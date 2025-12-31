@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+   <head>
+
+      <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+      <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0"/>
+      <title>Litematic Viewer</title>
+
+      <!-- Deepslate -->
+      <script src="https://unpkg.com/deepslate@0.10.1"></script>
+      <script src="https://unpkg.com/gl-matrix@3.4.3/gl-matrix-min.js"></script>
+
+      <script src="resource/assets.js"></script>
+      <script src="resource/opaque.js"></script>
+
+      <!-- Materialize -->
+      <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css" media="screen,projection"/>
+
+      <!-- Icons -->
+      <script src="https://kit.fontawesome.com/92330e144e.js" crossorigin="anonymous"></script>
+
+      <style>
+         @media (prefers-color-scheme: light) {
+           body {
+             background: #FFF;
+             color: #111;
+           }
+         }
+
+         @media (prefers-color-scheme: dark) {
+           body {
+             background: #111;
+             color: #FFF;
+           }
+            input#remote-url {
+               color: white;
+            }
+         }
+      </style>
+
+      <script src="src/deepslate-helpers.js"></script>
+      <script src="src/litematic-utils.js"></script>
+      <script src="src/main.js"></script>
+      <script src="src/settings.js"></script>
+      <script src="src/viewer.js"></script>
+
+      <!-- Google tag (gtag.js) -->
+      <script async src="https://www.googletagmanager.com/gtag/js?id=G-C0DVDW0WXS"></script>
+      <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+      
+        gtag('config', 'G-C0DVDW0WXS');
+      </script>
+
+      <style>
+
+         #viewer {
+             position:fixed;
+             left: 0;
+             top: 0;
+             width: 100%;
+             height: 100%;
+             z-index: -1;
+         }
+
+         .settings-section {
+            margin-bottom: 20px;
+            display: grid;
+            width: fit-content;
+            margin:auto;
+            grid-template-columns: repeat(4, auto);
+            grid-template-rows: repeat(6, 1fr);
+            grid-column-gap: 0px;
+            grid-row-gap: 0px;
+         }
+
+         #settings-button {
+            position: absolute;
+            top: 0;
+            right: 25px;
+            font-size: 36px;
+            margin-left: 50px;
+            z-index: 1;
+         }
+
+         #settings-panel {
+            height: 100%; /* 100% Full-height */
+            width: 0; /* 0 width - change this with JavaScript */
+            position: fixed; /* Stay in place */
+            z-index: 1; /* Stay on top */
+            top: 0; /* Stay at the top */
+            right: 0;
+            opacity: 90%;
+            background-color: #111; /* Black*/
+            overflow-x: hidden; /* Disable horizontal scroll */
+            padding-top: 60px; /* Place content 60px from the top */
+            transition: 0.5s; /* 0.5 second transition effect to slide in the sidenav */
+         }
+
+         /* Position and style the close button (top right corner) */
+         #settings-panel .closebtn {
+            position: absolute;
+            top: 0;
+            right: 25px;
+            font-size: 36px;
+            margin-left: 50px;
+         }
+
+         #materialList {
+            position: absolute;
+            top: 10px;
+            left: 50px;
+            column-width: 200px;
+            max-height: 80vh;
+         }
+
+         #materialList .count-item {
+            display: grid;
+            background-color: #000;
+            grid-template-columns: 1fr auto;
+            gap: 0px;
+            padding: 5px;
+         }
+
+         #materialListButton {
+            position: absolute;
+            padding: 8px;
+         }
+
+         #sliders input[type="range"] {
+            writing-mode: vertical-lr;
+            direction: rtl;
+            appearance: slider-vertical;
+            position: absolute;
+            background-color: #000;
+            width: 20px;
+            top: 35px;
+            height: 90%;
+            vertical-align: bottom;
+         }
+
+         #sliders #maxy {
+            left: 25px;
+         }
+      </style>
+
+   </head>
+
+   <body>
+
+      <div id="viewer" width="100%"></div>
+
+      <div id="sliders" hidden></div>
+      <button id="materialListButton" hidden><span class="material-icons">list</span></button>
+      <div id="materialList" hidden></div>
+
+      <div id="main-content">
+
+         <div class="section no-pad-bot">
+            <div class="container">
+               <h3 class="header center">JANKY AF litematic viewer by Ending_Credits</h3>
+            </div>
+         </div>
+
+         <div class="container">
+            <div class="row">
+               <div class="col s12" id="file-loader-panel">
+                  <input id="file-upload" type="file" onchange="readFileInput(this)" hidden multiple />
+               
+                  <label for="file-upload" id="drop-zone" ondrop="dropHandler(event);" ondragover="dragOverHandler(event);" width="100%">
+                     <div class="card-panel center gray lighten-1">
+                        <h3>Select file(s)</h3>
+                        
+                        <span id="file-upload-btn" class="btn btn-floating btn-large waves-effect waves-light red"><i class="material-icons">add</i></span>
+
+                     </div>
+                  </label>
+
+                  <h3>or paste a .litematic link:</h3>
+                  <form>
+                     <div class="input-field">
+                        <input id="remote-url" type="text" name="remote-url" class="validate">
+                        <label for="remote-url">URL</label>
+                        <button class="btn waves-effect waves-light" type="submit" onclick="submitFileLink(document.getElementById('remote-url').value)">Submit<i class="material-icons right">send</i></button>
+                     </div>
+                  </form>
+               </div>
+            </div>
+         </div>
+
+         <div class="row">
+            <div class="col s12">
+               <h5 class="header light">
+                  Powered by <a href="https://github.com/misode/deepslate">DeepSlate <i class="fa fa-github fa-1x"></i></a>
+               </h5>
+               <p>Known issues: Cannot render Banner, Bed, Chest, Decorated Pot, Sign, Shulker box</p>
+               <p>Complain about this app <a href="https://discord.gg/GJckUsHsVB">here <i class="fab fa-discord"></i></a> (expect improvements soon)</p>
+               <p>Contribute to the project <a href="https://github.com/endingcredits/litematic-viewer/">here <i class="fa fa-github"></i></a></p>
+            </div>
+         </div>
+
+         <!-- Texture atlas -->
+         <img id="atlas" src="resource/atlas.png" alt="Texture atlas" crossorigin="anonymous" hidden>
+
+         <script>
+
+            // Add listener to load resrouces from atlas
+            // TODO - move to index as an onload?
+            document.addEventListener("DOMContentLoaded", function(event) {
+
+              console.log("Adding loader")
+
+              const image = document.getElementById('atlas');
+              if (image.complete) {
+                console.log("Adding loader")
+                loadDeepslateResources(image);
+              } else {
+                 console.log("Setting up load listener");
+                 image.addEventListener('load', () => {
+                     console.log("Image load event triggered");
+                     loadDeepslateResources(image);
+                 });
+              }
+
+              image.addEventListener('error', (error) => {
+                console.error("Error loading image:", error);
+              });
+
+            });
+
+            document.addEventListener("DOMContentLoaded", function(event) { 
+               const urlParams = new URLSearchParams(window.location.search);
+               const remoteUrl = urlParams.get('remote-url');
+
+               if (remoteUrl) {
+                  console.log("Loading file from", remoteUrl);
+                  readFileURL(remoteUrl);
+               }
+            });
+
+            function readFileInput(input) {
+               for (let i = 0; i < input.files.length; i++) {
+                  let file = input.files[i];
+                  loadAndProcessFile(file);
+               }
+            }
+
+            function readFileURL(url, useProxy=true) {
+               // TODO: This URL probably shouldn't be hardcoded
+               var proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
+               var request = new XMLHttpRequest();
+               request.responseType = 'blob';
+               request.onreadystatechange = function () {
+                  if (request.readyState == XMLHttpRequest.DONE) {
+                     if (request.status === 200) {
+                        console.log("Loaded file from remote url");
+                        console.log(request.response);
+                        loadAndProcessFile(request.response);
+                     }
+                     else {
+                        console.log("Error loading litematic");
+                        console.log(request);
+                     }
+                  }
+               };
+               request.open('GET', proxyUrl, true);
+               request.send();
+            }
+
+            function dragOverHandler(ev) {
+              // Prevent default behavior (Prevent file from being opened)
+              ev.preventDefault();
+            }
+
+            function dropHandler(ev) {
+              console.log('File(s) dropped');
+
+              // Prevent default behavior (Prevent file from being opened)
+              ev.preventDefault();
+
+              if (ev.dataTransfer.items) {
+                // Use DataTransferItemList interface to access the file(s)
+                for (let i = 0; i < ev.dataTransfer.items.length; i++) {
+                  // If dropped items aren't files, reject them
+                  if (ev.dataTransfer.items[i].kind === 'file') {
+                    const file = ev.dataTransfer.items[i].getAsFile();
+                    console.log('... file[' + i + '].name = ' + file.name);
+                    loadAndProcessFile(file);
+                  }
+                }
+              } else {
+                // Use DataTransfer interface to access the file(s)
+                console.log('DataTransfer interface not implemented!')
+                for (let i = 0; i < ev.dataTransfer.files.length; i++) {
+                  console.log('... file[' + i + '].name = ' + ev.dataTransfer.files[i].name);
+                }
+
+              }
+            }
+
+         </script>
+
+      </div>
+
+      <!-- open settings panel button -->
+      <a href="javascript:void(0)" id="settings-button" class="openbtn" onclick="openSettings()"><i class="fa fa-cog"></i></a>
+
+      <div id="settings-panel" class="side-nav">
+         <!-- close button -->
+         <a href="javascript:void(0)" class="closebtn" onclick="closeSettings()">&times;</a>
+
+         <!-- add a button to remove the url query params -->
+         <button class="btn waves-effect waves-light red" type="submit" onclick="window.location.href = window.location.href.split('?')[0]">Unload Schematic</button>
+
+         <!-- TODO: Add a way to generate all this automagically -->
+         <p>Controls</p>
+         <div class="settings-section">
+            <div class="col settings-label">
+               Click-drag to: 
+            </div>
+            <div class="col">
+               
+               <div>
+                  <label>
+                     <input name="click-drag" type="radio" class="with-gap setting" data-setting="click-drag" value="move" checked />
+                     <span class="reduced-padding">Move</span>
+                  </label>
+                  <label>
+                     <input name="click-drag" type="radio" class="with-gap setting" data-setting="click-drag" value="pan" />
+                     <span class="reduced-padding">Pan</span>
+                  </label>
+               </div>
+
+            </div>
+            <div class="col">
+               <div>
+
+                  <span class="switch">
+                     <label>
+                        <input type="checkbox" class="setting" data-setting="click-drag-invert" />
+                        <span class="lever"></span>
+                        Invert
+                     </label>
+                  </span>
+               </div>
+            </div>
+
+            <div class="col">
+               <span class="slider">
+                  <label class="setting-label">
+                     Sensitivity
+                     <p class="range-field">
+                        <input type="range" min="0" max="5" step="0.1" value="1" class="setting" data-setting="click-drag-sensitivity" />
+                     </p>
+                  </label>
+               </span>
+            </div>
+         
+
+            <div class="col settings-label">
+               Middle-click-drag to: 
+            </div>
+            <div class="col">
+               <div>
+                  <label>
+                     <input name="middle-click-drag" type="radio" class="with-gap setting" data-setting="middle-click-drag" value="move"/>
+                     <span class="reduced-padding">Move</span>
+                  </label>
+                  <label>
+                     <input name="middle-click-drag" type="radio" class="with-gap setting" data-setting="middle-click-drag" value="pan" checked/>
+                     <span class="reduced-padding">Pan</span>
+                  </label>
+               </div>
+
+            </div>
+            <div class="col">
+               <div>
+
+                  <span class="switch">
+                     <label>
+                        <input type="checkbox" class="setting" data-setting="middle-click-drag-invert" />
+                        <span class="lever"></span>
+                        Invert
+                     </label>
+                  </span>
+               </div>
+
+            </div>
+            
+            <div class="col">
+               <span class="slider">
+                  <label class="setting-label">
+                     Sensitivity
+                     <p class="range-field">
+                        <input type="range" min="0" max="5" step="0.1" value="1" class="setting" data-setting="middle-click-drag-sensitivity" />
+                     </p>
+                  </label>
+               </span>
+            </div>
+            
+            <div class="col" style="grid-column: span 4; text-align: center;">
+               These do not work yet:
+            </div>
+
+            <div class="col settings-label">
+               Scroll to: 
+            </div>
+            <div class="col">
+               <div>
+                  <label>
+                     <input name="scroll" type="radio" class="with-gap setting" data-setting="scroll" value="move" checked />
+                     <span class="reduced-padding">Move</span>
+                  </label>
+                  <label>
+                     <input name="scroll" type="radio" class="with-gap setting" data-setting="scroll" value="zoom" />
+                     <span class="reduced-padding">Zoom</span>
+                  </label>
+               </div>
+
+            </div>
+            <div class="col">
+               <div>
+
+                  <span class="switch">
+                     <label>
+                        <input type="checkbox" id="invert-move" class="setting" data-setting="scroll-invert-move" />
+                        <span class="lever"></span>
+                        Invert
+                     </label>
+                  </span>
+               
+               </div>
+            </div>
+            
+            <div class="col">
+               <span class="slider">
+                  <label class="setting-label">
+                     Sensitivity
+                     <p class="range-field">
+                        <input type="range" min="0" max="5" step="0.1" value="1" class="setting" data-setting="scroll-sensitivity" />
+                     </p>
+                  </label>
+               </span>
+            </div>
+
+            <div class="col settings-label">
+               One finger touch drag to: 
+            </div>
+            <div class="col">
+               <div>
+                  <label>
+                     <input name="touch-drag" type="radio" class="with-gap setting" data-setting="touch-drag" value="move"/>
+                     <span class="reduced-padding">Move</span>
+                  </label>
+                  <label>
+                     <input name="touch-drag" type="radio" class="with-gap setting" data-setting="touch-drag" value="pan" checked/>
+                     <span class="reduced-padding">Pan</span>
+                  </label>
+               </div>
+
+            </div>
+            <div class="col">
+               
+               <div>
+                  <span class="switch">
+                     <label>
+                        <input type="checkbox" class="setting" data-setting="touch-drag-move-invert" />
+                        <span class="lever"></span>
+                        Invert
+                     </label>
+                  </span>
+               </div>
+
+            </div>
+            
+            <div class="col">
+               <span class="slider">
+                  <label class="setting-label">
+                     Sensitivity
+                     <p class="range-field">
+                        <input type="range" min="0" max="5" step="0.1" value="1" class="setting" data-setting="touch-drag-sensitivity" />
+                     </p>
+                  </label>
+               </span>
+            </div>
+            
+            <div class="col settings-label">
+               Two finger touch drag to: 
+            </div>
+            <div class="col">
+               <div>
+                  <label>
+                     <input name="two-finger-drag" type="radio" class="with-gap setting" data-setting="two-finger-drag" value="move" checked/>
+                     <span class="reduced-padding">Move</span>
+                  </label>
+                  <label>
+                     <input name="two-finger-drag" type="radio" class="with-gap setting" data-setting="two-finger-drag" value="pan"/>
+                     <span class="reduced-padding">Pan</span>
+                  </label>
+               </div>
+
+            </div>
+            <div class="col">
+               
+               <div>
+                  <span class="switch">
+                     <label>
+                        <input type="checkbox" class="setting" data-setting="gesture-move-invert" />
+                        <span class="lever"></span>
+                        Invert
+                     </label>
+                  </span>
+               </div>
+               
+            </div>
+            
+            <div class="col">
+               <span class="slider">
+                  <label class="setting-label">
+                     Sensitivity
+                     <p class="range-field">
+                        <input type="range" min="0" max="5" step="0.1" value="1" class="setting" data-setting="gesture-sensitivity" />
+                     </p>
+                  </label>
+               </span>
+            </div>
+
+            <div class="col settings-label">
+               Move with: 
+            </div>
+            <div class="col">
+               <div>
+                  <label>
+                     <input name="wasd-move" type="checkbox" class="filled-in setting" data-setting="wasd-move" value="checked" checked/>
+                     <span class="reduced-padding">WASD</span>
+                  </label>
+               </div>
+               <div>
+                  <label>
+                     <input name="arrow-move" type="checkbox" class="filled-in setting" data-setting="arrow-move"/>
+                     <span class="reduced-padding">Arrow Keys</span>
+                  </label>
+               </div>
+               <div>
+                  <label>
+                     <input name="pinch-move" type="checkbox" class="filled-in setting" data-setting="pinch-move" checked/>
+                     <span class="reduced-padding">Pinch</span>
+                  </label>
+               </div>
+
+            </div>
+            <div class="col" style="grid-column: span 2;">
+               <div>
+
+                  <span class="switch">
+                     <label>
+                        <input type="checkbox" class="setting" data-setting="relative-forwards-movement"/>
+                        <span class="lever"></span>
+                        Make forwards movement relative to facing direciton
+                     </label>
+                  </span>
+               
+               </div>
+
+            </div>
+         </div>
+
+         <button class="btn waves-effect waves-light" onclick="resetSettings()">Reset Settings</button>
+      </div>
+
+      <!--JavaScript at end of body for optimized loading-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+   </body>
+</html>

@@ -10,7 +10,7 @@ def grs(relative_path):
         base_path = sys._MEIPASS
     else:
         # 开发环境：从 main.py 所在目录（src/）的父目录（即项目根目录）访问资源
-        base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        base_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     return os.path.join(base_path, relative_path)
 
 json_data = json.load(open(grs(os.path.join('lang', 'setting.json')), 'r', encoding='utf-8'))

@@ -1,29 +1,30 @@
-import threading,sys,os,time,requests
+import threading, time,requests
 from amulet_nbt import load, NamedTag, IntTag
-from idlelib.history import History
 import tkinter as tk
 from tkinter import ttk, font, filedialog
 
-from PIL.ImageOps import expand
 from customtkinter import *
 from litemapy import Schematic, BlockState
 from PIL import Image, ImageTk, ImageEnhance
 from easygui import boolbox,choicebox,msgbox,enterbox
 from tqdm import tqdm
-from xonsh.completers.tools import justify
 
 sys.path.extend(os.path.join(os.path.dirname(__file__), ".."))
 
 
 import LitRender
 try:
-    from script.LitRender import OpenGLView, main_render_loop
-    from script.Litmatool import *
-    from script.Structure import *
+    from script.Tk.LitRender import OpenGLView, main_render_loop
+    from script.Tk.Litmatool import *
+    from script.Tk.Structure import *
+    from script.JSrender.helper.http_server import JSRender
+    from script.JSrender.helper.assets_update import JSUpdate
 except:
     from LitRender import OpenGLView, main_render_loop
     from Litmatool import *
     from Structure import *
+    from ..JSrender.helper.http_server import JSRender
+    from ..JSrender.helper.assets_update import JSUpdate
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -37,6 +38,7 @@ DefaultFontSize = int(data["Save"]["ui"]["FontSize"])
 DefaultCorner = data["Save"]["ui"]["cornerRadius"]
 LANGUAGE : str = data["Save"]["Language"]
 LANG : dict = json.load(open(grs(os.path.join('lang', LANGUAGE+'.json')), 'r', encoding='utf-8'))
+
 
 def handle_exception(exc_type, exc_value, exc_traceback):
     error_msg = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
@@ -133,6 +135,7 @@ def on_exit():
 atexit.register(on_exit) #退出绑定
 
 def Update(mode:["Github","Onedrive"]):
+    JSUpdate()
     try:
         try:
             response = requests.get("https://api.github.com/repos/albertchen857/LitematicaViewer/releases/latest", timeout=10)
@@ -174,7 +177,7 @@ def Redenmc(search : str, mode : str):
 
 def ConAly():
     try:
-        from script.LitContainer import LitCon
+        from script.Tk.LitContainer import LitCon
     except:
         from LitContainer import LitCon
     threading.Thread(target=LitCon, daemon=True).start()
@@ -818,27 +821,35 @@ def start_analysis():
 
     #3D RENDER
     if Do3d.get():
-        if Pn3d.get():
-            gl_view.destroy()
-            if Li3d.get() and num>1000:
-                if num>5000:
-                    check = boolbox(LANG["ui.render.warn1"],default_choice="是/Y",cancel_choice="取消/N")
-                    if not check: return
-                    threading.Thread(target=LitRender.main_render_loop(Block_pos,bool(False)), daemon=True).start()
-                    return
-                gl_view = OpenGLView(frame_3d, Block_pos, False, width=300, height=300, bg=color_map["PC"])
-            else:
-                gl_view = OpenGLView(frame_3d, Block_pos, bool(Sp3d.get()), width=300, height=300, bg=color_map["PC"])
-            gl_view.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-            gl_view.after(1000, gl_view.redraw)
-        else:
-            if Li3d.get() and num>1000:
-                if num>5000:
-                    check = boolbox(LANG["ui.render.warn1"],default_choice="是/Y",cancel_choice="取消/N")
-                    if not check: return
-                threading.Thread(target=LitRender.main_render_loop(Block_pos,bool(False)), daemon=True).start()
-            else:
-                threading.Thread(target=LitRender.main_render_loop(Block_pos,bool(Sp3d.get())), daemon=True).start()
+        # if Pn3d.get():
+        #     gl_view.destroy()
+        #     if Li3d.get() and num>1000:
+        #         if num>5000:
+        #             check = boolbox(LANG["ui.render.warn1"],default_choice="是/Y",cancel_choice="取消/N")
+        #             if not check: return
+        #             threading.Thread(target=LitRender.main_render_loop(Block_pos,bool(False)), daemon=True).start()
+        #             return
+        #         gl_view = OpenGLView(frame_3d, Block_pos, False, width=300, height=300, bg=color_map["PC"])
+        #     else:
+        #         gl_view = OpenGLView(frame_3d, Block_pos, bool(Sp3d.get()), width=300, height=300, bg=color_map["PC"])
+        #     gl_view.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        #     gl_view.after(1000, gl_view.redraw)
+        # else:
+        #     if Li3d.get() and num>1000:
+        #         if num>5000:
+        #             check = boolbox(LANG["ui.render.warn1"],default_choice="是/Y",cancel_choice="取消/N")
+        #             if not check: return
+        #         threading.Thread(target=LitRender.main_render_loop(Block_pos,bool(False)), daemon=True).start()
+        #     else:
+        #         threading.Thread(target=LitRender.main_render_loop(Block_pos,bool(Sp3d.get())), daemon=True).start()
+        time.sleep(10000)
+        subprocess.Popen(['python', '-m', 'http.server', '8000'],
+                         cwd=os.getcwd(),
+                         stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL)
+        # threading.Thread(target=JSRender().StartServer(), daemon=True).start()
+        webbrowser.open("http://localhost:8000")
+
 
 
 if __name__ == "__main__":
@@ -1141,22 +1152,20 @@ if __name__ == "__main__":
 
     sroll = tk.Scrollbar(frame_chart, orient="vertical")
     sroll.pack(side=tk.RIGHT, fill=tk.Y, padx=10)
-    count_table = ttk.Treeview(frame_chart, column=('blockID', 'num', 'unit', 'ID') if LANGUAGE == "zh" else ('blockID', 'num', 'unit'), height=7, yscrollcommand=sroll.set)
+    cc = ('blockID', 'num', 'unit', 'ID') if LANGUAGE == "zh" else ('blockID', 'num', 'unit')
+    count_table = ttk.Treeview(frame_chart, height=7, columns=cc, yscrollcommand=sroll.set)
     sroll.config(command=count_table.yview)
+    count_table.heading('blockID', text=LANG["litem.chart.1"], anchor="center")
+    count_table.heading('num', text=LANG["litem.chart.2"], anchor="e")
+    count_table.heading('unit', text=LANG["litem.chart.3"], anchor="w")
     if LANGUAGE == "zh":
-        count_table.heading('blockID', text=LANG["litem.chart.1"], anchor="center")
-        count_table.heading('num', text=LANG["litem.chart.2"], anchor="e")
-        count_table.heading('unit', text=LANG["litem.chart.3"], anchor="w")
         count_table.heading('ID', text=LANG["litem.chart.4"], anchor="center")
-    else:
-        count_table.heading('blockID', text=LANG["litem.chart.4"], anchor="center")
-        count_table.heading('num', text=LANG["litem.chart.2"], anchor="e")
-        count_table.heading('unit', text=LANG["litem.chart.3"], anchor="w")
+        count_table.column("ID", width=200)
     count_table.column("#0", width=40)
     count_table.column("blockID", width=150)
     count_table.column("num", width=40)
     count_table.column("unit", width=80, anchor="e")
-    count_table.column("ID", width=200)
+
     count_table.config(height=20)
     count_table.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=5, pady=10)
 

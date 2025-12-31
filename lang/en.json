@@ -30,6 +30,8 @@
   "ui.stat.type4": "Structural Machine",
   "ui.stat.type5": "Architecture",
   "ui.stat.type6": "Too few blocks",
+  "ui.chart.t1": "Block Analysis",
+  "ui.chart.t2": "Classify Analysis",
   "ui.render.warn1": "Block number over 5000, keep rendering?\nRendering more than 5000 blocks may crash.\nContinuing will disable spinning mode.",
   "ui.render.warn2": "File to big! Time for loading might be{:.1f}s\nTime for Analysis might be{:.1f}s\nTotal time might be{:.1f}s",
   "litem.title": "Projection Viewer",
@@ -104,6 +106,6 @@
   "litem.reden.select.2": "UID Search",
   "litem.reden.select.3": "UID Download | Format: UID/Number or UID",
   "litem.reden.btn": "Search",
-  "litem.prev.ask": "Detected last analyzed projection file. Continue analysis?\nPath:"
+  "litem.prev.ask": "Detected last analyzed projection file. Continue analysis?\nPath:",
   "litem.procbar.1": "Analysis Process {}/{} {:.2f}s"
 }
