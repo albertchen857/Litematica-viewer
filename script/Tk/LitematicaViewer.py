@@ -1,35 +1,31 @@
 import threading, time,requests
-from amulet_nbt import load, NamedTag, IntTag
 import tkinter as tk
 from tkinter import ttk, font, filedialog
-
 from customtkinter import *
 from litemapy import Schematic, BlockState
-from PIL import Image, ImageTk, ImageEnhance
+from PIL import Image, ImageEnhance
 from easygui import boolbox,choicebox,msgbox,enterbox
 from tqdm import tqdm
-
-sys.path.extend(os.path.join(os.path.dirname(__file__), ".."))
-
-
-import LitRender
-try:
-    from script.Tk.LitRender import OpenGLView, main_render_loop
-    from script.Tk.Litmatool import *
-    from script.Tk.Structure import *
-    from script.JSrender.helper.http_server import JSRender
-    from script.JSrender.helper.assets_update import JSUpdate
-except:
-    from LitRender import OpenGLView, main_render_loop
-    from Litmatool import *
-    from Structure import *
-    from ..JSrender.helper.http_server import JSRender
-    from ..JSrender.helper.assets_update import JSUpdate
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import importlib, webbrowser, codecs, atexit
 import traceback
+sys.path.extend(os.path.join(os.path.dirname(__file__), ".."))
+import LitRender
+try:
+    from script.Tk.LitRender import OpenGLView, main_render_loop
+    from script.Tk.Litmatool import *
+    from script.Tk.Structure import *
+    # from script.JSrender.helper.webview import JSRender
+    # from script.JSrender.helper.assets_update import JSUpdate
+except:
+    from LitRender import OpenGLView, main_render_loop
+    from Litmatool import *
+    from Structure import *
+    # from ..JSrender.helper.webview import JSRender
+    # from ..JSrender.helper.assets_update import JSUpdate
+
 
 data : dict = json.load(open(grs(os.path.join('lang', 'data.json')), 'r', encoding='utf-8'))
 color_map = data["Color_map"][data["Save"]["ui"]["ColorMap"]]
@@ -38,7 +34,6 @@ DefaultFontSize = int(data["Save"]["ui"]["FontSize"])
 DefaultCorner = data["Save"]["ui"]["cornerRadius"]
 LANGUAGE : str = data["Save"]["Language"]
 LANG : dict = json.load(open(grs(os.path.join('lang', LANGUAGE+'.json')), 'r', encoding='utf-8'))
-
 
 def handle_exception(exc_type, exc_value, exc_traceback):
     error_msg = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
@@ -124,18 +119,904 @@ class Setting:
         if boolbox(LANG["func.exit"], title="Setting"):
             exit()
 
+
+class TKF:
+    def __init__(self):
+        self.label_bottom = None
+        self.progress = None
+        self.litem = tk.Tk()
+        self.a_desc = None
+        self.a_ver = None
+        self.a_auth = None
+        self.a_den = None
+        self.a_liq = None
+        self.a_redt = None
+        self.a_red = None
+        self.stat_desc = None
+        self.stat_ver = None
+        self.stat_auth = None
+        self.stat_den = None
+        self.stat_liq = None
+        self.stat_redt = None
+        self.count_table = None
+        self.ax2 = None
+        self.ax1 = None
+        self.label_middle = None
+        self.stat_red = None
+        self.DoEntity = tk.IntVar()
+        self.DoLifr = tk.IntVar()
+        self.DoStat = tk.IntVar()
+        self.DoAnal = tk.IntVar()
+        self.Do3d = tk.IntVar()
+        self.Pn3d = tk.IntVar()
+        self.Li3d = tk.IntVar()
+        self.Sp3d = tk.IntVar()
+        self.LogVar = None
+        self.litem = None
+        self.frame_middle = None
+        self.frame_data = None
+        self.entry_max_z = None
+        self.entry_min_z = None
+        self.entry_min_y = None
+        self.entry_max_y = None
+        self.entry_max_x = None
+        self.text_change = None
+        self.entry_min_x = None
+        self.entry_height = None
+        self.entry_width = None
+        self.entry_length = None
+        self.entry_z = None
+        self.entry_y = None
+        self.entry_x = None
+        self.frame_func = None
+        self.entry_id = None
+
+    def TK_INIT(self):
+        self.litem.title(f'{LANG["litem.title"]} v{APP_VERSION}')
+        self.litem.iconbitmap(grs("icon.ico"))
+        if sys.platform.startswith("win"):
+            self.litem.state("zoomed")  # Windows 专用
+        else:
+            self.litem.attributes("-zoomed", True)  # Linux/macOS
+        self.litem.configure(bg=color_map["BG"])
+
+        if data["Save"]["First_open"] == "0":
+            msgbox(LANG["litem.log"])
+            data["Save"]["First_open"] = "1"
+            with open(grs(os.path.join('lang', 'data.json')), 'w') as js:
+                json.dump(data, js, indent=2)
+
+        menu = tk.Menu(self.litem)
+
+
+        Basic = data["Save"]["Basic"]
+        try:
+            self.DoEntity = tk.IntVar(value=int(Basic[0]))
+            self.DoLifr = tk.IntVar(value=int(Basic[1]))
+            self.DoStat = tk.IntVar(value=int(Basic[2]))
+            self.DoAnal = tk.IntVar(value=int(Basic[3]))
+            self.Do3d = tk.IntVar(value=int(Basic[4]))
+            self.Pn3d = tk.IntVar(value=int(Basic[5]))
+            self.Li3d = tk.IntVar(value=int(Basic[6]))
+            self.Sp3d = tk.IntVar(value=int(Basic[7]))
+        except:
+            self.DoEntity = tk.IntVar(value=1)
+            self.DoLifr = tk.IntVar(value=1)
+            self.DoStat = tk.IntVar(value=1)
+            self.DoAnal = tk.IntVar(value=1)
+            self.Do3d = tk.IntVar(value=1)
+            self.Pn3d = tk.IntVar(value=1)
+            self.Li3d = tk.IntVar(value=1)
+            self.Sp3d = tk.IntVar(value=1)
+
+        # 菜单：数据分析
+        menu_analysis = tk.Menu(menu, tearoff=0)
+        menu_analysis.add_command(label=LANG["litem.menuAnalysis.1"], command=self.import_file,
+                                  font=(DefaultFont, DefaultFontSize))
+        menu_analysis.add_command(label=LANG["litem.menuAnalysis.2"], command=lambda: self.output_data(False),
+                                  font=(DefaultFont, DefaultFontSize))
+        menu_analysis.add_command(label=LANG["litem.menuAnalysis.3"], command=lambda: self.output_data(True),
+                                  font=(DefaultFont, DefaultFontSize))
+        menu_analysis.add_command(label=LANG["litem.menuAnalysis.4"],
+                                  command=lambda: threading.Thread(target=self.start_analysis(), daemon=True).start(),
+                                  font=(DefaultFont, DefaultFontSize))
+        menu_analysis.add_command(label=LANG["litem.menuAnalysis.5"],
+                                  command=lambda: create_structure(
+                                      f"minecraft:{cn_translate(self.entry_id.get(), False)}",
+                                      (self.entry_x.get(), self.entry_y.get(), self.entry_z.get()),
+                                      (self.entry_length.get(), self.entry_width.get(),
+                                       self.entry_height.get()), False, 0,
+                                      [False, False, False, False, False, False]
+                                      ), font=(DefaultFont, DefaultFontSize))
+        menu_analysis.add_command(label=LANG["litem.menuAnalysis.6"],
+                                  command=lambda: change_Schematic(schematic,
+                                                                   CS_trans_dict(self.text_change.get("1.0", tk.END)),
+                                                                   ((self.entry_min_x.get(), self.entry_max_x.get()),
+                                                                    (self.entry_min_y.get(), self.entry_max_y.get()),
+                                                                    (self.entry_min_z.get(), self.entry_max_z.get())),
+                                                                   file_name.split(".")[0] + "_Modified"),
+                                  font=(DefaultFont, DefaultFontSize))
+        menu.add_cascade(label=LANG["litem.menuAnalysis.title"], menu=menu_analysis,
+                         font=(DefaultFont, int(DefaultFontSize * 2.0)))
+        # 菜单：设置 + 3D选项 + 界面设置
+        menu_AnaSet = tk.Menu(menu, tearoff=0)
+        menu.add_cascade(label=LANG["litem.menuAnaSet.title"], menu=menu_AnaSet,
+                         font=(DefaultFont, int(DefaultFontSize * 2.0)))
+        menu_AnaSet.add_checkbutton(label=LANG["litem.menuAnaSet.1"], variable=self.DoEntity,
+                                    font=(DefaultFont, DefaultFontSize))
+        menu_AnaSet.add_separator()
+        menu_AnaSet.add_checkbutton(label=LANG["litem.menuAnaSet.2"], variable=self.DoLifr,
+                                    command=lambda: hide(self.frame_func, self.DoLifr),
+                                    font=(DefaultFont, DefaultFontSize))
+        menu_AnaSet.add_checkbutton(label=LANG["litem.menuAnaSet.3"], variable=self.DoStat,
+                                    command=lambda: hide(self.frame_data, self.DoStat),
+                                    font=(DefaultFont, DefaultFontSize))
+        menu_AnaSet.add_checkbutton(label=LANG["litem.menuAnaSet.4"], variable=self.DoAnal,
+                                    command=lambda: hide(self.frame_middle, self.DoAnal),
+                                    font=(DefaultFont, DefaultFontSize))
+        menu_AnaSet.add_separator()
+
+        menu_3d = tk.Menu(menu, tearoff=0)
+        menu_AnaSet.add_cascade(label=LANG["litem.menu3d.title"], menu=menu_3d, font=(DefaultFont, DefaultFontSize))
+        menu_3d.add_checkbutton(label=LANG["litem.menu3d.1"], variable=self.Do3d, font=(DefaultFont, DefaultFontSize))
+        menu_3d.add_checkbutton(label=LANG["litem.menu3d.2"], variable=self.Pn3d, font=(DefaultFont, DefaultFontSize))
+        menu_3d.add_checkbutton(label=LANG["litem.menu3d.3"], variable=self.Li3d, font=(DefaultFont, DefaultFontSize))
+        menu_3d.add_checkbutton(label=LANG["litem.menu3d.4"], variable=self.Sp3d, font=(DefaultFont, DefaultFontSize))
+
+        menu_Setting = tk.Menu(menu, tearoff=0)
+        menu_AnaSet.add_cascade(label=LANG["litem.menuSetting.title"], menu=menu_Setting,
+                                font=(DefaultFont, DefaultFontSize))
+        setting = Setting()
+        menu_Setting.add_command(label=LANG["litem.menuSetting.1"], font=(DefaultFont, DefaultFontSize),
+                                 command=setting.set_colormap)
+        menu_Setting.add_command(label=LANG["litem.menuSetting.2"], font=(DefaultFont, DefaultFontSize),
+                                 command=setting.set_font)
+        menu_Setting.add_command(label=LANG["litem.menuSetting.3"], font=(DefaultFont, DefaultFontSize),
+                                 command=setting.set_fontsize)
+        # 菜单：功能
+        menu_Func = tk.Menu(menu, tearoff=0)
+        menu.add_cascade(label=LANG["litem.menuFunc.title"], menu=menu_Func,
+                         font=(DefaultFont, int(DefaultFontSize * 2.0)))
+        menu_Func.add_command(label=LANG["litem.menuFunc.1"], command=lambda: litVerFix(7, file_path),
+                              font=(DefaultFont, DefaultFontSize))
+        menu_Func.add_command(label=LANG["litem.menuFunc.2"], command=lambda: litVerFix(6, file_path),
+                              font=(DefaultFont, DefaultFontSize))
+        menu_Func.add_command(label=LANG["litem.menuFunc.3"], command=lambda: litVerFix(3, file_path),
+                              font=(DefaultFont, DefaultFontSize))
+        menu_Func.add_separator()
+        menu_Func.add_command(label=LANG["litem.menuFunc.4"], command=lambda: ConAly(),
+                              font=(DefaultFont, DefaultFontSize))
+        menu_Func.add_command(label=LANG["litem.menuFunc.5"],
+                              command=lambda: threading.Thread(
+                                  target=LitRender.main_render_loop(Block_pos, bool(False)),
+                                  daemon=True).start(), font=(DefaultFont, DefaultFontSize))
+        menu_Func.add_command(label=LANG["litem.menuFunc.6"], command=lambda: StepOpen(),
+                              font=(DefaultFont, DefaultFontSize))
+        # 菜单：帮助
+        menu_Help = tk.Menu(menu, tearoff=0)
+        menu.add_cascade(label=LANG["litem.menuHelp.title"], menu=menu_Help,
+                         font=(DefaultFont, int(DefaultFontSize * 2.0)))
+        menu_Help.add_command(label=LANG["litem.menuHelp.1"],
+                              command=lambda: webbrowser.open("https://github.com/albertchen857/LitematicaViewer"),
+                              font=(DefaultFont, DefaultFontSize))
+        menu_Help.add_command(label=LANG["litem.menuHelp.2"],
+                              command=lambda: webbrowser.open("https://space.bilibili.com/3494373232741268"),
+                              font=(DefaultFont, DefaultFontSize))
+        menu_Help.add_command(label=LANG["litem.menuHelp.3"], command=lambda: Update('GitHub'),
+                              font=(DefaultFont, DefaultFontSize))
+        menu_Help.add_command(label=LANG["litem.menuHelp.4"], command=lambda: Update('Onedrive'),
+                              font=(DefaultFont, DefaultFontSize))
+        menu_Help.add_command(label=LANG["litem.menuHelp.5"], command=manual_install_pk,
+                              font=(DefaultFont, DefaultFontSize))
+        menu_Help.add_command(label=LANG["litem.menuHelp.6"],
+                              command=lambda: webbrowser.open("https://redenmc.com/litematica"),
+                              font=(DefaultFont, DefaultFontSize))
+        menu_Help.add_command(label=LANG["litem.menuHelp.7"],
+                              command=setting.ChangeLang,
+                              font=(DefaultFont, DefaultFontSize))
+        litem.config(menu=menu, padx=10)
+
+        self.TK_FrameTop()
+        self.TK_FrameFunc()
+        self.TK_FrameMiddle()
+        self.TK_FrameStat()
+
+        try:
+            with open(grs('log.txt'), 'r', encoding='utf-8') as file:
+                file_text = str(file.read())
+                print(file_text)
+                if not file_text:
+                    pass
+                else:
+                    if boolbox(LANG["litem.prev.ask"] + file_text, title="Analysis"):
+                        file_path = file_text
+                        del file_text
+                        self.start_analysis()
+        except:
+            with open(grs('log.txt'), 'w', encoding='utf-8') as file:
+                file.write("")
+
+        litem.mainloop()
+
+    def TK_FrameTop(self):
+        #  顶容器
+        frame_top = tk.Frame(litem)
+        frame_top.configure(bg=color_map["BG"], bd=5)
+        frame_top.pack(side=tk.TOP, fill=tk.X)
+
+        btn_import = CTkButton(frame_top, text=LANG["litem.frameTop.1"], command=self.import_file,
+                               font=(DefaultFont, DefaultFontSize * 1.5))
+        btn_import.configure(fg_color=color_map["PC"], text_color=color_map["BG"], corner_radius=DefaultCorner)
+        btn_import.pack(side=tk.LEFT, padx=5)
+        btn_simstart = CTkButton(frame_top, text=LANG["litem.frameTop.2"],
+                                 command=lambda: threading.Thread(target=self.start_analysis, daemon=True).start(),
+                                 font=(DefaultFont, DefaultFontSize * 1.5))
+        btn_simstart.configure(fg_color=color_map["PC"], text_color=color_map["BG"], corner_radius=DefaultCorner)
+        btn_simstart.pack(side=tk.LEFT, padx=5)
+        btn_litstepchecker = CTkButton(frame_top, text=LANG["litem.frameTop.3"], command=lambda: StepOpen(),
+                                       font=(DefaultFont, int(DefaultFontSize * 1.5)))
+        btn_litstepchecker.configure(fg_color=color_map["PC"], text_color=color_map["BG"], corner_radius=DefaultCorner)
+        btn_litstepchecker.pack(side=tk.LEFT, padx=5)
+        btn_conanaly = CTkButton(frame_top, text=LANG["litem.frameTop.4"], command=lambda: ConAly(),
+                                 font=(DefaultFont, int(DefaultFontSize * 1.5)))
+        btn_conanaly.configure(fg_color=color_map["PC"], text_color=color_map["BG"], corner_radius=DefaultCorner)
+        btn_conanaly.pack(side=tk.LEFT, padx=5)
+        btn_hint = CTkButton(frame_top, text=LANG["litem.frameTop.5"],
+                             command=lambda: msgbox(LANG["litem.frameTop.hint"]),
+                             font=(DefaultFont, DefaultFontSize * 1.5))
+        btn_hint.configure(fg_color=color_map["PC"], text_color=color_map["BG"], corner_radius=DefaultCorner)
+        btn_hint.pack(side=tk.LEFT, padx=5)
+
+        btn_github = CTkButton(frame_top, text="GitHub",
+                               command=lambda: webbrowser.open("https://github.com/albertchen857/LitematicaViewer"),
+                               font=(DefaultFont, DefaultFontSize * 1.5))
+        btn_github.configure(fg_color="black", text_color="#f8f9fa", corner_radius=DefaultCorner)
+        btn_github.pack(side=tk.RIGHT, padx=5)
+        btn_bilibili = CTkButton(frame_top, text="Bilibili",
+                                 command=lambda: webbrowser.open("https://space.bilibili.com/3494373232741268"),
+                                 font=(DefaultFont, DefaultFontSize * 1.5))
+        btn_bilibili.configure(fg_color="#FF6699", text_color="#f8f9fa", corner_radius=DefaultCorner)
+        btn_bilibili.pack(side=tk.RIGHT, padx=5)
+
+    def TK_FrameFunc(self):
+        #  func容器
+        frame_func = CTkFrame(litem, fg_color=color_map["MC"], corner_radius=DefaultCorner)
+        hide(frame_func, self.DoLifr, lambda: frame_func.pack(side=tk.RIGHT, fill=tk.BOTH, padx=10, pady=10))
+        #  投影创建容器：frame_func_new
+        frame_func_new = tk.Frame(frame_func, bg=color_map["MC"])
+        frame_func_new.pack(side=tk.TOP, fill=tk.X, padx=20, pady=20)
+        frame_new_title = tk.Label(frame_func_new, text=LANG["litem.funcNew.1"],
+                                   font=(DefaultFont, int(DefaultFontSize * 1.8)), bg=color_map["MC"],
+                                   fg=color_map["TT"])
+        frame_new_title.grid(row=0, column=0, padx=5, pady=5, columnspan=4)
+        # -- ID 输入框
+        label_id = tk.Label(frame_func_new, text=LANG["litem.funcNew.2"],
+                            font=(DefaultFont, int(DefaultFontSize * 1.2)), bg=color_map["MC"], fg=color_map["TT"])
+        label_id.grid(row=1, column=0, padx=5, pady=5)
+        entry_id = tk.Entry(frame_func_new, width=20, bg=color_map["BG"], fg=color_map["PC"],
+                            font=(DefaultFont, DefaultFontSize))
+        entry_id.grid(row=1, column=1, padx=5, pady=5, columnspan=3)
+        # -- XYZ 长宽高输入框
+        label_xyz = tk.Label(frame_func_new, text=LANG["litem.funcNew.3"],
+                             font=(DefaultFont, int(DefaultFontSize * 1.2)), bg=color_map["MC"], fg=color_map["TT"])
+        label_xyz.grid(row=2, column=0, padx=5, pady=5)
+        label_lwh = tk.Label(frame_func_new, text=LANG["litem.funcNew.4"],
+                             font=(DefaultFont, int(DefaultFontSize * 1.2)), bg=color_map["MC"], fg=color_map["TT"])
+        label_lwh.grid(row=3, column=0, padx=5, pady=5)
+        entry_x = tk.Entry(frame_func_new, width=5, bg=color_map["BG"], fg=color_map["PC"],
+                           font=(DefaultFont, DefaultFontSize))
+        entry_x.grid(row=2, column=1, padx=2, pady=5)
+        entry_y = tk.Entry(frame_func_new, width=5, bg=color_map["BG"], fg=color_map["PC"],
+                           font=(DefaultFont, DefaultFontSize))
+        entry_y.grid(row=2, column=2, padx=2, pady=5)
+        entry_z = tk.Entry(frame_func_new, width=5, bg=color_map["BG"], fg=color_map["PC"],
+                           font=(DefaultFont, DefaultFontSize))
+        entry_z.grid(row=2, column=3, padx=2, pady=5)
+        entry_length = tk.Entry(frame_func_new, width=5, bg=color_map["BG"], fg=color_map["PC"],
+                                font=(DefaultFont, DefaultFontSize))
+        entry_length.grid(row=3, column=3, padx=2, pady=5)
+        entry_width = tk.Entry(frame_func_new, width=5, bg=color_map["BG"], fg=color_map["PC"],
+                               font=(DefaultFont, DefaultFontSize))
+        entry_width.grid(row=3, column=2, padx=2, pady=5)
+        entry_height = tk.Entry(frame_func_new, width=5, bg=color_map["BG"], fg=color_map["PC"],
+                                font=(DefaultFont, DefaultFontSize))
+        entry_height.grid(row=3, column=1, padx=2, pady=5)
+        btn_spawn = CTkButton(frame_func_new, text=LANG["litem.funcNew.5"],
+                              font=(DefaultFont, DefaultFontSize * 1.6, "bold"),
+                              command=lambda: create_structure(f"minecraft:{cn_translate(entry_id.get(), False)}",
+                                                               (entry_x.get(), entry_y.get(), entry_z.get()),
+                                                               (entry_length.get(), entry_width.get(),
+                                                                entry_height.get()), False, 0,
+                                                               [False, False, False, False, False, False]
+                                                               ))
+        btn_spawn.configure(fg_color=color_map["BG"], text_color=color_map["TT"], corner_radius=DefaultCorner)
+        btn_spawn.grid(row=8, column=0, padx=2, pady=2, columnspan=4)
+        label_tip = tk.Label(frame_func_new, text=LANG["litem.funcNew.6"], font=(DefaultFont, DefaultFontSize, "bold"),
+                             bg=color_map["MC"], fg="#f70400")
+        label_tip.grid(row=9, column=0, padx=5, pady=5, columnspan=4)
+        #  方块替换容器：frame_func_change
+        frame_func_change = tk.Frame(frame_func, bg=color_map["MC"])
+        frame_func_change.pack(side=tk.TOP, fill=tk.X, pady=20, padx=20)
+        frame_change_title = tk.Label(frame_func_change, text=LANG["litem.funcChange.1"],
+                                      font=(DefaultFont, int(DefaultFontSize * 1.8)), bg=color_map["MC"],
+                                      fg=color_map["TT"])
+        frame_change_title.grid(row=0, column=0, padx=5, pady=20, columnspan=4)
+
+        # -- Limit 标签和 XYZ 输入框
+        label_min = tk.Label(frame_func_change, text=LANG["litem.funcChange.2"],
+                             font=(DefaultFont, int(DefaultFontSize * 1.2)), bg=color_map["MC"], fg=color_map["TT"])
+        label_min.grid(row=1, column=0, padx=5, pady=5)
+        entry_min_x = tk.Entry(frame_func_change, width=5, bg=color_map["BG"], fg=color_map["PC"],
+                               font=(DefaultFont, DefaultFontSize))
+        entry_min_x.grid(row=1, column=1, padx=2, pady=5)
+        entry_min_y = tk.Entry(frame_func_change, width=5, bg=color_map["BG"], fg=color_map["PC"],
+                               font=(DefaultFont, DefaultFontSize))
+        entry_min_y.grid(row=1, column=2, padx=2, pady=5)
+        entry_min_z = tk.Entry(frame_func_change, width=5, bg=color_map["BG"], fg=color_map["PC"],
+                               font=(DefaultFont, DefaultFontSize))
+        entry_min_z.grid(row=1, column=3, padx=2, pady=5)
+        label_max = tk.Label(frame_func_change, text=LANG["litem.funcChange.3"],
+                             font=(DefaultFont, int(DefaultFontSize * 1.2)), bg=color_map["MC"], fg=color_map["TT"])
+        label_max.grid(row=2, column=0, padx=5, pady=5)
+        entry_max_x = tk.Entry(frame_func_change, width=5, bg=color_map["BG"], fg=color_map["PC"],
+                               font=(DefaultFont, DefaultFontSize))
+        entry_max_x.grid(row=2, column=1, padx=2, pady=5)
+        entry_max_y = tk.Entry(frame_func_change, width=5, bg=color_map["BG"], fg=color_map["PC"],
+                               font=(DefaultFont, DefaultFontSize))
+        entry_max_y.grid(row=2, column=2, padx=2, pady=5)
+        entry_max_z = tk.Entry(frame_func_change, width=5, bg=color_map["BG"], fg=color_map["PC"],
+                               font=(DefaultFont, DefaultFontSize))
+        entry_max_z.grid(row=2, column=3, padx=2, pady=5)
+
+        # -- Change 标签和多行输入框
+        tk.Label(frame_func_change, text=LANG["litem.funcChange.4"], font=(DefaultFont, int(DefaultFontSize * 1.2)),
+                 bg=color_map["MC"], fg=color_map["TT"]).grid(row=3, column=0, padx=5, pady=5)
+        text_change = tk.Text(frame_func_change, width=20, height=5, bg=color_map["BG"], fg=color_map["PC"],
+                              font=(DefaultFont, DefaultFontSize))
+        text_change.grid(row=3, column=1, columnspan=3, padx=5, pady=5)
+
+        btn_spawn2 = CTkButton(frame_func_change, text=LANG["litem.funcChange.5"],
+                               font=(DefaultFont, DefaultFontSize * 1.6, "bold"),
+                               command=lambda: change_Schematic(schematic,
+                                                                CS_trans_dict(text_change.get("1.0", tk.END)), (
+                                                                (entry_min_x.get(), entry_max_x.get()),
+                                                                (entry_min_y.get(), entry_max_y.get()),
+                                                                (entry_min_z.get(), entry_max_z.get())),
+                                                                file_name.split(".")[0] + "_Modified"))
+        btn_spawn2.configure(fg_color=color_map["BG"], text_color=color_map["TT"], corner_radius=DefaultCorner)
+        btn_spawn2.grid(row=5, column=0, padx=2, pady=2, columnspan=4)
+        tk.Label(frame_func_change, text=LANG["litem.funcChange.6"], font=(DefaultFont, DefaultFontSize, "bold"),
+                 bg=color_map["MC"], fg="#f70400", justify="left", wraplength=200).grid(row=6, column=0, padx=5, pady=5,
+                                                                                        columnspan=4)
+        # -- 分析设置
+        frame_Output = CTkScrollableFrame(frame_func, fg_color=color_map["BG"], corner_radius=DefaultCorner)
+        frame_Output.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True, padx=20, pady=20)
+        CTkLabel(frame_Output, text=LANG["litem.output.1"], font=(DefaultFont, int(DefaultFontSize * 2.0), "bold"),
+                 fg_color=color_map["BG"], text_color=color_map["TT"]).pack(side=tk.TOP, fill=tk.BOTH, padx=10, pady=10)
+        frame_times = tk.Frame(frame_Output, bg=color_map["BG"])
+        frame_times.pack(side=tk.TOP, fill=tk.BOTH, padx=10, pady=5)
+        tk.Label(frame_times, text=LANG["litem.times.1"], font=(DefaultFont, int(DefaultFontSize * 1.5)),
+                 bg=color_map["BG"], fg=color_map["TT"]).pack(side=tk.LEFT, padx=5)
+        entry_times = tk.Entry(frame_times, width=10, bg=color_map["BG"], fg=color_map["PC"],
+                               font=(DefaultFont, DefaultFontSize))
+        entry_times.pack(side=tk.RIGHT, padx=5)
+        frame_debug = tk.Frame(frame_Output, bg=color_map["BG"])
+        frame_debug.pack(side=tk.TOP, fill=tk.BOTH, padx=10, pady=10)
+        analysis_debug = tk.Label(frame_debug, text=LANG["litem.debug.1"], bg=color_map["BG"], fg=color_map["TT"],
+                                  font=(DefaultFont, int(DefaultFontSize * 1.5)))
+        analysis_debug.pack(side=tk.TOP, padx=10)
+        CTkLabel(frame_debug, text=LANG["litem.debug.2"], font=(DefaultFont, int(DefaultFontSize * 1.2), "bold"),
+                 fg_color=color_map["BG"], text_color="#f70400").pack(side=tk.TOP, fill=tk.BOTH, padx=10)
+
+    def TK_FrameMiddle(self):
+        #  中分析容器
+        frame_middle = CTkFrame(litem, fg_color=color_map["MC"], corner_radius=DefaultCorner)
+        hide(frame_middle, self.DoAnal,
+             lambda: frame_middle.pack(side=tk.RIGHT, fill=tk.BOTH, padx=10, pady=10, expand=True))
+        # - 标题容器
+        frame_middle_top = CTkFrame(frame_middle, fg_color=color_map["BG"], corner_radius=DefaultCorner)
+        frame_middle_top.pack(side=tk.TOP, fill=tk.X, padx=10, pady=10)
+        self.label_middle = tk.Label(frame_middle_top, text=LANG["litem.midTop.1"],
+                                     font=(DefaultFont, DefaultFontSize * 3, 'bold'))
+        self.label_middle.configure(bg=color_map["BG"], fg=color_map["TT"], bd=5)
+        self.label_middle.pack(fill=tk.Y)
+        label_bottom = tk.Label(frame_middle_top, text=LANG["litem.midTop.2"],
+                                font=(DefaultFont, int(DefaultFontSize * 1.4), "bold"))
+        label_bottom.configure(bg=color_map["BG"], fg=color_map["PC"], bd=5)
+        label_bottom.pack(side=tk.LEFT, fill=tk.X, padx=20, pady=10)
+
+        # 统计图标容器
+        frame_data = tk.Frame(frame_middle, bg=color_map["MC"])
+        hide(frame_data, self.DoStat, lambda: frame_data.pack(side=tk.RIGHT, fill=tk.Y, padx=10, pady=10))
+        frame_pie1 = CTkFrame(frame_data, fg_color=color_map["BG"], corner_radius=DefaultCorner)
+        frame_pie1.pack(side=tk.TOP, fill=tk.BOTH, pady=10)
+        frame_pie2 = CTkFrame(frame_data, fg_color=color_map["BG"], corner_radius=DefaultCorner)
+        frame_pie2.pack(side=tk.TOP, fill=tk.BOTH, pady=10)
+        fig1 = Figure(figsize=(4, 3), dpi=80)
+        self.ax1 = fig1.add_subplot(111)
+        canvas1 = FigureCanvasTkAgg(fig1, master=frame_pie1)
+        canvas1.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+        fig2 = Figure(figsize=(4, 3), dpi=80)
+        self.ax2 = fig2.add_subplot(111)
+        canvas2 = FigureCanvasTkAgg(fig2, master=frame_pie2)
+        canvas2.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+        process_frame = tk.Frame(frame_data, bg=color_map["MC"])
+        process_frame.pack(side=tk.TOP, fill=tk.X, padx=5, pady=10)
+        progress = ttk.Progressbar(process_frame, orient="horizontal", length=300, mode="determinate", name="pb")
+        progress.pack(pady=5, side=tk.TOP, fill=tk.X)
+        process_text = tk.Label(process_frame, text=LANG["litem.procbar.1"].format(0, 0, 0))
+        process_text.pack(pady=5, side=tk.TOP, fill=tk.X)
+
+        table_sty = ttk.Style()
+        table_sty.configure("Treeview", font=(DefaultFont, int(DefaultFontSize * 1.2)), rowheight=25,
+                            background=color_map["PC"], foreground=color_map["BG"])
+        table_sty.configure("Treeview.Heading", font=(DefaultFont, int(DefaultFontSize * 1.4), "bold"),
+                            background=color_map["PC"], foreground=color_map["MC"])
+        table_sty.map('Treeview', background=[('selected', color_map["MC"])])
+        # 中容器表格
+        frame_chart = tk.Frame(frame_middle, bg=color_map["TT"], background=color_map["MC"])
+        frame_chart.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=10, pady=5)
+
+        sroll = tk.Scrollbar(frame_chart, orient="vertical")
+        sroll.pack(side=tk.RIGHT, fill=tk.Y, padx=10)
+        cc = ('blockID', 'num', 'unit', 'ID') if LANGUAGE == "zh" else ('blockID', 'num', 'unit')
+        self.count_table = ttk.Treeview(frame_chart, height=7, columns=cc, yscrollcommand=sroll.set)
+        sroll.config(command=self.count_table.yview)
+        self.count_table.heading('blockID', text=LANG["litem.chart.1"], anchor="center")
+        self.count_table.heading('num', text=LANG["litem.chart.2"], anchor="e")
+        self.count_table.heading('unit', text=LANG["litem.chart.3"], anchor="w")
+        if LANGUAGE == "zh":
+            self.count_table.heading('ID', text=LANG["litem.chart.4"], anchor="center")
+            self.count_table.column("ID", width=200)
+        self.count_table.column("#0", width=40)
+        self.count_table.column("blockID", width=150)
+        self.count_table.column("num", width=40)
+        self.count_table.column("unit", width=80, anchor="e")
+
+        self.count_table.config(height=20)
+        self.count_table.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=5, pady=10)
+
+    def TK_FrameStat(self):
+        # 统计数据容器
+        frame_left = tk.Frame(litem, bg=color_map["BG"])
+        hide(frame_left, self.DoStat,
+             lambda: frame_left.pack(side=tk.LEFT, fill=tk.BOTH, expand=False, padx=10, pady=10))
+        frame_3d = CTkFrame(frame_left, fg_color=color_map["PC"], corner_radius=DefaultCorner)
+        frame_3d.pack(side=tk.TOP, fill=tk.BOTH, expand=False, padx=10, pady=0)
+        frame_stati = CTkFrame(frame_left, fg_color=color_map["MC"], corner_radius=DefaultCorner)
+        frame_stati.pack(side=tk.TOP, fill=tk.X, expand=False, padx=10, pady=30)
+        frame_stati2 = tk.Frame(frame_stati, bg=color_map["MC"])
+        frame_stati2.pack(fill=tk.BOTH, padx=20, pady=20)
+
+        gl_view = OpenGLView(frame_3d, [((0, 0, 0), 'minecraft:dirt', [])], False, width=300, height=300,
+                             bg=color_map["PC"])
+        gl_view.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        gl_view.after(1000, gl_view.redraw)
+        self.stat_red = CTkFrame(frame_stati2, fg_color=color_map["PC"])
+        self.stat_red.pack(fill=tk.BOTH, side=tk.TOP, padx=5, pady=5)
+        self.stat_redt = CTkFrame(frame_stati2, fg_color=color_map["PC"])
+        self.stat_redt.pack(fill=tk.BOTH, side=tk.TOP, padx=5, pady=5)
+        self.stat_liq = CTkFrame(frame_stati2, fg_color=color_map["PC"])
+        self.stat_liq.pack(fill=tk.BOTH, side=tk.TOP, padx=5, pady=5)
+        self.stat_den = CTkFrame(frame_stati2, fg_color=color_map["PC"])
+        self.stat_den.pack(fill=tk.BOTH, side=tk.TOP, padx=5, pady=5)
+        self.stat_auth = CTkFrame(frame_stati2, fg_color=color_map["PC"])
+        self.stat_auth.pack(fill=tk.BOTH, side=tk.TOP, padx=5, pady=5)
+        self.stat_ver = CTkFrame(frame_stati2, fg_color=color_map["PC"])
+        self.stat_ver.pack(fill=tk.BOTH, side=tk.TOP, padx=5, pady=5)
+        self.stat_desc = CTkFrame(frame_stati2, fg_color=color_map["PC"])
+        self.stat_desc.pack(fill=tk.BOTH, side=tk.TOP, padx=5, pady=5)
+        tk.Label(self.stat_red, text=LANG["ui.stat.l1"], font=(DefaultFont, int(DefaultFontSize * 1.6), "bold"),
+                 bg=color_map["PC"], fg=color_map["BG"]).pack(fill=tk.X, side=tk.LEFT, padx=5, pady=5)
+        tk.Label(self.stat_redt, text=LANG["ui.stat.l2"], font=(DefaultFont, int(DefaultFontSize * 1.6), "bold"),
+                 bg=color_map["PC"], fg=color_map["BG"]).pack(fill=tk.X, side=tk.LEFT, padx=5, pady=5)
+        tk.Label(self.stat_liq, text=LANG["ui.stat.l3"], font=(DefaultFont, int(DefaultFontSize * 1.6), "bold"),
+                 bg=color_map["PC"], fg=color_map["BG"]).pack(fill=tk.X, side=tk.LEFT, padx=5, pady=5)
+        tk.Label(self.stat_den, text=LANG["ui.stat.l4"], font=(DefaultFont, int(DefaultFontSize * 1.6), "bold"),
+                 bg=color_map["PC"], fg=color_map["BG"]).pack(fill=tk.X, side=tk.LEFT, padx=5, pady=5)
+        tk.Label(self.stat_auth, text=LANG["ui.stat.l5"], font=(DefaultFont, int(DefaultFontSize * 1.6), "bold"),
+                 bg=color_map["PC"], fg=color_map["BG"]).pack(fill=tk.X, side=tk.LEFT, padx=5, pady=5)
+        tk.Label(self.stat_ver, text=LANG["ui.stat.l6"], font=(DefaultFont, int(DefaultFontSize * 1.6), "bold"),
+                 bg=color_map["PC"], fg=color_map["BG"]).pack(fill=tk.X, side=tk.LEFT, padx=5, pady=5)
+        tk.Label(self.stat_desc, text=LANG["ui.stat.l7"], font=(DefaultFont, int(DefaultFontSize * 1.6), "bold"),
+                 bg=color_map["PC"], fg=color_map["BG"]).pack(fill=tk.X, side=tk.LEFT, padx=5, pady=5)
+        self.a_red = tk.Label(self.stat_red, text="", font=(DefaultFont, int(DefaultFontSize * 1.6)),
+                              bg=color_map["PC"], fg=color_map["MC"])
+        self.a_red.pack(fill=tk.X, side=tk.RIGHT, padx=5, pady=5)
+        self.a_redt = tk.Label(self.stat_redt, text="", font=(DefaultFont, int(DefaultFontSize * 1.6)),
+                               bg=color_map["PC"], fg=color_map["MC"])
+        self.a_redt.pack(fill=tk.X, side=tk.RIGHT, padx=5, pady=5)
+        self.a_liq = tk.Label(self.stat_liq, text="", font=(DefaultFont, int(DefaultFontSize * 1.6)),
+                              bg=color_map["PC"], fg=color_map["MC"])
+        self.a_liq.pack(fill=tk.X, side=tk.RIGHT, padx=5, pady=5)
+        self.a_den = tk.Label(self.stat_den, text="", font=(DefaultFont, int(DefaultFontSize * 1.6)),
+                              bg=color_map["PC"], fg=color_map["MC"])
+        self.a_den.pack(fill=tk.X, side=tk.RIGHT, padx=5, pady=5)
+        self.a_auth = tk.Label(self.stat_auth, text="", font=(DefaultFont, int(DefaultFontSize * 1.6)),
+                               bg=color_map["PC"], fg=color_map["MC"])
+        self.a_auth.pack(fill=tk.X, side=tk.RIGHT, padx=5, pady=5)
+        self.a_ver = tk.Label(self.stat_ver, text="", font=(DefaultFont, int(DefaultFontSize * 1.6)),
+                              bg=color_map["PC"], fg=color_map["MC"])
+        self.a_ver.pack(fill=tk.X, side=tk.RIGHT, padx=5, pady=5)
+        self.a_desc = tk.Label(self.stat_desc, font=(DefaultFont, int(DefaultFontSize * 1.6)), bg=color_map["PC"],
+                               fg=color_map["MC"])
+        self.a_desc.pack(fill=tk.BOTH, side=tk.RIGHT, padx=5, pady=5)
+
+        redenmcframe = CTkFrame(frame_left, fg_color=color_map["MC"], corner_radius=DefaultCorner)
+        redenmcframe.pack(side=tk.TOP, fill=tk.BOTH, expand=False, padx=10, pady=0)
+        redenLab = CTkLabel(redenmcframe, text=LANG["litem.reden.title"],
+                            font=(DefaultFont, int(DefaultFontSize * 1.6)), fg_color=color_map["MC"],
+                            text_color=color_map["BG"])
+        redenLab.grid(padx=5, pady=5, row=0, column=0, columnspan=2)
+        redenenter = CTkEntry(redenmcframe, font=(DefaultFont, int(DefaultFontSize * 1.6)), fg_color=color_map["BG"],
+                              text_color=color_map["MC"], width=200)
+        redenenter.grid(padx=5, pady=5, row=1, column=0, columnspan=2)
+        redenselect = CTkComboBox(redenmcframe, values=[LANG["litem.reden.select.1"], LANG["litem.reden.select.2"],
+                                                        LANG["litem.reden.select.3"]],
+                                  font=(DefaultFont, int(DefaultFontSize * 1.6)), fg_color=color_map["MC"],
+                                  text_color=color_map["BG"])
+        redenselect.grid(padx=5, pady=5, row=2, column=0)
+        redenbtn = CTkButton(redenmcframe, text=LANG["litem.reden.btn"], font=(DefaultFont, int(DefaultFontSize * 1.6)),
+                             fg_color=color_map["BG"], text_color=color_map["MC"],
+                             command=lambda: Redenmc(redenenter.get(), str(redenselect.get())))
+        redenbtn.grid(padx=5, pady=5, row=2, column=1)
+
+    def import_file(self):
+        global file_path, file_name
+        file_path = filedialog.askopenfilename(filetypes=[("Litematic File", "*.litematic"), ("All File", "*.*")])
+        if not file_path:
+            return
+        file_path = os.path.normpath(file_path)
+        file_name = file_path.split("\\")[-1]
+        self.label_middle.config(text=f"{file_name}")
+        print(f"Imported file: {file_path}")
+
+    def insert_table(self, block_state, count):
+        if isinstance(block_state, BlockState):
+            block_id = block_state._BlockState__block_id
+            block_name = block_id.split(":")[-1]
+        else:
+            block_id = block_state
+            block_name = block_id.split(":")[-1]
+        img = load_image(block_name, images)
+        self.count_table.insert('', 'end', image=img, values=(
+            cn_translate(block_name), str(count), convert_units(count, LANGUAGE), block_name) if LANGUAGE == "zh" else (
+            block_name, str(count), convert_units(count, LANGUAGE)))
+        litem.update_idletasks()
+
+    def output_data(self, classification: bool = False):
+        global Block
+        output_file_path = tk.filedialog.asksaveasfilename(defaultextension=".txt", filetypes=[("Text files", "*.txt"),
+                                                                                               ("CSV Chart files",
+                                                                                                "*.csv")],
+                                                           title="Litematica Analysis Data Save As",
+                                                           initialfile=f'''{file_name.split(".")[0]}.txt''')
+        if not output_file_path:
+            return
+        with codecs.open(output_file_path, 'w', encoding='utf-8-sig') as f:
+            if not classification:
+                Block = dict(sorted(Block.items(), key=lambda x: x[1], reverse=True))  # Block = list
+                for val in Block:
+                    num = Block[val]
+                    id = val.split("[")[0].split(":")[-1]
+                    extension = os.path.splitext(output_file_path)[1].lower()
+                    if extension == ".csv":
+                        f.write(f"{cn_translate(id)},{id},{num},{convert_units(num, LANGUAGE)}\n")
+                    else:
+                        f.write(f"{num}[{convert_units(num, LANGUAGE)}] | {cn_translate(id)} [{id}]\n")
+            else:
+                for v in Cla_Block:
+                    Cla_Block[v].sort(key=lambda x: x[0], reverse=True)
+                for category in Cla_Block:
+                    if Cla_Block[category]:
+                        f.write(f"\n{category}\n" + "-" * 20 + "\n")
+                    for val in Cla_Block[category]:
+                        num = val[0]
+                        id = str(val[1]).split("[")[0].split(":")[-1]
+                        extension = os.path.splitext(output_file_path)[1].lower()
+                        if extension == ".csv":
+                            f.write(f"{cn_translate(id)},{id},{num},{convert_units(num, LANGUAGE)}\n")
+                        else:
+                            f.write(f"{num}[{convert_units(num, LANGUAGE)}] | {cn_translate(id)}[{id}]\n")
+        if sys.platform == 'darwin':
+            subprocess.call(['open', output_file_path])
+        elif sys.platform == 'win32':
+            os.startfile(output_file_path)
+
+    plt.rcParams['font.sans-serif'] = ['Microsoft YaHei', 'SimHei', "Source Han Sans SC",
+                                       "Noto Sans CJK SC"] if LANGUAGE == "zh" else ["Noto Sans", "Segoe UI",
+                                                                                     "Helvetica Neue", "Arial",
+                                                                                     "Liberation Sans"]
+    plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
+
+    # plt.figure(facecolor=color_map["MC"])
+
+    def Draw_Chart(self):
+        self.ax1.clear()
+        self.ax2.clear()
+
+        sorted_block = sorted(Block.items(), key=lambda x: x[1], reverse=True)
+        top_5 = sorted_block[:5]
+        other_count = sum(count for _, count in sorted_block[5:])
+        labels1 = [cn_translate(block_id.split(":")[-1]) for block_id, _ in top_5]
+        sizes1 = [count for _, count in top_5]
+        if other_count > 0:
+            labels1.append("其他")
+            sizes1.append(other_count)
+        self.ax1.pie(sizes1, labels=labels1, autopct='%1.1f%%', startangle=90)
+        self.ax1.set_title(LANG["ui.chart.t1"])
+
+        cla_bl = {}
+        for category, blocks in Cla_Block.items():
+            if blocks:
+                total = sum(count for count, _ in blocks)
+                cla_bl[category] = total
+
+        # 处理“其他”类别
+        if "其他" in cla_bl:
+            cat_other = cla_bl.pop("其他")
+        else:
+            cat_other = 0
+
+        sorted_block = sorted(cla_bl.items(), key=lambda x: x[1], reverse=True)
+        top_5 = sorted_block[:5]
+        other_count = sum(count for _, count in sorted_block[5:]) + cat_other
+        labels2 = [cate for cate, _ in top_5]
+        sizes2 = [count for _, count in top_5]
+        if other_count > 0:
+            labels2.append("其他")
+            sizes2.append(other_count)
+        self.ax2.pie(sizes2, labels=labels2, autopct='%1.1f%%', startangle=90)
+        self.ax2.set_title(LANG["ui.chart.t2"])
+
+        self.canvas1.draw()
+        self.canvas2.draw()
+        return sorted_block[:1]
+
+    def PB(self, tm):
+        global process_text
+        self.progress["maximum"] = int(tm)
+        for i in range(int(tm)):
+            self.progress["value"] += 1
+            time.sleep(1)
+            process_text.config(
+                text=LANG["litem.procbar.1"].format(self.progress["value"], self.progress["maximum"], i))
+            litem.update_idletasks()
+
+    def start_analysis(self):
+        global schematic, Cla_Block, Block_pos, gl_view, Block, size_x, size_y, size_z, process_text
+        print(file_path)
+        if not file_path:
+            self.import_file()
+        else:
+            self.label_middle.config(text=f"{os.path.basename(file_path)}")
+        Cla_Block = {"实体": [], "羊毛": [], "陶瓦": [], "混凝土": [], "玻璃": [], "木制": [], "石质": [],
+                     "其他岩石": [], "石英": [], "矿类": [], "自然类": [], "末地类": [], "地狱类": [], "海晶类": [],
+                     "粘土类": [], "红石": [], "铁类": [], "容器": [], "液体": [], "其他": []}
+        Block_pos = []
+        byte = os.path.getsize(file_path)
+        starttime = time.time()
+        time1 = 0.000026 * byte + 3
+        time2 = 0.000012 * byte + 2
+        self.progress["value"] = 0
+        if time1 > 5:
+            msgbox(LANG["ui.render.warn2"].format(time1, time2, time1 + time2))
+            threading.Thread(self.PB(time1)).start()
+        else:
+            self.progress["maximum"] = 2
+        with tqdm(total=2, desc="Loading Schematic", unit="u", dynamic_ncols=True) as pbar:
+            Block.clear()
+            self.count_table.delete(*self.count_table.get_children())
+            schematic = Schematic.load(file_path)
+            pbar.update(1)
+            self.progress["value"] += 1
+            nbt_file: NamedTag = load(file_path, compressed=True)
+            SCblock = nbt_file.tag['Metadata']['TotalBlocks']
+            SCname = schematic.name
+            SCauthor = schematic.author
+            SCdesc = schematic.description
+            SClv = schematic.lm_version
+            SCver: str
+            if SClv <= 3:
+                SCver = "1.12/1.13"
+            elif SClv <= 6:
+                SCver = "1.14~1.20.5"
+            elif SClv >= 7:
+                SCver = "1.20.6+"
+            else:
+                SCver = "1.12+"
+            num = 0
+            pbar.update(1)
+            self.progress["value"] += 1
+        print(f"--Schematic loaded: {schematic}|Name:{SCname}|Author:{SCauthor}|Description:{SCdesc}|Version:{SCver}|")
+        for region_index, region in enumerate(schematic.regions.values()):
+            print(f"--Analyzing region {region_index + 1}")
+            size_x = region.maxx() - region.minx() + 1
+            size_y = region.maxy() - region.miny() + 1
+            size_z = region.maxz() - region.minz() + 1
+            self.progress["maximum"] = size_x * size_y * size_z
+            self.progress["value"] = 0
+            with tqdm(total=size_x * size_y * size_z, desc="Region" + str(region_index) + "-Parsing blocks", unit="blk",
+                      dynamic_ncols=True) as pbar:
+                for x in (range(size_x)):
+                    for y in (range(size_y)):
+                        for z in (range(size_z)):
+                            block_state = region._Region__palette[region._Region__blocks[x, y, z]]
+                            block_id = block_state._BlockState__block_id
+                            block_property = block_state._BlockState__properties
+                            output = block_id
+                            if output not in ["minecraft:air", "minecraft:cave_air", "minecraft:void_air"]:
+                                num += 1
+                                if output not in ["minecraft:piston_head",
+                                                  "minecraft:nether_portal", "minecraft:moving_piston",
+                                                  "minecraft:bedrock"]:
+                                    MBB = ["potted_", "_cake", "wall_", "_cauldron"]  # 组合逆天方块
+                                    Analysis = {  # 简单转换方块
+                                        "minecraft:farmland": "minecraft:dirt",
+                                        "minecraft:dirt_path": "minecraft:dirt",
+                                        "minecraft:bubble_column": "minecraft:water",
+                                        "minecraft:soul_fire": "minecraft:fire"
+                                    }
+                                    prop_list = [('waterlogged', 'true', "minecraft:water", 1),  # 属性判断方块
+                                                 ('type', 'double', None, 2),
+                                                 ('half', 'upper', None, -1),
+                                                 ('part', 'head', None, -1),
+                                                 ('eggs', '', "minecraft:turtle_egg", 0),
+                                                 ('pickles', '', "minecraft:sea_pickle", 0),
+                                                 ('charges', '', "minecraft:glowstone", 0),
+                                                 ('flower_amount', '', "minecraft:pink_petals", 0)]
+                                    # 简单转换方块
+                                    for a in Analysis:
+                                        output = Analysis[a] if block_id == a else block_id
+                                    # 组合逆天方块
+                                    for root in MBB:
+                                        if root in block_id:
+                                            output = block_id.replace(root, "")
+                                    # 属性判断方块
+                                    for pt, pv, pf, pn in prop_list:
+                                        if pt in block_property:
+                                            if not pn: pn = int(block_property[pt])
+                                            if block_property[pt] == pv or not pv:
+                                                if not pf:
+                                                    Block[output] = Block[output] + pn if output in Block else pn
+                                                    Block_pos.append([[x, y, z], str(output), block_property])
+                                                elif pf not in Block:
+                                                    Block[pf] = pn
+                                                    Block_pos.append([[x, y, z], str(pf), block_property])
+                                                else:
+                                                    Block[pf] = Block[pf] + pn
+                                                    Block_pos.append([[x, y, z], str(pf), block_property])
+                                                continue
+                                    Block[output] = Block[output] + 1 if output in Block else 1
+                                Block_pos.append([[x, y, z], str(output), block_property])
+                            pbar.update(1)
+                            self.progress["value"] += 1
+                process_text.config(
+                    text=LANG["litem.procbar.1"].format(self.progress["value"], self.progress["maximum"],
+                                                        int(time.time() - starttime)))
+                litem.update_idletasks()
+
+            if self.DoEntity.get():
+                for entity in region._Region__entities:
+                    entity_type = "E/" + str(entity.id)
+                    if entity_type not in ["E/minecraft:item", "E/minecraft:bat", "E/minecraft:experience_orb",
+                                           "E/minecraft:shulker_bullet"]:
+                        if entity_type not in Block:
+                            Block[entity_type] = 1
+                        else:
+                            Block[entity_type] += 1
+        tim = 1 if self.entry_times.get() == "" else int(self.entry_times.get())
+        for val in Block:
+            id = val.split("[")[0].split(":")[-1]
+            typeB = Category_Tran(id)
+            if val.split("/")[0] == "E":
+                Cla_Block["实体"].append((Block[val], val))
+            elif typeB != "":
+                Cla_Block[typeB].append((Block[val], val))
+            else:
+                Cla_Block["其他"].append((Block[val], val))
+        print(f"{Cla_Block}")
+        # print(Block_pos)
+        self.label_bottom.config(
+            text=LANG["litem.midTop.2b"].format(size_x, size_y, size_z, num, tim, len(Block)))
+        top1 = self.Draw_Chart()
+        sorted_block = sorted(Block.items(), key=lambda x: x[1], reverse=True)
+        self.a_den.config(text=f"{num / (size_x * size_y * size_z) * 100:.1f}%")
+        redly = (sum(n for n, _ in Cla_Block["红石"]) + sum(n for n, _ in Cla_Block["容器"])) / (
+            num - sorted_block[0][1] if len(Block) > 5 else num)
+        if num > 10:
+            if redly > 0.5:
+                me_type = LANG["ui.stat.type1"]
+            elif redly >= 0.3:
+                me_type = LANG["ui.stat.type2"]
+            elif redly >= 0.1:
+                me_type = LANG["ui.stat.type3"]
+            elif redly >= 0.01:
+                me_type = LANG["ui.stat.type4"]
+            elif redly < 0.01:
+                me_type = LANG["ui.stat.type5"]
+        else:
+            me_type = LANG["ui.stat.type6"]
+        self.a_red.config(text=f"{redly * 100:.1f}%")
+        self.a_redt.config(text=f"{me_type}")
+        fluid = sum(n for n, _ in Cla_Block["液体"])
+        self.a_liq.config(text=f"{fluid / num * 100:.1f}%\n{fluid}u")
+        self.a_auth.config(text=SCauthor)
+        self.a_ver.config(text=SCver)
+        self.a_desc.config(text=SCdesc)
+        deb = (SCblock == num)
+        self.analysis_debug.config(text=f"Analysis DEBUG: {str(deb)}")
+        for index, (block_state, count) in enumerate(sorted_block):
+            try:
+                count = count * int(self.entry_times.get())
+            except:
+                count = count * 1
+            self.insert_table(block_state, count)
+
+        # save file
+        with open(grs('log.txt'), 'w', encoding='utf-8') as file:
+            file.write(file_path)
+            print("new file saved")
+        litem.update_idletasks()
+
+        # 3D RENDER
+        if self.Do3d.get():
+            # if Pn3d.get():
+            #     gl_view.destroy()
+            #     if Li3d.get() and num>1000:
+            #         if num>5000:
+            #             check = boolbox(LANG["ui.render.warn1"],default_choice="是/Y",cancel_choice="取消/N")
+            #             if not check: return
+            #             threading.Thread(target=LitRender.main_render_loop(Block_pos,bool(False)), daemon=True).start()
+            #             return
+            #         gl_view = OpenGLView(frame_3d, Block_pos, False, width=300, height=300, bg=color_map["PC"])
+            #     else:
+            #         gl_view = OpenGLView(frame_3d, Block_pos, bool(Sp3d.get()), width=300, height=300, bg=color_map["PC"])
+            #     gl_view.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+            #     gl_view.after(1000, gl_view.redraw)
+            # else:
+            #     if Li3d.get() and num>1000:
+            #         if num>5000:
+            #             check = boolbox(LANG["ui.render.warn1"],default_choice="是/Y",cancel_choice="取消/N")
+            #             if not check: return
+            #         threading.Thread(target=LitRender.main_render_loop(Block_pos,bool(False)), daemon=True).start()
+            #     else:
+            #         threading.Thread(target=LitRender.main_render_loop(Block_pos,bool(Sp3d.get())), daemon=True).start()
+
+            # threading.Thread(target=JSRender().StartServer(), daemon=True).start()
+            pass
+
+    def on_exit(self):
+        fw = f"{self.DoEntity.get()}{self.DoLifr.get()}{self.DoStat.get()}{self.DoAnal.get()}{self.Do3d.get()}{self.Pn3d.get()}{self.Li3d.get()}{self.Sp3d.get()}"
+        return fw
+
+
+
+
+Tk = TKF()
+
+
 def on_exit():
-    fw = ""
-    for logvar in LogVar:
-        fw += str(globals()[logvar].get())
+    fw = Tk.on_exit()
     print(f"Log Rewrite:{fw}")
     data["Save"]["Basic"] = fw
     with open(grs(os.path.join('lang', 'data.json')), 'w') as js:
         json.dump(data, js, indent=2)
-atexit.register(on_exit) #退出绑定
+atexit.register(on_exit)  # 退出绑定
 
-def Update(mode:["Github","Onedrive"]):
-    JSUpdate()
+
+class Github:
+    pass
+
+
+def Update(mode):
+    """
+    :param mode: input "GitHub" & "Onedrive"
+    :return:
+    """
+    # JSUpdate()
     try:
         try:
             response = requests.get("https://api.github.com/repos/albertchen857/LitematicaViewer/releases/latest", timeout=10)
@@ -153,7 +1034,7 @@ def Update(mode:["Github","Onedrive"]):
         print(latest_tag[-5:])
         if boolbox(LANG["func.update.ms1"].format(latest_tag),title="Download"):
             match mode:
-                case "Github":
+                case "GitHub":
                     webbrowser.open("https://github.com/albertchen857/LitematicaViewer/releases/latest/download/LitematicaViewer.7z")
     else:
         msgbox(LANG["func.update.ms2"],title="Download")
@@ -472,26 +1353,6 @@ class LitStepChecker:
         self.update_canvas()
         litem.update_idletasks()
 
-def litVerFix(version: int) -> None:
-    #["v7 1.20.6+", "v6 1.14~1.20.5", "v3 1.12/1.13"]
-    global file_path
-    if not file_path:
-        file_path = filedialog.askopenfilename(filetypes=[("Litematic File", "*.litematic"), ("All File", "*.*")],title="选择 Litematic 文件")
-    if not file_path:
-        return
-    nbt_file: NamedTag = load(file_path, compressed=True)
-    if 'Version' not in nbt_file.tag:
-        return
-    nbt_file.tag['Version'] = IntTag(version)
-    print(f"修改后的 Version: {nbt_file.tag['Version']}")
-    file_dir, file_name = os.path.split(file_path)
-    file_name_without_extension, file_extension = os.path.splitext(file_name)
-    new_file_name = f"{file_name_without_extension}_v{nbt_file.tag['Version']}{file_extension}"
-    new_file_path = os.path.join(file_dir, new_file_name)
-    nbt_file.save_to(new_file_path, compressed=True)
-    print(f"文件已保存到 Save: {new_file_path}")
-    os.startfile(os.path.dirname(file_path))
-
 def CS_trans_dict(inp:str) -> dict:
     d1 = inp.strip("\n").split(",")
     d2 : dict[str:[str,dict,dict]] = {}
@@ -508,16 +1369,6 @@ def CS_trans_dict(inp:str) -> dict:
         d2["minecraft:"+str(cn_translate(initname,False))]=("minecraft:"+str(cn_translate(finalname,False)),iprop,fprop)
     return d2
 
-def import_file():
-    global file_path, file_name
-    file_path = filedialog.askopenfilename(filetypes=[("Litematic File","*.litematic"),("All File","*.*")])
-    if not file_path:
-        return
-    file_path = os.path.normpath(file_path)
-    file_name = file_path.split("\\")[-1]
-    label_middle.config(text=f"{file_name}")
-    print(f"Imported file: {file_path}")
-
 def hide(root , vari , prop = None):
     if not prop: prop = lambda: root.pack(side=tk.LEFT, fill=tk.Y)
     if not vari.get():
@@ -526,725 +1377,8 @@ def hide(root , vari , prop = None):
         prop()
         litem.update_idletasks()
 
-def load_image(block_name):
-    try:
-        img_path = grs(os.path.join('block', f"{block_name}.png"))
-        img = Image.open(img_path)
-        img = img.resize((20, 20), Image.LANCZOS)
-        img = ImageTk.PhotoImage(img)
-        images[block_name] = img
-        return img
-    except:
-        img_path = grs(os.path.join('block', 'info_update.png'))
-        img = Image.open(img_path)
-        img = img.resize((20, 20), Image.LANCZOS)
-        img = ImageTk.PhotoImage(img)
-        images[block_name] = img
-        return img
-
-def insert_table(block_state, count):
-    if isinstance(block_state, BlockState):
-        block_id = block_state._BlockState__block_id
-        block_name = block_id.split(":")[-1]
-    else:
-        block_id = block_state
-        block_name = block_id.split(":")[-1]
-    img = load_image(block_name)
-    count_table.insert('', 'end', image=img, values=(cn_translate(block_name), str(count), convert_units(count,LANGUAGE), block_name) if LANGUAGE == "zh" else (block_name, str(count), convert_units(count,LANGUAGE)))
-    litem.update_idletasks()
-
-def output_data(classification : bool = False):
-    global Block
-    output_file_path = tk.filedialog.asksaveasfilename(defaultextension=".txt", filetypes=[("Text files", "*.txt"),
-                                                                                            ("CSV Chart files",
-                                                                                            "*.csv")],
-                                                           title="Litematica Analysis Data Save As",
-                                                           initialfile=f'''{file_name.split(".")[0]}.txt''')
-    if not output_file_path:
-        return
-    with codecs.open(output_file_path, 'w', encoding='utf-8-sig') as f:
-        if not classification:
-            Block = dict(sorted(Block.items(), key=lambda x: x[1], reverse=True))  # Block = list
-            for val in Block:
-                num = Block[val]
-                id = val.split("[")[0].split(":")[-1]
-                extension = os.path.splitext(output_file_path)[1].lower()
-                if extension == ".csv":
-                    f.write(f"{cn_translate(id)},{id},{num},{convert_units(num,LANGUAGE)}\n")
-                else:
-                    f.write(f"{num}[{convert_units(num,LANGUAGE)}] | {cn_translate(id)} [{id}]\n")
-        else:
-            for v in Cla_Block:
-                Cla_Block[v].sort(key=lambda x: x[0], reverse=True)
-            for category in Cla_Block:
-                if Cla_Block[category]:
-                    f.write(f"\n{category}\n" + "-" * 20 + "\n")
-                for val in Cla_Block[category]:
-                    num = val[0]
-                    id = str(val[1]).split("[")[0].split(":")[-1]
-                    extension = os.path.splitext(output_file_path)[1].lower()
-                    if extension == ".csv":
-                        f.write(f"{cn_translate(id)},{id},{num},{convert_units(num,LANGUAGE)}\n")
-                    else:
-                        f.write(f"{num}[{convert_units(num,LANGUAGE)}] | {cn_translate(id)}[{id}]\n")
-    if sys.platform == 'darwin':
-        subprocess.call(['open', output_file_path])
-    elif sys.platform == 'win32':
-        os.startfile(output_file_path)
-
-plt.rcParams['font.sans-serif'] = ['Microsoft YaHei', 'SimHei', "Source Han Sans SC", "Noto Sans CJK SC"]  if LANGUAGE == "zh" else ["Noto Sans", "Segoe UI", "Helvetica Neue", "Arial", "Liberation Sans"]
-plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
-#plt.figure(facecolor=color_map["MC"])
-
-def Draw_Chart():
-    ax1.clear()
-    ax2.clear()
-
-    sorted_block = sorted(Block.items(), key=lambda x: x[1], reverse=True)
-    top_5 = sorted_block[:5]
-    other_count = sum(count for _, count in sorted_block[5:])
-    labels1 = [cn_translate(block_id.split(":")[-1]) for block_id, _ in top_5]
-    sizes1 = [count for _, count in top_5]
-    if other_count > 0:
-        labels1.append("其他")
-        sizes1.append(other_count)
-    ax1.pie(sizes1, labels=labels1, autopct='%1.1f%%', startangle=90)
-    ax1.set_title(LANG["ui.chart.t1"])
-
-    cla_bl = {}
-    for category, blocks in Cla_Block.items():
-        if blocks:
-            total = sum(count for count, _ in blocks)
-            cla_bl[category] = total
-
-    # 处理“其他”类别
-    if "其他" in cla_bl:
-        cat_other = cla_bl.pop("其他")
-    else:
-        cat_other = 0
-
-    sorted_block = sorted(cla_bl.items(), key=lambda x: x[1], reverse=True)
-    top_5 = sorted_block[:5]
-    other_count = sum(count for _, count in sorted_block[5:]) + cat_other
-    labels2 = [cate for cate, _ in top_5]
-    sizes2 = [count for _, count in top_5]
-    if other_count > 0:
-        labels2.append("其他")
-        sizes2.append(other_count)
-    ax2.pie(sizes2, labels=labels2, autopct='%1.1f%%', startangle=90)
-    ax2.set_title(LANG["ui.chart.t2"])
-
-    canvas1.draw()
-    canvas2.draw()
-    return sorted_block[:1]
-
-def PB(tm):
-    global process_text
-    progress["maximum"] = int(tm)
-    for i in range(int(tm)):
-        progress["value"]+=1
-        time.sleep(1)
-        process_text.config(text=LANG["litem.procbar.1"].format(progress["value"], progress["maximum"], i))
-        litem.update_idletasks()
-
-def start_analysis():
-    global schematic, Cla_Block, Block_pos, gl_view, Block, size_x, size_y, size_z, process_text
-    print(file_path)
-    if not file_path:
-        import_file()
-    else:
-        label_middle.config(text=f"{os.path.basename(file_path)}")
-    Cla_Block = {"实体": [], "羊毛": [], "陶瓦": [], "混凝土": [], "玻璃": [], "木制": [], "石质": [],
-                 "其他岩石": [], "石英": [], "矿类": [], "自然类": [], "末地类": [], "地狱类": [], "海晶类": [],
-                 "粘土类": [], "红石": [], "铁类": [], "容器": [], "液体": [], "其他": []}
-    Block_pos = []
-    byte = os.path.getsize(file_path)
-    starttime = time.time()
-    time1 = 0.000026*byte+3
-    time2 = 0.000012*byte+2
-    progress["value"] = 0
-    if time1 > 5:
-        msgbox(LANG["ui.render.warn2"].format(time1,time2,time1+time2))
-        threading.Thread(PB(time1)).start()
-    else:
-        progress["maximum"] = 2
-    with tqdm(total=2, desc="Loading Schematic", unit="u", dynamic_ncols=True) as pbar:
-        Block.clear()
-        count_table.delete(*count_table.get_children())
-        schematic = Schematic.load(file_path)
-        pbar.update(1)
-        progress["value"] += 1
-        nbt_file: NamedTag = load(file_path, compressed=True)
-        SCblock = nbt_file.tag['Metadata']['TotalBlocks']
-        SCname = schematic.name
-        SCauthor = schematic.author
-        SCdesc = schematic.description
-        SClv = schematic.lm_version
-        SCver : str
-        if SClv <= 3:
-            SCver = "1.12/1.13"
-        elif SClv <= 6:
-            SCver = "1.14~1.20.5"
-        elif SClv >= 7:
-            SCver = "1.20.6+"
-        else:
-            SCver = "1.12+"
-        num = 0
-        pbar.update(1)
-        progress["value"] += 1
-    print(f"--Schematic loaded: {schematic}|Name:{SCname}|Author:{SCauthor}|Description:{SCdesc}|Version:{SCver}|")
-    for region_index, region in enumerate(schematic.regions.values()):
-        print(f"--Analyzing region {region_index + 1}")
-        size_x = region.maxx() - region.minx() + 1
-        size_y = region.maxy() - region.miny() + 1
-        size_z = region.maxz() - region.minz() + 1
-        progress["maximum"] = size_x* size_y * size_z
-        progress["value"] = 0
-        with tqdm(total=size_x * size_y * size_z, desc="Region"+str(region_index)+"-Parsing blocks", unit="blk", dynamic_ncols=True) as pbar:
-            for x in (range(size_x)):
-                for y in (range(size_y)):
-                    for z in (range(size_z)):
-                        block_state = region._Region__palette[region._Region__blocks[x, y, z]]
-                        block_id = block_state._BlockState__block_id
-                        block_property = block_state._BlockState__properties
-                        output = block_id
-                        if output not in ["minecraft:air", "minecraft:cave_air", "minecraft:void_air"]:
-                            num += 1
-                            if output not in ["minecraft:piston_head",
-                                                "minecraft:nether_portal", "minecraft:moving_piston",
-                                                "minecraft:bedrock"]:
-                                MBB = ["potted_", "_cake", "wall_", "_cauldron"] #组合逆天方块
-                                Analysis= { #简单转换方块
-                                    "minecraft:farmland": "minecraft:dirt",
-                                    "minecraft:dirt_path": "minecraft:dirt",
-                                    "minecraft:bubble_column": "minecraft:water",
-                                    "minecraft:soul_fire": "minecraft:fire"
-                                }
-                                prop_list = [('waterlogged', 'true', "minecraft:water", 1), #属性判断方块
-                                             ('type', 'double', None, 2),
-                                             ('half', 'upper', None, -1),
-                                             ('part', 'head', None, -1),
-                                             ('eggs', '', "minecraft:turtle_egg", 0),
-                                             ('pickles', '', "minecraft:sea_pickle", 0),
-                                             ('charges', '', "minecraft:glowstone", 0),
-                                             ('flower_amount', '', "minecraft:pink_petals", 0)]
-                                # 简单转换方块
-                                for a in Analysis:
-                                    output = Analysis[a] if block_id == a else block_id
-                                # 组合逆天方块
-                                for root in MBB:
-                                    if root in block_id:
-                                        output = block_id.replace(root, "")
-                                # 属性判断方块
-                                for pt, pv, pf, pn in prop_list:
-                                    if pt in block_property:
-                                        if not pn: pn = int(block_property[pt])
-                                        if block_property[pt] == pv or not pv:
-                                            if not pf:
-                                                Block[output] = Block[output]+pn if output in Block else pn
-                                                Block_pos.append([[x, y, z], str(output), block_property])
-                                            elif pf not in Block:
-                                                Block[pf] = pn
-                                                Block_pos.append([[x, y, z], str(pf), block_property])
-                                            else:
-                                                Block[pf] = Block[pf]+pn
-                                                Block_pos.append([[x, y, z], str(pf), block_property])
-                                            continue
-                                Block[output] = Block[output]+1 if output in Block else 1
-                            Block_pos.append([[x, y, z], str(output), block_property])
-                        pbar.update(1)
-                        progress["value"] += 1
-            process_text.config(text=LANG["litem.procbar.1"].format(progress["value"], progress["maximum"], int(time.time()-starttime)))
-            litem.update_idletasks()
-
-        if DoEntity.get():
-            for entity in region._Region__entities:
-                entity_type = "E/" + str(entity.id)
-                if entity_type not in ["E/minecraft:item", "E/minecraft:bat", "E/minecraft:experience_orb",
-                                       "E/minecraft:shulker_bullet"]:
-                    if entity_type not in Block:
-                        Block[entity_type] = 1
-                    else:
-                        Block[entity_type] += 1
-    tim = 1 if entry_times.get() == "" else int(entry_times.get())
-    for val in Block:
-        id = val.split("[")[0].split(":")[-1]
-        typeB = Category_Tran(id)
-        if val.split("/")[0]=="E":
-            Cla_Block["实体"].append((Block[val], val))
-        elif typeB != "":
-            Cla_Block[typeB].append((Block[val], val))
-        else:
-            Cla_Block["其他"].append((Block[val], val))
-    print(f"{Cla_Block}")
-    #print(Block_pos)
-    label_bottom.config(
-        text=LANG["litem.midTop.2b"].format(size_x,size_y,size_z,num,tim,len(Block)))
-    top1 = Draw_Chart()
-    sorted_block = sorted(Block.items(), key=lambda x: x[1], reverse=True)
-    a_den.config(text=f"{num / (size_x * size_y * size_z) * 100:.1f}%")
-    redly = (sum(n for n, _ in Cla_Block["红石"])+sum(n for n, _ in Cla_Block["容器"])) / (num-sorted_block[0][1] if len(Block)>5 else num)
-    if num > 10:
-        if redly>0.5:
-            me_type = LANG["ui.stat.type1"]
-        elif redly>=0.3:
-            me_type = LANG["ui.stat.type2"]
-        elif redly>=0.1:
-            me_type = LANG["ui.stat.type3"]
-        elif redly>=0.01:
-            me_type = LANG["ui.stat.type4"]
-        elif redly<0.01:
-            me_type = LANG["ui.stat.type5"]
-    else:
-        me_type = LANG["ui.stat.type6"]
-    a_red.config(text=f"{redly*100:.1f}%")
-    a_redt.config(text=f"{me_type}")
-    fluid = sum(n for n, _ in Cla_Block["液体"])
-    a_liq.config(text=f"{fluid / num * 100:.1f}%\n{fluid}u")
-    a_auth.config(text=SCauthor)
-    a_ver.config(text=SCver)
-    a_desc.config(text=SCdesc)
-    deb = (SCblock==num)
-    analysis_debug.config(text=f"Analysis DEBUG: {str(deb)}")
-    for index, (block_state, count) in enumerate(sorted_block):
-        try:
-            count = count * int(entry_times.get())
-        except:
-            count = count * 1
-        insert_table(block_state, count)
-
-    #save file
-    with open(grs('log.txt'), 'w', encoding='utf-8') as file:
-        file.write(file_path)
-        print("new file saved")
-    litem.update_idletasks()
-
-    #3D RENDER
-    if Do3d.get():
-        # if Pn3d.get():
-        #     gl_view.destroy()
-        #     if Li3d.get() and num>1000:
-        #         if num>5000:
-        #             check = boolbox(LANG["ui.render.warn1"],default_choice="是/Y",cancel_choice="取消/N")
-        #             if not check: return
-        #             threading.Thread(target=LitRender.main_render_loop(Block_pos,bool(False)), daemon=True).start()
-        #             return
-        #         gl_view = OpenGLView(frame_3d, Block_pos, False, width=300, height=300, bg=color_map["PC"])
-        #     else:
-        #         gl_view = OpenGLView(frame_3d, Block_pos, bool(Sp3d.get()), width=300, height=300, bg=color_map["PC"])
-        #     gl_view.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        #     gl_view.after(1000, gl_view.redraw)
-        # else:
-        #     if Li3d.get() and num>1000:
-        #         if num>5000:
-        #             check = boolbox(LANG["ui.render.warn1"],default_choice="是/Y",cancel_choice="取消/N")
-        #             if not check: return
-        #         threading.Thread(target=LitRender.main_render_loop(Block_pos,bool(False)), daemon=True).start()
-        #     else:
-        #         threading.Thread(target=LitRender.main_render_loop(Block_pos,bool(Sp3d.get())), daemon=True).start()
-        time.sleep(10000)
-        subprocess.Popen(['python', '-m', 'http.server', '8000'],
-                         cwd=os.getcwd(),
-                         stdout=subprocess.DEVNULL,
-                         stderr=subprocess.DEVNULL)
-        # threading.Thread(target=JSRender().StartServer(), daemon=True).start()
-        webbrowser.open("http://localhost:8000")
 
 
 
 if __name__ == "__main__":
-    #  主窗口
-    litem = tk.Tk()
-    litem.title(f'{LANG["litem.title"]} v{APP_VERSION}')
-    litem.iconbitmap(grs("icon.ico"))
-    if sys.platform.startswith("win"):
-        litem.state("zoomed")  # Windows 专用
-    else:
-        litem.attributes("-zoomed", True)  # Linux/macOS
-    litem.configure(bg=color_map["BG"])
-
-    if data["Save"]["First_open"] == "0":
-        msgbox(LANG["litem.log"])
-        data["Save"]["First_open"] = "1"
-        with open(grs(os.path.join('lang', 'data.json')), 'w') as js:
-            json.dump(data, js, indent=2)
-
-    LogVar = ["DoEntity", "DoLifr", "DoStat", "DoAnal", "Do3d", "Pn3d", "Li3d", "Sp3d"]
-    menu = tk.Menu(litem)
-    DoEntity = tk.IntVar()
-    DoLifr = tk.IntVar()
-    DoStat = tk.IntVar()
-    DoAnal = tk.IntVar()
-    Do3d = tk.IntVar()
-    Pn3d = tk.IntVar()
-    Li3d = tk.IntVar()
-    Sp3d = tk.IntVar()
-
-    Basic = data["Save"]["Basic"]
-    try:
-        logvan = 0
-        for logvar in LogVar:
-            globals()[logvar] = tk.IntVar(value=int(Basic[logvan]))
-            logvan+=1
-    except:
-        for logvar in LogVar:
-            globals()[logvar] = tk.IntVar(value=1)
-
-    # 菜单：数据分析
-    menu_analysis = tk.Menu(menu, tearoff=0)
-    menu_analysis.add_command(label=LANG["litem.menuAnalysis.1"], command=import_file,
-                              font=(DefaultFont, DefaultFontSize))
-    menu_analysis.add_command(label=LANG["litem.menuAnalysis.2"], command=lambda: output_data(False),
-                              font=(DefaultFont, DefaultFontSize))
-    menu_analysis.add_command(label=LANG["litem.menuAnalysis.3"], command=lambda: output_data(True),
-                              font=(DefaultFont, DefaultFontSize))
-    menu_analysis.add_command(label=LANG["litem.menuAnalysis.4"],
-                              command=lambda: threading.Thread(target=start_analysis(True), daemon=True).start(),
-                              font=(DefaultFont, DefaultFontSize))
-    menu_analysis.add_command(label=LANG["litem.menuAnalysis.5"],
-                              command=lambda: create_structure(f"minecraft:{cn_translate(entry_id.get(), False)}",
-                                                               (entry_x.get(), entry_y.get(), entry_z.get()),
-                                                               (entry_length.get(), entry_width.get(),
-                                                                entry_height.get()), False, 0,
-                                                               [False, False, False, False, False, False]
-                                                               ), font=(DefaultFont, DefaultFontSize))
-    menu_analysis.add_command(label=LANG["litem.menuAnalysis.6"],
-                              command=lambda: change_Schematic(schematic, CS_trans_dict(text_change.get("1.0", tk.END)),
-                                                               ((entry_min_x.get(), entry_max_x.get()),
-                                                                (entry_min_y.get(), entry_max_y.get()),
-                                                                (entry_min_z.get(), entry_max_z.get())),
-                                                               file_name.split(".")[0] + "_Modified"),
-                              font=(DefaultFont, DefaultFontSize))
-    menu.add_cascade(label=LANG["litem.menuAnalysis.title"], menu=menu_analysis,
-                     font=(DefaultFont, int(DefaultFontSize * 2.0)))
-    # 菜单：设置 + 3D选项 + 界面设置
-    menu_AnaSet = tk.Menu(menu, tearoff=0)
-    menu.add_cascade(label=LANG["litem.menuAnaSet.title"], menu=menu_AnaSet,
-                     font=(DefaultFont, int(DefaultFontSize * 2.0)))
-    menu_AnaSet.add_checkbutton(label=LANG["litem.menuAnaSet.1"], variable=DoEntity,
-                                font=(DefaultFont, DefaultFontSize))
-    menu_AnaSet.add_separator()
-    menu_AnaSet.add_checkbutton(label=LANG["litem.menuAnaSet.2"], variable=DoLifr,
-                                command=lambda: hide(frame_func, DoLifr), font=(DefaultFont, DefaultFontSize))
-    menu_AnaSet.add_checkbutton(label=LANG["litem.menuAnaSet.3"], variable=DoStat,
-                                command=lambda: hide(frame_data, DoStat), font=(DefaultFont, DefaultFontSize))
-    menu_AnaSet.add_checkbutton(label=LANG["litem.menuAnaSet.4"], variable=DoAnal,
-                                command=lambda: hide(frame_middle, DoAnal), font=(DefaultFont, DefaultFontSize))
-    menu_AnaSet.add_separator()
-
-    menu_3d = tk.Menu(menu, tearoff=0)
-    menu_AnaSet.add_cascade(label=LANG["litem.menu3d.title"], menu=menu_3d, font=(DefaultFont, DefaultFontSize))
-    menu_3d.add_checkbutton(label=LANG["litem.menu3d.1"], variable=Do3d, font=(DefaultFont, DefaultFontSize))
-    menu_3d.add_checkbutton(label=LANG["litem.menu3d.2"], variable=Pn3d, font=(DefaultFont, DefaultFontSize))
-    menu_3d.add_checkbutton(label=LANG["litem.menu3d.3"], variable=Li3d, font=(DefaultFont, DefaultFontSize))
-    menu_3d.add_checkbutton(label=LANG["litem.menu3d.4"], variable=Sp3d, font=(DefaultFont, DefaultFontSize))
-
-    menu_Setting = tk.Menu(menu, tearoff=0)
-    menu_AnaSet.add_cascade(label=LANG["litem.menuSetting.title"], menu=menu_Setting,
-                            font=(DefaultFont, DefaultFontSize))
-    setting = Setting()
-    menu_Setting.add_command(label=LANG["litem.menuSetting.1"], font=(DefaultFont, DefaultFontSize),
-                             command=setting.set_colormap)
-    menu_Setting.add_command(label=LANG["litem.menuSetting.2"], font=(DefaultFont, DefaultFontSize),
-                             command=setting.set_font)
-    menu_Setting.add_command(label=LANG["litem.menuSetting.3"], font=(DefaultFont, DefaultFontSize),
-                             command=setting.set_fontsize)
-    # 菜单：功能
-    menu_Func = tk.Menu(menu, tearoff=0)
-    menu.add_cascade(label=LANG["litem.menuFunc.title"], menu=menu_Func, font=(DefaultFont, int(DefaultFontSize * 2.0)))
-    menu_Func.add_command(label=LANG["litem.menuFunc.1"], command=lambda: litVerFix(7),
-                          font=(DefaultFont, DefaultFontSize))
-    menu_Func.add_command(label=LANG["litem.menuFunc.2"], command=lambda: litVerFix(6),
-                          font=(DefaultFont, DefaultFontSize))
-    menu_Func.add_command(label=LANG["litem.menuFunc.3"], command=lambda: litVerFix(3),
-                          font=(DefaultFont, DefaultFontSize))
-    menu_Func.add_separator()
-    menu_Func.add_command(label=LANG["litem.menuFunc.4"], command=lambda: ConAly(), font=(DefaultFont, DefaultFontSize))
-    menu_Func.add_command(label=LANG["litem.menuFunc.5"],
-                          command=lambda: threading.Thread(target=LitRender.main_render_loop(Block_pos, bool(False)),
-                                                           daemon=True).start(), font=(DefaultFont, DefaultFontSize))
-    menu_Func.add_command(label=LANG["litem.menuFunc.6"], command=lambda: StepOpen(),
-                          font=(DefaultFont, DefaultFontSize))
-    # 菜单：帮助
-    menu_Help = tk.Menu(menu, tearoff=0)
-    menu.add_cascade(label=LANG["litem.menuHelp.title"], menu=menu_Help, font=(DefaultFont, int(DefaultFontSize * 2.0)))
-    menu_Help.add_command(label=LANG["litem.menuHelp.1"],
-                          command=lambda: webbrowser.open("https://github.com/albertchen857/LitematicaViewer"),
-                          font=(DefaultFont, DefaultFontSize))
-    menu_Help.add_command(label=LANG["litem.menuHelp.2"],
-                          command=lambda: webbrowser.open("https://space.bilibili.com/3494373232741268"),
-                          font=(DefaultFont, DefaultFontSize))
-    menu_Help.add_command(label=LANG["litem.menuHelp.3"], command=lambda: Update('Github'),
-                          font=(DefaultFont, DefaultFontSize))
-    menu_Help.add_command(label=LANG["litem.menuHelp.4"], command=lambda: Update('Onedrive'),
-                          font=(DefaultFont, DefaultFontSize))
-    menu_Help.add_command(label=LANG["litem.menuHelp.5"], command=manual_install_pk,
-                          font=(DefaultFont, DefaultFontSize))
-    menu_Help.add_command(label=LANG["litem.menuHelp.6"],
-                          command=lambda: webbrowser.open("https://redenmc.com/litematica"),
-                          font=(DefaultFont, DefaultFontSize))
-    menu_Help.add_command(label=LANG["litem.menuHelp.7"],
-                          command=setting.ChangeLang,
-                          font=(DefaultFont, DefaultFontSize))
-    litem.config(menu=menu, padx=10)
-
-    #  顶容器
-    frame_top = tk.Frame(litem)
-    frame_top.configure(bg=color_map["BG"], bd=5)
-    frame_top.pack(side=tk.TOP, fill=tk.X)
-
-    btn_import = CTkButton(frame_top, text=LANG["litem.frameTop.1"], command=import_file, font=(DefaultFont, DefaultFontSize*1.5))
-    btn_import.configure(fg_color=color_map["PC"],text_color=color_map["BG"],corner_radius=DefaultCorner)
-    btn_import.pack(side=tk.LEFT, padx=5)
-    btn_simstart = CTkButton(frame_top, text=LANG["litem.frameTop.2"], command=lambda:threading.Thread(target=start_analysis, daemon=True).start(), font=(DefaultFont, DefaultFontSize*1.5))
-    btn_simstart.configure(fg_color=color_map["PC"],text_color=color_map["BG"],corner_radius=DefaultCorner)
-    btn_simstart.pack(side=tk.LEFT, padx=5)
-    btn_litstepchecker = CTkButton(frame_top, text=LANG["litem.frameTop.3"], command=lambda: StepOpen(), font=(DefaultFont, int(DefaultFontSize*1.5)))
-    btn_litstepchecker.configure(fg_color=color_map["PC"], text_color=color_map["BG"], corner_radius=DefaultCorner)
-    btn_litstepchecker.pack(side=tk.LEFT, padx=5)
-    btn_conanaly = CTkButton(frame_top, text=LANG["litem.frameTop.4"], command=lambda: ConAly(),font=(DefaultFont, int(DefaultFontSize * 1.5)))
-    btn_conanaly.configure(fg_color=color_map["PC"], text_color=color_map["BG"], corner_radius=DefaultCorner)
-    btn_conanaly.pack(side=tk.LEFT, padx=5)
-    btn_hint = CTkButton(frame_top, text=LANG["litem.frameTop.5"],
-                             command=lambda: msgbox(LANG["litem.frameTop.hint"]),
-                             font=(DefaultFont, DefaultFontSize*1.5))
-    btn_hint.configure(fg_color=color_map["PC"], text_color=color_map["BG"], corner_radius=DefaultCorner)
-    btn_hint.pack(side=tk.LEFT, padx=5)
-
-    btn_github = CTkButton(frame_top, text="GitHub", command=lambda:webbrowser.open("https://github.com/albertchen857/LitematicaViewer"), font=(DefaultFont, DefaultFontSize*1.5))
-    btn_github.configure(fg_color="black",text_color="#f8f9fa",corner_radius=DefaultCorner)
-    btn_github.pack(side=tk.RIGHT, padx=5)
-    btn_bilibili = CTkButton(frame_top, text="Bilibili", command=lambda:webbrowser.open("https://space.bilibili.com/3494373232741268"), font=(DefaultFont, DefaultFontSize*1.5))
-    btn_bilibili.configure(fg_color="#FF6699", text_color="#f8f9fa",corner_radius=DefaultCorner)
-    btn_bilibili.pack(side=tk.RIGHT, padx=5)
-
-    #  func容器
-    frame_func = CTkFrame(litem, fg_color=color_map["MC"], corner_radius=DefaultCorner)
-    hide(frame_func, DoLifr,lambda :frame_func.pack(side=tk.RIGHT, fill=tk.BOTH, padx=10, pady=10))
-    #  投影创建容器：frame_func_new
-    frame_func_new = tk.Frame(frame_func, bg=color_map["MC"])
-    frame_func_new.pack(side=tk.TOP, fill=tk.X,  padx=20, pady=20)
-    frame_new_title = tk.Label(frame_func_new, text=LANG["litem.funcNew.1"], font=(DefaultFont, int(DefaultFontSize*1.8)), bg=color_map["MC"], fg=color_map["TT"])
-    frame_new_title.grid(row=0, column=0, padx=5, pady=5, columnspan=4)
-    # -- ID 输入框
-    label_id = tk.Label(frame_func_new, text=LANG["litem.funcNew.2"], font=(DefaultFont, int(DefaultFontSize*1.2)), bg=color_map["MC"], fg=color_map["TT"])
-    label_id.grid(row=1, column=0, padx=5, pady=5)
-    entry_id = tk.Entry(frame_func_new, width=20, bg=color_map["BG"], fg=color_map["PC"], font=(DefaultFont, DefaultFontSize))
-    entry_id.grid(row=1, column=1, padx=5, pady=5, columnspan=3)
-    # -- XYZ 长宽高输入框
-    label_xyz = tk.Label(frame_func_new, text=LANG["litem.funcNew.3"], font=(DefaultFont, int(DefaultFontSize*1.2)), bg=color_map["MC"], fg=color_map["TT"])
-    label_xyz.grid(row=2, column=0, padx=5, pady=5)
-    label_lwh = tk.Label(frame_func_new, text=LANG["litem.funcNew.4"], font=(DefaultFont, int(DefaultFontSize*1.2)), bg=color_map["MC"], fg=color_map["TT"])
-    label_lwh.grid(row=3, column=0, padx=5, pady=5)
-    entry_x = tk.Entry(frame_func_new, width=5, bg=color_map["BG"], fg=color_map["PC"], font=(DefaultFont, DefaultFontSize))
-    entry_x.grid(row=2, column=1, padx=2, pady=5)
-    entry_y = tk.Entry(frame_func_new, width=5, bg=color_map["BG"], fg=color_map["PC"], font=(DefaultFont, DefaultFontSize))
-    entry_y.grid(row=2, column=2, padx=2, pady=5)
-    entry_z = tk.Entry(frame_func_new, width=5, bg=color_map["BG"], fg=color_map["PC"], font=(DefaultFont, DefaultFontSize))
-    entry_z.grid(row=2, column=3, padx=2, pady=5)
-    entry_length = tk.Entry(frame_func_new, width=5, bg=color_map["BG"], fg=color_map["PC"], font=(DefaultFont, DefaultFontSize))
-    entry_length.grid(row=3, column=3, padx=2, pady=5)
-    entry_width = tk.Entry(frame_func_new, width=5, bg=color_map["BG"], fg=color_map["PC"], font=(DefaultFont, DefaultFontSize))
-    entry_width.grid(row=3, column=2, padx=2, pady=5)
-    entry_height = tk.Entry(frame_func_new, width=5, bg=color_map["BG"], fg=color_map["PC"], font=(DefaultFont, DefaultFontSize))
-    entry_height.grid(row=3, column=1, padx=2, pady=5)
-    btn_spawn = CTkButton(frame_func_new, text=LANG["litem.funcNew.5"], font=(DefaultFont, DefaultFontSize*1.6, "bold"),
-                          command=lambda : create_structure(f"minecraft:{cn_translate(entry_id.get(),False)}",
-                                                            (entry_x.get(),entry_y.get(),entry_z.get()),
-                                                            (entry_length.get(),entry_width.get(),entry_height.get()), False, 0, [False,False,False,False,False,False]
-                                                            ))
-    btn_spawn.configure(fg_color=color_map["BG"],text_color=color_map["TT"],corner_radius=DefaultCorner)
-    btn_spawn.grid(row=8, column=0, padx=2, pady=2, columnspan=4)
-    label_tip = tk.Label(frame_func_new, text=LANG["litem.funcNew.6"], font=(DefaultFont, DefaultFontSize, "bold"), bg=color_map["MC"], fg="#f70400")
-    label_tip.grid(row=9, column=0, padx=5, pady=5, columnspan=4)
-    #  方块替换容器：frame_func_change
-    frame_func_change = tk.Frame(frame_func, bg=color_map["MC"])
-    frame_func_change.pack(side=tk.TOP, fill=tk.X, pady=20, padx=20)
-    frame_change_title = tk.Label(frame_func_change, text=LANG["litem.funcChange.1"], font=(DefaultFont, int(DefaultFontSize*1.8)), bg=color_map["MC"],fg=color_map["TT"])
-    frame_change_title.grid(row=0, column=0, padx=5, pady=20, columnspan=4)
-
-    # -- Limit 标签和 XYZ 输入框
-    label_min = tk.Label(frame_func_change, text=LANG["litem.funcChange.2"], font=(DefaultFont, int(DefaultFontSize*1.2)), bg=color_map["MC"], fg=color_map["TT"])
-    label_min.grid(row=1, column=0, padx=5, pady=5)
-    entry_min_x = tk.Entry(frame_func_change, width=5, bg=color_map["BG"], fg=color_map["PC"], font=(DefaultFont, DefaultFontSize))
-    entry_min_x.grid(row=1, column=1, padx=2, pady=5)
-    entry_min_y = tk.Entry(frame_func_change, width=5, bg=color_map["BG"], fg=color_map["PC"], font=(DefaultFont, DefaultFontSize))
-    entry_min_y.grid(row=1, column=2, padx=2, pady=5)
-    entry_min_z = tk.Entry(frame_func_change, width=5, bg=color_map["BG"], fg=color_map["PC"], font=(DefaultFont, DefaultFontSize))
-    entry_min_z.grid(row=1, column=3, padx=2, pady=5)
-    label_max = tk.Label(frame_func_change, text=LANG["litem.funcChange.3"], font=(DefaultFont, int(DefaultFontSize*1.2)), bg=color_map["MC"], fg=color_map["TT"])
-    label_max.grid(row=2, column=0, padx=5, pady=5)
-    entry_max_x = tk.Entry(frame_func_change, width=5, bg=color_map["BG"], fg=color_map["PC"], font=(DefaultFont, DefaultFontSize))
-    entry_max_x.grid(row=2, column=1, padx=2, pady=5)
-    entry_max_y = tk.Entry(frame_func_change, width=5, bg=color_map["BG"], fg=color_map["PC"], font=(DefaultFont, DefaultFontSize))
-    entry_max_y.grid(row=2, column=2, padx=2, pady=5)
-    entry_max_z = tk.Entry(frame_func_change, width=5, bg=color_map["BG"], fg=color_map["PC"], font=(DefaultFont, DefaultFontSize))
-    entry_max_z.grid(row=2, column=3, padx=2, pady=5)
-
-    # -- Change 标签和多行输入框
-    tk.Label(frame_func_change, text=LANG["litem.funcChange.4"], font=(DefaultFont, int(DefaultFontSize*1.2)), bg=color_map["MC"], fg=color_map["TT"]).grid(row=3, column=0, padx=5, pady=5)
-    text_change = tk.Text(frame_func_change,width=20, height=5, bg=color_map["BG"], fg=color_map["PC"], font=(DefaultFont, DefaultFontSize))
-    text_change.grid(row=3, column=1, columnspan=3, padx=5, pady=5)
-
-    btn_spawn2 = CTkButton(frame_func_change, text=LANG["litem.funcChange.5"], font=(DefaultFont, DefaultFontSize*1.6, "bold"), command=lambda : change_Schematic(schematic, CS_trans_dict(text_change.get("1.0", tk.END)), ((entry_min_x.get(),entry_max_x.get()),(entry_min_y.get(),entry_max_y.get()),(entry_min_z.get(),entry_max_z.get())), file_name.split(".")[0]+"_Modified"))
-    btn_spawn2.configure(fg_color=color_map["BG"],text_color=color_map["TT"],corner_radius=DefaultCorner)
-    btn_spawn2.grid(row=5, column=0, padx=2, pady=2, columnspan=4)
-    tk.Label(frame_func_change, text=LANG["litem.funcChange.6"], font=(DefaultFont, DefaultFontSize, "bold"), bg=color_map["MC"], fg="#f70400", justify="left", wraplength=200).grid(row=6, column=0, padx=5, pady=5, columnspan=4)
-    # -- 分析设置
-    frame_Output = CTkScrollableFrame(frame_func, fg_color=color_map["BG"], corner_radius=DefaultCorner)
-    frame_Output.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True, padx=20, pady=20)
-    CTkLabel(frame_Output, text=LANG["litem.output.1"], font=(DefaultFont, int(DefaultFontSize*2.0), "bold"), fg_color=color_map["BG"], text_color=color_map["TT"]).pack(side=tk.TOP, fill=tk.BOTH, padx=10, pady=10)
-    frame_times = tk.Frame(frame_Output, bg=color_map["BG"])
-    frame_times.pack(side=tk.TOP, fill=tk.BOTH, padx=10, pady=5)
-    tk.Label(frame_times, text=LANG["litem.times.1"], font=(DefaultFont, int(DefaultFontSize*1.5)),bg=color_map["BG"], fg=color_map["TT"]).pack(side=tk.LEFT, padx=5)
-    entry_times = tk.Entry(frame_times, width=10, bg=color_map["BG"], fg=color_map["PC"], font=(DefaultFont, DefaultFontSize))
-    entry_times.pack(side=tk.RIGHT, padx=5)
-    frame_debug = tk.Frame(frame_Output, bg=color_map["BG"])
-    frame_debug.pack(side=tk.TOP, fill=tk.BOTH, padx=10, pady=10)
-    analysis_debug = tk.Label(frame_debug, text=LANG["litem.debug.1"], bg=color_map["BG"], fg=color_map["TT"], font=(DefaultFont, int(DefaultFontSize*1.5)))
-    analysis_debug.pack(side=tk.TOP, padx=10)
-    CTkLabel(frame_debug, text=LANG["litem.debug.2"], font=(DefaultFont, int(DefaultFontSize*1.2), "bold"), fg_color=color_map["BG"], text_color="#f70400").pack(side=tk.TOP, fill=tk.BOTH, padx=10)
-
-    #  中分析容器
-    frame_middle = CTkFrame(litem, fg_color=color_map["MC"], corner_radius=DefaultCorner)
-    hide(frame_middle,DoAnal,lambda :frame_middle.pack(side=tk.RIGHT, fill=tk.BOTH, padx=10, pady=10, expand=True))
-    # - 标题容器
-    frame_middle_top = CTkFrame(frame_middle, fg_color=color_map["BG"], corner_radius=DefaultCorner)
-    frame_middle_top.pack(side=tk.TOP, fill=tk.X, padx=10, pady=10)
-    label_middle = tk.Label(frame_middle_top, text=LANG["litem.midTop.1"], font=(DefaultFont, DefaultFontSize*3, 'bold'))
-    label_middle.configure(bg=color_map["BG"], fg=color_map["TT"], bd=5)
-    label_middle.pack(fill=tk.Y)
-    label_bottom = tk.Label(frame_middle_top, text=LANG["litem.midTop.2"], font=(DefaultFont, int(DefaultFontSize*1.4), "bold"))
-    label_bottom.configure(bg=color_map["BG"], fg=color_map["PC"], bd=5)
-    label_bottom.pack(side=tk.LEFT, fill=tk.X, padx=20, pady=10)
-    
-    # 统计图标容器
-    frame_data = tk.Frame(frame_middle, bg=color_map["MC"])
-    hide(frame_data, DoStat, lambda: frame_data.pack(side=tk.RIGHT, fill=tk.Y, padx=10, pady=10))
-    frame_pie1 = CTkFrame(frame_data, fg_color=color_map["BG"], corner_radius=DefaultCorner)
-    frame_pie1.pack(side=tk.TOP, fill=tk.BOTH, pady=10)
-    frame_pie2 = CTkFrame(frame_data, fg_color=color_map["BG"], corner_radius=DefaultCorner)
-    frame_pie2.pack(side=tk.TOP, fill=tk.BOTH, pady=10)
-    fig1 = Figure(figsize=(4, 3), dpi=80)
-    ax1 = fig1.add_subplot(111)
-    canvas1 = FigureCanvasTkAgg(fig1, master=frame_pie1)
-    canvas1.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
-
-    fig2 = Figure(figsize=(4, 3), dpi=80)
-    ax2 = fig2.add_subplot(111)
-    canvas2 = FigureCanvasTkAgg(fig2, master=frame_pie2)
-    canvas2.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
-
-    process_frame = tk.Frame(frame_data, bg=color_map["MC"])
-    process_frame.pack(side=tk.TOP, fill=tk.X, padx=5, pady=10)
-    progress = ttk.Progressbar(process_frame, orient="horizontal", length=300, mode="determinate", name="pb")
-    progress.pack(pady=5, side=tk.TOP, fill=tk.X)
-    process_text = tk.Label(process_frame, text=LANG["litem.procbar.1"].format(0,0,0))
-    process_text.pack(pady=5, side=tk.TOP, fill=tk.X)
-
-    table_sty = ttk.Style()
-    table_sty.configure("Treeview", font=(DefaultFont, int(DefaultFontSize*1.2)), rowheight=25, background=color_map["PC"], foreground=color_map["BG"])
-    table_sty.configure("Treeview.Heading", font=(DefaultFont, int(DefaultFontSize*1.4), "bold"), background=color_map["PC"], foreground=color_map["MC"])
-    table_sty.map('Treeview', background=[('selected', color_map["MC"])])
-    # 中容器表格
-    frame_chart = tk.Frame(frame_middle, bg=color_map["TT"], background=color_map["MC"])
-    frame_chart.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=10, pady=5)
-
-    sroll = tk.Scrollbar(frame_chart, orient="vertical")
-    sroll.pack(side=tk.RIGHT, fill=tk.Y, padx=10)
-    cc = ('blockID', 'num', 'unit', 'ID') if LANGUAGE == "zh" else ('blockID', 'num', 'unit')
-    count_table = ttk.Treeview(frame_chart, height=7, columns=cc, yscrollcommand=sroll.set)
-    sroll.config(command=count_table.yview)
-    count_table.heading('blockID', text=LANG["litem.chart.1"], anchor="center")
-    count_table.heading('num', text=LANG["litem.chart.2"], anchor="e")
-    count_table.heading('unit', text=LANG["litem.chart.3"], anchor="w")
-    if LANGUAGE == "zh":
-        count_table.heading('ID', text=LANG["litem.chart.4"], anchor="center")
-        count_table.column("ID", width=200)
-    count_table.column("#0", width=40)
-    count_table.column("blockID", width=150)
-    count_table.column("num", width=40)
-    count_table.column("unit", width=80, anchor="e")
-
-    count_table.config(height=20)
-    count_table.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=5, pady=10)
-
-    # 统计数据容器
-    frame_left = tk.Frame(litem, bg=color_map["BG"])
-    hide(frame_left, DoStat, lambda: frame_left.pack(side=tk.LEFT, fill=tk.BOTH, expand=False, padx=10, pady=10))
-    frame_3d = CTkFrame(frame_left, fg_color=color_map["PC"], corner_radius=DefaultCorner)
-    frame_3d.pack(side=tk.TOP, fill=tk.BOTH, expand=False, padx=10, pady=0)
-    frame_stati = CTkFrame(frame_left, fg_color=color_map["MC"], corner_radius=DefaultCorner)
-    frame_stati.pack(side=tk.TOP, fill=tk.X, expand=False, padx=10, pady=30)
-    frame_stati2 = tk.Frame(frame_stati, bg=color_map["MC"])
-    frame_stati2.pack(fill=tk.BOTH, padx=20, pady=20)
-
-    gl_view = OpenGLView(frame_3d, [((0, 0, 0), 'minecraft:dirt', [])], False, width=300, height=300, bg=color_map["PC"])
-    gl_view.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-    gl_view.after(1000, gl_view.redraw)
-    stat_red = CTkFrame(frame_stati2, fg_color=color_map["PC"])
-    stat_red.pack(fill=tk.BOTH, side=tk.TOP, padx=5, pady=5)
-    stat_redt = CTkFrame(frame_stati2, fg_color=color_map["PC"])
-    stat_redt.pack(fill=tk.BOTH, side=tk.TOP, padx=5, pady=5)
-    stat_liq = CTkFrame(frame_stati2, fg_color=color_map["PC"])
-    stat_liq.pack(fill=tk.BOTH, side=tk.TOP, padx=5, pady=5)
-    stat_den = CTkFrame(frame_stati2, fg_color=color_map["PC"])
-    stat_den.pack(fill=tk.BOTH, side=tk.TOP, padx=5, pady=5)
-    stat_auth = CTkFrame(frame_stati2, fg_color=color_map["PC"])
-    stat_auth.pack(fill=tk.BOTH, side=tk.TOP, padx=5, pady=5)
-    stat_ver = CTkFrame(frame_stati2, fg_color=color_map["PC"])
-    stat_ver.pack(fill=tk.BOTH, side=tk.TOP, padx=5, pady=5)
-    stat_desc = CTkFrame(frame_stati2, fg_color=color_map["PC"])
-    stat_desc.pack(fill=tk.BOTH, side=tk.TOP, padx=5, pady=5)
-    tk.Label(stat_red, text=LANG["ui.stat.l1"], font=(DefaultFont, int(DefaultFontSize*1.6), "bold"), bg=color_map["PC"],fg=color_map["BG"]).pack(fill=tk.X, side=tk.LEFT, padx=5, pady=5)
-    tk.Label(stat_redt, text=LANG["ui.stat.l2"], font=(DefaultFont, int(DefaultFontSize*1.6), "bold"), bg=color_map["PC"], fg=color_map["BG"]).pack(fill=tk.X, side=tk.LEFT, padx=5, pady=5)
-    tk.Label(stat_liq, text=LANG["ui.stat.l3"], font=(DefaultFont, int(DefaultFontSize*1.6), "bold"), bg=color_map["PC"],fg=color_map["BG"]).pack(fill=tk.X, side=tk.LEFT, padx=5, pady=5)
-    tk.Label(stat_den, text=LANG["ui.stat.l4"], font=(DefaultFont, int(DefaultFontSize*1.6), "bold"), bg=color_map["PC"], fg=color_map["BG"]).pack(fill=tk.X, side=tk.LEFT, padx=5, pady=5)
-    tk.Label(stat_auth, text=LANG["ui.stat.l5"], font=(DefaultFont, int(DefaultFontSize * 1.6), "bold"), bg=color_map["PC"],fg=color_map["BG"]).pack(fill=tk.X, side=tk.LEFT, padx=5, pady=5)
-    tk.Label(stat_ver, text=LANG["ui.stat.l6"], font=(DefaultFont, int(DefaultFontSize * 1.6), "bold"), bg=color_map["PC"],fg=color_map["BG"]).pack(fill=tk.X, side=tk.LEFT, padx=5, pady=5)
-    tk.Label(stat_desc, text=LANG["ui.stat.l7"], font=(DefaultFont, int(DefaultFontSize * 1.6), "bold"), bg=color_map["PC"],fg=color_map["BG"]).pack(fill=tk.X, side=tk.LEFT, padx=5, pady=5)
-    a_red = tk.Label(stat_red, text="", font=(DefaultFont, int(DefaultFontSize*1.6)), bg=color_map["PC"], fg=color_map["MC"])
-    a_red.pack(fill=tk.X, side=tk.RIGHT, padx=5, pady=5)
-    a_redt = tk.Label(stat_redt, text="", font=(DefaultFont, int(DefaultFontSize*1.6)), bg=color_map["PC"], fg=color_map["MC"])
-    a_redt.pack(fill=tk.X, side=tk.RIGHT, padx=5, pady=5)
-    a_liq = tk.Label(stat_liq, text="", font=(DefaultFont, int(DefaultFontSize*1.6)), bg=color_map["PC"], fg=color_map["MC"])
-    a_liq.pack(fill=tk.X, side=tk.RIGHT, padx=5, pady=5)
-    a_den = tk.Label(stat_den, text="", font=(DefaultFont, int(DefaultFontSize*1.6)), bg=color_map["PC"], fg=color_map["MC"])
-    a_den.pack(fill=tk.X, side=tk.RIGHT, padx=5, pady=5)
-    a_auth = tk.Label(stat_auth, text="", font=(DefaultFont, int(DefaultFontSize*1.6)), bg=color_map["PC"], fg=color_map["MC"])
-    a_auth.pack(fill=tk.X, side=tk.RIGHT, padx=5, pady=5)
-    a_ver = tk.Label(stat_ver, text="", font=(DefaultFont, int(DefaultFontSize * 1.6)), bg=color_map["PC"],fg=color_map["MC"])
-    a_ver.pack(fill=tk.X, side=tk.RIGHT, padx=5, pady=5)
-    a_desc = tk.Label(stat_desc, font=(DefaultFont, int(DefaultFontSize * 1.6)), bg=color_map["PC"],fg=color_map["MC"])
-    a_desc.pack(fill=tk.BOTH, side=tk.RIGHT, padx=5, pady=5)
-
-    redenmcframe = CTkFrame(frame_left, fg_color=color_map["MC"], corner_radius=DefaultCorner)
-    redenmcframe.pack(side=tk.TOP, fill=tk.BOTH, expand=False, padx=10, pady=0)
-    redenLab = CTkLabel(redenmcframe, text=LANG["litem.reden.title"], font=(DefaultFont, int(DefaultFontSize * 1.6)), fg_color=color_map["MC"], text_color=color_map["BG"])
-    redenLab.grid(padx=5, pady=5, row=0,column=0,columnspan=2)
-    redenenter = CTkEntry(redenmcframe, font=(DefaultFont, int(DefaultFontSize*1.6)), fg_color=color_map["BG"], text_color=color_map["MC"], width=200)
-    redenenter.grid(padx=5, pady=5, row=1,column=0,columnspan=2)
-    redenselect = CTkComboBox(redenmcframe, values=[LANG["litem.reden.select.1"],LANG["litem.reden.select.2"],LANG["litem.reden.select.3"]], font=(DefaultFont, int(DefaultFontSize*1.6)), fg_color=color_map["MC"], text_color=color_map["BG"])
-    redenselect.grid(padx=5, pady=5, row=2,column=0)
-    redenbtn = CTkButton(redenmcframe, text=LANG["litem.reden.btn"], font=(DefaultFont, int(DefaultFontSize*1.6)), fg_color=color_map["BG"], text_color=color_map["MC"], command= lambda: Redenmc(redenenter.get(), str(redenselect.get())))
-    redenbtn.grid(padx=5, pady=5, row=2,column=1)
-
-    try:
-        with open(grs('log.txt'), 'r', encoding='utf-8') as file:
-            file_text = str(file.read())
-            print(file_text)
-            if not file_text:
-                pass
-            else:
-                if boolbox(LANG["litem.prev.ask"]+file_text, title="Analysis"):
-                    file_path = file_text
-                    del file_text
-                    start_analysis()
-    except:
-        with open(grs('log.txt'), 'w', encoding='utf-8') as file:
-            file.write("")
-
-    litem.mainloop()
-
-
-
+    threading.Thread(target=TKF, daemon=True).start()

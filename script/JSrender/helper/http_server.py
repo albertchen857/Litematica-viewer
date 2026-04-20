@@ -1,7 +1,7 @@
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 import os
 
-class JSRender:
+class JSServer:
     def __init__(self):
         self.server = HTTPServer(('localhost', 8000), self.CORSRequestHandler)
     class CORSRequestHandler(SimpleHTTPRequestHandler):
@@ -18,4 +18,4 @@ class JSRender:
         self.server.server_close()
 
 if __name__=="__main__":
-    JSRender().StartServer()
+    JSServer().StartServer()
