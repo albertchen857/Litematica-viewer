@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import importlib, webbrowser, codecs, atexit
 import traceback
+import gettext
 sys.path.extend(os.path.join(os.path.dirname(__file__), ".."))
 import LitRender
 try:
@@ -28,12 +29,13 @@ except:
 
 
 data : dict = json.load(open(grs(os.path.join('lang', 'data.json')), 'r', encoding='utf-8'))
+dataIO = data["Save"]["Basic"]
 color_map = data["Color_map"][data["Save"]["ui"]["ColorMap"]]
 DefaultFont = data["Save"]["ui"]["Font"]
 DefaultFontSize = int(data["Save"]["ui"]["FontSize"])
 DefaultCorner = data["Save"]["ui"]["cornerRadius"]
 LANGUAGE : str = data["Save"]["Language"]
-LANG : dict = json.load(open(grs(os.path.join('lang', LANGUAGE+'.json')), 'r', encoding='utf-8'))
+
 
 def handle_exception(exc_type, exc_value, exc_traceback):
     error_msg = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
@@ -60,6 +62,10 @@ Cla_Block = {"实体": [], "羊毛": [], "陶瓦": [], "混凝土": [], "玻璃"
                      "粘土类": [], "红石":[], "铁类":[], "容器":[], "液体":[], "其他": []}
 images = {}
 
+lang_device = gettext.translation('base', localedir='lang', languages=[LANGUAGE], fallback=True)
+lang_device.install()
+_ = lang_device.gettext
+
 class Setting:
     def __init__(self):
         self.choice = None
@@ -67,7 +73,7 @@ class Setting:
         self.colormap = ""
         global color_map, data, litem
         cm = data["Save"]["ui"]["ColorMap"]
-        self.choice = choicebox(LANG["setting.colormap"]+cm, title="Setting", choices=["蔚蓝色BlueAr","亮绿色LiGreen","暗色Darkly","深蓝色DarkBlue","粉色Pink"])
+        self.choice = choicebox(_("setting.colormap")+cm, title="Setting", choices=["蔚蓝色BlueAr","亮绿色LiGreen","暗色Darkly","深蓝色DarkBlue","粉色Pink"])
         if self.choice == "亮绿色LiGreen":
             self.colormap = "Green"
         elif self.choice == "暗色Darkly":
@@ -86,7 +92,7 @@ class Setting:
 
     def set_font(self):
         global DefaultFont
-        self.choice = choicebox(LANG["setting.font"].format(DefaultFont), title="Setting", choices=sorted(font.families()))
+        self.choice = choicebox(_("setting.font").format(DefaultFont), title="Setting", choices=sorted(font.families()))
         if not self.choice:
             return
         DefaultFont = self.choice
@@ -95,7 +101,7 @@ class Setting:
 
     def set_fontsize(self):
         global DefaultFontSize
-        self.choice = enterbox(LANG["setting.fontsize"].format(DefaultFontSize), title="Setting", strip=True, default=str(DefaultFontSize))
+        self.choice = enterbox(_("setting.fontsize").format(DefaultFontSize), title="Setting", strip=True, default=str(DefaultFontSize))
         if not (self.choice or self.choice.isdigit()):
             return
         DefaultFontSize = self.choice
@@ -104,8 +110,8 @@ class Setting:
 
     def ChangeLang(self):
         global LANGUAGE
-        msgbox(LANG["setting.lang"], title="Change Language")
-        if LANGUAGE == "zh":
+        msgbox(_("setting.lang"), title="Change Language")
+        if LANGUAGE == "zh_CN":
             LANGUAGE = "en"
         else:
             LANGUAGE = "zh"
@@ -116,12 +122,14 @@ class Setting:
         with open(grs(os.path.join('lang', 'data.json')), 'w') as js:
             json.dump(data, js, indent=4)
             print(f"Successfully Upload Setting")
-        if boolbox(LANG["func.exit"], title="Setting"):
+        if boolbox(_("func.exit"), title="Setting"):
             exit()
 
 
 class TKF:
     def __init__(self):
+        global _
+        self._ = _
         self.label_bottom = None
         self.progress = None
         self.litem = tk.Tk()
@@ -143,14 +151,14 @@ class TKF:
         self.ax1 = None
         self.label_middle = None
         self.stat_red = None
-        self.DoEntity = tk.IntVar()
-        self.DoLifr = tk.IntVar()
-        self.DoStat = tk.IntVar()
-        self.DoAnal = tk.IntVar()
-        self.Do3d = tk.IntVar()
-        self.Pn3d = tk.IntVar()
-        self.Li3d = tk.IntVar()
-        self.Sp3d = tk.IntVar()
+        self.DoEntity = tk.IntVar(value=0)
+        self.DoLifr = tk.IntVar(value=0)
+        self.DoStat = tk.IntVar(value=0)
+        self.DoAnal = tk.IntVar(value=0)
+        self.Do3d = tk.IntVar(value=0)
+        self.Pn3d = tk.IntVar(value=0)
+        self.Li3d = tk.IntVar(value=0)
+        self.Sp3d = tk.IntVar(value=0)
         self.LogVar = None
         self.litem = None
         self.frame_middle = None
@@ -170,9 +178,10 @@ class TKF:
         self.entry_x = None
         self.frame_func = None
         self.entry_id = None
+        print("TKF class init finish")
 
     def TK_INIT(self):
-        self.litem.title(f'{LANG["litem.title"]} v{APP_VERSION}')
+        self.litem.title(f'{_("litem.title")} v{APP_VERSION}')
         self.litem.iconbitmap(grs("icon.ico"))
         if sys.platform.startswith("win"):
             self.litem.state("zoomed")  # Windows 专用
@@ -181,7 +190,7 @@ class TKF:
         self.litem.configure(bg=color_map["BG"])
 
         if data["Save"]["First_open"] == "0":
-            msgbox(LANG["litem.log"])
+            msgbox(_("litem.log"))
             data["Save"]["First_open"] = "1"
             with open(grs(os.path.join('lang', 'data.json')), 'w') as js:
                 json.dump(data, js, indent=2)
@@ -190,6 +199,7 @@ class TKF:
 
 
         Basic = data["Save"]["Basic"]
+        print("TK_INIT finish")
         try:
             self.DoEntity = tk.IntVar(value=int(Basic[0]))
             self.DoLifr = tk.IntVar(value=int(Basic[1]))
@@ -199,7 +209,8 @@ class TKF:
             self.Pn3d = tk.IntVar(value=int(Basic[5]))
             self.Li3d = tk.IntVar(value=int(Basic[6]))
             self.Sp3d = tk.IntVar(value=int(Basic[7]))
-        except:
+        except Exception as e:
+            print(f"An unexpected error occurred: {e}")
             self.DoEntity = tk.IntVar(value=1)
             self.DoLifr = tk.IntVar(value=1)
             self.DoStat = tk.IntVar(value=1)
@@ -211,16 +222,16 @@ class TKF:
 
         # 菜单：数据分析
         menu_analysis = tk.Menu(menu, tearoff=0)
-        menu_analysis.add_command(label=LANG["litem.menuAnalysis.1"], command=self.import_file,
+        menu_analysis.add_command(label=_("litem.menuAnalysis.1"), command=self.import_file,
                                   font=(DefaultFont, DefaultFontSize))
-        menu_analysis.add_command(label=LANG["litem.menuAnalysis.2"], command=lambda: self.output_data(False),
+        menu_analysis.add_command(label=_("litem.menuAnalysis.2"), command=lambda: self.output_data(False),
                                   font=(DefaultFont, DefaultFontSize))
-        menu_analysis.add_command(label=LANG["litem.menuAnalysis.3"], command=lambda: self.output_data(True),
+        menu_analysis.add_command(label=_("litem.menuAnalysis.3"), command=lambda: self.output_data(True),
                                   font=(DefaultFont, DefaultFontSize))
-        menu_analysis.add_command(label=LANG["litem.menuAnalysis.4"],
+        menu_analysis.add_command(label=_("litem.menuAnalysis.4"),
                                   command=lambda: threading.Thread(target=self.start_analysis(), daemon=True).start(),
                                   font=(DefaultFont, DefaultFontSize))
-        menu_analysis.add_command(label=LANG["litem.menuAnalysis.5"],
+        menu_analysis.add_command(label=_("litem.menuAnalysis.5"),
                                   command=lambda: create_structure(
                                       f"minecraft:{cn_translate(self.entry_id.get(), False)}",
                                       (self.entry_x.get(), self.entry_y.get(), self.entry_z.get()),
@@ -228,7 +239,7 @@ class TKF:
                                        self.entry_height.get()), False, 0,
                                       [False, False, False, False, False, False]
                                       ), font=(DefaultFont, DefaultFontSize))
-        menu_analysis.add_command(label=LANG["litem.menuAnalysis.6"],
+        menu_analysis.add_command(label=_("litem.menuAnalysis.6"),
                                   command=lambda: change_Schematic(schematic,
                                                                    CS_trans_dict(self.text_change.get("1.0", tk.END)),
                                                                    ((self.entry_min_x.get(), self.entry_max_x.get()),
@@ -236,82 +247,82 @@ class TKF:
                                                                     (self.entry_min_z.get(), self.entry_max_z.get())),
                                                                    file_name.split(".")[0] + "_Modified"),
                                   font=(DefaultFont, DefaultFontSize))
-        menu.add_cascade(label=LANG["litem.menuAnalysis.title"], menu=menu_analysis,
+        menu.add_cascade(label=_("litem.menuAnalysis.title"), menu=menu_analysis,
                          font=(DefaultFont, int(DefaultFontSize * 2.0)))
         # 菜单：设置 + 3D选项 + 界面设置
         menu_AnaSet = tk.Menu(menu, tearoff=0)
-        menu.add_cascade(label=LANG["litem.menuAnaSet.title"], menu=menu_AnaSet,
+        menu.add_cascade(label=_("litem.menuAnaSet.title"), menu=menu_AnaSet,
                          font=(DefaultFont, int(DefaultFontSize * 2.0)))
-        menu_AnaSet.add_checkbutton(label=LANG["litem.menuAnaSet.1"], variable=self.DoEntity,
+        menu_AnaSet.add_checkbutton(label=_("litem.menuAnaSet.1"), variable=self.DoEntity,
                                     font=(DefaultFont, DefaultFontSize))
         menu_AnaSet.add_separator()
-        menu_AnaSet.add_checkbutton(label=LANG["litem.menuAnaSet.2"], variable=self.DoLifr,
+        menu_AnaSet.add_checkbutton(label=_("litem.menuAnaSet.2"), variable=self.DoLifr,
                                     command=lambda: hide(self.frame_func, self.DoLifr),
                                     font=(DefaultFont, DefaultFontSize))
-        menu_AnaSet.add_checkbutton(label=LANG["litem.menuAnaSet.3"], variable=self.DoStat,
+        menu_AnaSet.add_checkbutton(label=_("litem.menuAnaSet.3"), variable=self.DoStat,
                                     command=lambda: hide(self.frame_data, self.DoStat),
                                     font=(DefaultFont, DefaultFontSize))
-        menu_AnaSet.add_checkbutton(label=LANG["litem.menuAnaSet.4"], variable=self.DoAnal,
+        menu_AnaSet.add_checkbutton(label=_("litem.menuAnaSet.4"), variable=self.DoAnal,
                                     command=lambda: hide(self.frame_middle, self.DoAnal),
                                     font=(DefaultFont, DefaultFontSize))
         menu_AnaSet.add_separator()
 
         menu_3d = tk.Menu(menu, tearoff=0)
-        menu_AnaSet.add_cascade(label=LANG["litem.menu3d.title"], menu=menu_3d, font=(DefaultFont, DefaultFontSize))
-        menu_3d.add_checkbutton(label=LANG["litem.menu3d.1"], variable=self.Do3d, font=(DefaultFont, DefaultFontSize))
-        menu_3d.add_checkbutton(label=LANG["litem.menu3d.2"], variable=self.Pn3d, font=(DefaultFont, DefaultFontSize))
-        menu_3d.add_checkbutton(label=LANG["litem.menu3d.3"], variable=self.Li3d, font=(DefaultFont, DefaultFontSize))
-        menu_3d.add_checkbutton(label=LANG["litem.menu3d.4"], variable=self.Sp3d, font=(DefaultFont, DefaultFontSize))
+        menu_AnaSet.add_cascade(label=_("litem.menu3d.title"), menu=menu_3d, font=(DefaultFont, DefaultFontSize))
+        menu_3d.add_checkbutton(label=_("litem.menu3d.1"), variable=self.Do3d, font=(DefaultFont, DefaultFontSize))
+        menu_3d.add_checkbutton(label=_("litem.menu3d.2"), variable=self.Pn3d, font=(DefaultFont, DefaultFontSize))
+        menu_3d.add_checkbutton(label=_("litem.menu3d.3"), variable=self.Li3d, font=(DefaultFont, DefaultFontSize))
+        menu_3d.add_checkbutton(label=_("litem.menu3d.4"), variable=self.Sp3d, font=(DefaultFont, DefaultFontSize))
 
         menu_Setting = tk.Menu(menu, tearoff=0)
-        menu_AnaSet.add_cascade(label=LANG["litem.menuSetting.title"], menu=menu_Setting,
+        menu_AnaSet.add_cascade(label=_("litem.menuSetting.title"), menu=menu_Setting,
                                 font=(DefaultFont, DefaultFontSize))
         setting = Setting()
-        menu_Setting.add_command(label=LANG["litem.menuSetting.1"], font=(DefaultFont, DefaultFontSize),
+        menu_Setting.add_command(label=_("litem.menuSetting.1"), font=(DefaultFont, DefaultFontSize),
                                  command=setting.set_colormap)
-        menu_Setting.add_command(label=LANG["litem.menuSetting.2"], font=(DefaultFont, DefaultFontSize),
+        menu_Setting.add_command(label=_("litem.menuSetting.2"), font=(DefaultFont, DefaultFontSize),
                                  command=setting.set_font)
-        menu_Setting.add_command(label=LANG["litem.menuSetting.3"], font=(DefaultFont, DefaultFontSize),
+        menu_Setting.add_command(label=_("litem.menuSetting.3"), font=(DefaultFont, DefaultFontSize),
                                  command=setting.set_fontsize)
         # 菜单：功能
         menu_Func = tk.Menu(menu, tearoff=0)
-        menu.add_cascade(label=LANG["litem.menuFunc.title"], menu=menu_Func,
+        menu.add_cascade(label=_("litem.menuFunc.title"), menu=menu_Func,
                          font=(DefaultFont, int(DefaultFontSize * 2.0)))
-        menu_Func.add_command(label=LANG["litem.menuFunc.1"], command=lambda: litVerFix(7, file_path),
+        menu_Func.add_command(label=_("litem.menuFunc.1"), command=lambda: litVerFix(7, file_path),
                               font=(DefaultFont, DefaultFontSize))
-        menu_Func.add_command(label=LANG["litem.menuFunc.2"], command=lambda: litVerFix(6, file_path),
+        menu_Func.add_command(label=_("litem.menuFunc.2"), command=lambda: litVerFix(6, file_path),
                               font=(DefaultFont, DefaultFontSize))
-        menu_Func.add_command(label=LANG["litem.menuFunc.3"], command=lambda: litVerFix(3, file_path),
+        menu_Func.add_command(label=_("litem.menuFunc.3"), command=lambda: litVerFix(3, file_path),
                               font=(DefaultFont, DefaultFontSize))
         menu_Func.add_separator()
-        menu_Func.add_command(label=LANG["litem.menuFunc.4"], command=lambda: ConAly(),
+        menu_Func.add_command(label=_("litem.menuFunc.4"), command=lambda: ConAly(),
                               font=(DefaultFont, DefaultFontSize))
-        menu_Func.add_command(label=LANG["litem.menuFunc.5"],
+        menu_Func.add_command(label=_("litem.menuFunc.5"),
                               command=lambda: threading.Thread(
                                   target=LitRender.main_render_loop(Block_pos, bool(False)),
                                   daemon=True).start(), font=(DefaultFont, DefaultFontSize))
-        menu_Func.add_command(label=LANG["litem.menuFunc.6"], command=lambda: StepOpen(),
+        menu_Func.add_command(label=_("litem.menuFunc.6"), command=lambda: StepOpen(),
                               font=(DefaultFont, DefaultFontSize))
         # 菜单：帮助
         menu_Help = tk.Menu(menu, tearoff=0)
-        menu.add_cascade(label=LANG["litem.menuHelp.title"], menu=menu_Help,
+        menu.add_cascade(label=_("litem.menuHelp.title"), menu=menu_Help,
                          font=(DefaultFont, int(DefaultFontSize * 2.0)))
-        menu_Help.add_command(label=LANG["litem.menuHelp.1"],
+        menu_Help.add_command(label=_("litem.menuHelp.1"),
                               command=lambda: webbrowser.open("https://github.com/albertchen857/LitematicaViewer"),
                               font=(DefaultFont, DefaultFontSize))
-        menu_Help.add_command(label=LANG["litem.menuHelp.2"],
+        menu_Help.add_command(label=_("litem.menuHelp.2"),
                               command=lambda: webbrowser.open("https://space.bilibili.com/3494373232741268"),
                               font=(DefaultFont, DefaultFontSize))
-        menu_Help.add_command(label=LANG["litem.menuHelp.3"], command=lambda: Update('GitHub'),
+        menu_Help.add_command(label=_("litem.menuHelp.3"), command=lambda: Update('GitHub'),
                               font=(DefaultFont, DefaultFontSize))
-        menu_Help.add_command(label=LANG["litem.menuHelp.4"], command=lambda: Update('Onedrive'),
+        menu_Help.add_command(label=_("litem.menuHelp.4"), command=lambda: Update('Onedrive'),
                               font=(DefaultFont, DefaultFontSize))
-        menu_Help.add_command(label=LANG["litem.menuHelp.5"], command=manual_install_pk,
+        menu_Help.add_command(label=_("litem.menuHelp.5"), command=manual_install_pk,
                               font=(DefaultFont, DefaultFontSize))
-        menu_Help.add_command(label=LANG["litem.menuHelp.6"],
+        menu_Help.add_command(label=_("litem.menuHelp.6"),
                               command=lambda: webbrowser.open("https://redenmc.com/litematica"),
                               font=(DefaultFont, DefaultFontSize))
-        menu_Help.add_command(label=LANG["litem.menuHelp.7"],
+        menu_Help.add_command(label=_("litem.menuHelp.7"),
                               command=setting.ChangeLang,
                               font=(DefaultFont, DefaultFontSize))
         litem.config(menu=menu, padx=10)
@@ -328,13 +339,14 @@ class TKF:
                 if not file_text:
                     pass
                 else:
-                    if boolbox(LANG["litem.prev.ask"] + file_text, title="Analysis"):
+                    if boolbox(_("litem.prev.ask") + file_text, title="Analysis"):
                         file_path = file_text
                         del file_text
                         self.start_analysis()
         except:
             with open(grs('log.txt'), 'w', encoding='utf-8') as file:
                 file.write("")
+            print(67)
 
         litem.mainloop()
 
@@ -344,25 +356,25 @@ class TKF:
         frame_top.configure(bg=color_map["BG"], bd=5)
         frame_top.pack(side=tk.TOP, fill=tk.X)
 
-        btn_import = CTkButton(frame_top, text=LANG["litem.frameTop.1"], command=self.import_file,
+        btn_import = CTkButton(frame_top, text=_("litem.frameTop.1"), command=self.import_file,
                                font=(DefaultFont, DefaultFontSize * 1.5))
         btn_import.configure(fg_color=color_map["PC"], text_color=color_map["BG"], corner_radius=DefaultCorner)
         btn_import.pack(side=tk.LEFT, padx=5)
-        btn_simstart = CTkButton(frame_top, text=LANG["litem.frameTop.2"],
+        btn_simstart = CTkButton(frame_top, text=_("litem.frameTop.2"),
                                  command=lambda: threading.Thread(target=self.start_analysis, daemon=True).start(),
                                  font=(DefaultFont, DefaultFontSize * 1.5))
         btn_simstart.configure(fg_color=color_map["PC"], text_color=color_map["BG"], corner_radius=DefaultCorner)
         btn_simstart.pack(side=tk.LEFT, padx=5)
-        btn_litstepchecker = CTkButton(frame_top, text=LANG["litem.frameTop.3"], command=lambda: StepOpen(),
+        btn_litstepchecker = CTkButton(frame_top, text=_("litem.frameTop.3"), command=lambda: StepOpen(),
                                        font=(DefaultFont, int(DefaultFontSize * 1.5)))
         btn_litstepchecker.configure(fg_color=color_map["PC"], text_color=color_map["BG"], corner_radius=DefaultCorner)
         btn_litstepchecker.pack(side=tk.LEFT, padx=5)
-        btn_conanaly = CTkButton(frame_top, text=LANG["litem.frameTop.4"], command=lambda: ConAly(),
+        btn_conanaly = CTkButton(frame_top, text=_("litem.frameTop.4"), command=lambda: ConAly(),
                                  font=(DefaultFont, int(DefaultFontSize * 1.5)))
         btn_conanaly.configure(fg_color=color_map["PC"], text_color=color_map["BG"], corner_radius=DefaultCorner)
         btn_conanaly.pack(side=tk.LEFT, padx=5)
-        btn_hint = CTkButton(frame_top, text=LANG["litem.frameTop.5"],
-                             command=lambda: msgbox(LANG["litem.frameTop.hint"]),
+        btn_hint = CTkButton(frame_top, text=_("litem.frameTop.5"),
+                             command=lambda: msgbox(_("litem.frameTop.hint")),
                              font=(DefaultFont, DefaultFontSize * 1.5))
         btn_hint.configure(fg_color=color_map["PC"], text_color=color_map["BG"], corner_radius=DefaultCorner)
         btn_hint.pack(side=tk.LEFT, padx=5)
@@ -385,22 +397,22 @@ class TKF:
         #  投影创建容器：frame_func_new
         frame_func_new = tk.Frame(frame_func, bg=color_map["MC"])
         frame_func_new.pack(side=tk.TOP, fill=tk.X, padx=20, pady=20)
-        frame_new_title = tk.Label(frame_func_new, text=LANG["litem.funcNew.1"],
+        frame_new_title = tk.Label(frame_func_new, text=_("litem.funcNew.1"),
                                    font=(DefaultFont, int(DefaultFontSize * 1.8)), bg=color_map["MC"],
                                    fg=color_map["TT"])
         frame_new_title.grid(row=0, column=0, padx=5, pady=5, columnspan=4)
         # -- ID 输入框
-        label_id = tk.Label(frame_func_new, text=LANG["litem.funcNew.2"],
+        label_id = tk.Label(frame_func_new, text=_("litem.funcNew.2"),
                             font=(DefaultFont, int(DefaultFontSize * 1.2)), bg=color_map["MC"], fg=color_map["TT"])
         label_id.grid(row=1, column=0, padx=5, pady=5)
         entry_id = tk.Entry(frame_func_new, width=20, bg=color_map["BG"], fg=color_map["PC"],
                             font=(DefaultFont, DefaultFontSize))
         entry_id.grid(row=1, column=1, padx=5, pady=5, columnspan=3)
         # -- XYZ 长宽高输入框
-        label_xyz = tk.Label(frame_func_new, text=LANG["litem.funcNew.3"],
+        label_xyz = tk.Label(frame_func_new, text=_("litem.funcNew.3"),
                              font=(DefaultFont, int(DefaultFontSize * 1.2)), bg=color_map["MC"], fg=color_map["TT"])
         label_xyz.grid(row=2, column=0, padx=5, pady=5)
-        label_lwh = tk.Label(frame_func_new, text=LANG["litem.funcNew.4"],
+        label_lwh = tk.Label(frame_func_new, text=_("litem.funcNew.4"),
                              font=(DefaultFont, int(DefaultFontSize * 1.2)), bg=color_map["MC"], fg=color_map["TT"])
         label_lwh.grid(row=3, column=0, padx=5, pady=5)
         entry_x = tk.Entry(frame_func_new, width=5, bg=color_map["BG"], fg=color_map["PC"],
@@ -421,7 +433,7 @@ class TKF:
         entry_height = tk.Entry(frame_func_new, width=5, bg=color_map["BG"], fg=color_map["PC"],
                                 font=(DefaultFont, DefaultFontSize))
         entry_height.grid(row=3, column=1, padx=2, pady=5)
-        btn_spawn = CTkButton(frame_func_new, text=LANG["litem.funcNew.5"],
+        btn_spawn = CTkButton(frame_func_new, text=_("litem.funcNew.5"),
                               font=(DefaultFont, DefaultFontSize * 1.6, "bold"),
                               command=lambda: create_structure(f"minecraft:{cn_translate(entry_id.get(), False)}",
                                                                (entry_x.get(), entry_y.get(), entry_z.get()),
@@ -431,19 +443,19 @@ class TKF:
                                                                ))
         btn_spawn.configure(fg_color=color_map["BG"], text_color=color_map["TT"], corner_radius=DefaultCorner)
         btn_spawn.grid(row=8, column=0, padx=2, pady=2, columnspan=4)
-        label_tip = tk.Label(frame_func_new, text=LANG["litem.funcNew.6"], font=(DefaultFont, DefaultFontSize, "bold"),
+        label_tip = tk.Label(frame_func_new, text=_("litem.funcNew.6"), font=(DefaultFont, DefaultFontSize, "bold"),
                              bg=color_map["MC"], fg="#f70400")
         label_tip.grid(row=9, column=0, padx=5, pady=5, columnspan=4)
         #  方块替换容器：frame_func_change
         frame_func_change = tk.Frame(frame_func, bg=color_map["MC"])
         frame_func_change.pack(side=tk.TOP, fill=tk.X, pady=20, padx=20)
-        frame_change_title = tk.Label(frame_func_change, text=LANG["litem.funcChange.1"],
+        frame_change_title = tk.Label(frame_func_change, text=_("litem.funcChange.1"),
                                       font=(DefaultFont, int(DefaultFontSize * 1.8)), bg=color_map["MC"],
                                       fg=color_map["TT"])
         frame_change_title.grid(row=0, column=0, padx=5, pady=20, columnspan=4)
 
         # -- Limit 标签和 XYZ 输入框
-        label_min = tk.Label(frame_func_change, text=LANG["litem.funcChange.2"],
+        label_min = tk.Label(frame_func_change, text=_("litem.funcChange.2"),
                              font=(DefaultFont, int(DefaultFontSize * 1.2)), bg=color_map["MC"], fg=color_map["TT"])
         label_min.grid(row=1, column=0, padx=5, pady=5)
         entry_min_x = tk.Entry(frame_func_change, width=5, bg=color_map["BG"], fg=color_map["PC"],
@@ -455,7 +467,7 @@ class TKF:
         entry_min_z = tk.Entry(frame_func_change, width=5, bg=color_map["BG"], fg=color_map["PC"],
                                font=(DefaultFont, DefaultFontSize))
         entry_min_z.grid(row=1, column=3, padx=2, pady=5)
-        label_max = tk.Label(frame_func_change, text=LANG["litem.funcChange.3"],
+        label_max = tk.Label(frame_func_change, text=_("litem.funcChange.3"),
                              font=(DefaultFont, int(DefaultFontSize * 1.2)), bg=color_map["MC"], fg=color_map["TT"])
         label_max.grid(row=2, column=0, padx=5, pady=5)
         entry_max_x = tk.Entry(frame_func_change, width=5, bg=color_map["BG"], fg=color_map["PC"],
@@ -469,13 +481,13 @@ class TKF:
         entry_max_z.grid(row=2, column=3, padx=2, pady=5)
 
         # -- Change 标签和多行输入框
-        tk.Label(frame_func_change, text=LANG["litem.funcChange.4"], font=(DefaultFont, int(DefaultFontSize * 1.2)),
+        tk.Label(frame_func_change, text=_("litem.funcChange.4"), font=(DefaultFont, int(DefaultFontSize * 1.2)),
                  bg=color_map["MC"], fg=color_map["TT"]).grid(row=3, column=0, padx=5, pady=5)
         text_change = tk.Text(frame_func_change, width=20, height=5, bg=color_map["BG"], fg=color_map["PC"],
                               font=(DefaultFont, DefaultFontSize))
         text_change.grid(row=3, column=1, columnspan=3, padx=5, pady=5)
 
-        btn_spawn2 = CTkButton(frame_func_change, text=LANG["litem.funcChange.5"],
+        btn_spawn2 = CTkButton(frame_func_change, text=_("litem.funcChange.5"),
                                font=(DefaultFont, DefaultFontSize * 1.6, "bold"),
                                command=lambda: change_Schematic(schematic,
                                                                 CS_trans_dict(text_change.get("1.0", tk.END)), (
@@ -485,27 +497,27 @@ class TKF:
                                                                 file_name.split(".")[0] + "_Modified"))
         btn_spawn2.configure(fg_color=color_map["BG"], text_color=color_map["TT"], corner_radius=DefaultCorner)
         btn_spawn2.grid(row=5, column=0, padx=2, pady=2, columnspan=4)
-        tk.Label(frame_func_change, text=LANG["litem.funcChange.6"], font=(DefaultFont, DefaultFontSize, "bold"),
+        tk.Label(frame_func_change, text=_("litem.funcChange.6"), font=(DefaultFont, DefaultFontSize, "bold"),
                  bg=color_map["MC"], fg="#f70400", justify="left", wraplength=200).grid(row=6, column=0, padx=5, pady=5,
                                                                                         columnspan=4)
         # -- 分析设置
         frame_Output = CTkScrollableFrame(frame_func, fg_color=color_map["BG"], corner_radius=DefaultCorner)
         frame_Output.pack(side=tk.BOTTOM, fill=tk.BOTH, expand=True, padx=20, pady=20)
-        CTkLabel(frame_Output, text=LANG["litem.output.1"], font=(DefaultFont, int(DefaultFontSize * 2.0), "bold"),
+        CTkLabel(frame_Output, text=_("litem.output.1"), font=(DefaultFont, int(DefaultFontSize * 2.0), "bold"),
                  fg_color=color_map["BG"], text_color=color_map["TT"]).pack(side=tk.TOP, fill=tk.BOTH, padx=10, pady=10)
         frame_times = tk.Frame(frame_Output, bg=color_map["BG"])
         frame_times.pack(side=tk.TOP, fill=tk.BOTH, padx=10, pady=5)
-        tk.Label(frame_times, text=LANG["litem.times.1"], font=(DefaultFont, int(DefaultFontSize * 1.5)),
+        tk.Label(frame_times, text=_("litem.times.1"), font=(DefaultFont, int(DefaultFontSize * 1.5)),
                  bg=color_map["BG"], fg=color_map["TT"]).pack(side=tk.LEFT, padx=5)
         entry_times = tk.Entry(frame_times, width=10, bg=color_map["BG"], fg=color_map["PC"],
                                font=(DefaultFont, DefaultFontSize))
         entry_times.pack(side=tk.RIGHT, padx=5)
         frame_debug = tk.Frame(frame_Output, bg=color_map["BG"])
         frame_debug.pack(side=tk.TOP, fill=tk.BOTH, padx=10, pady=10)
-        analysis_debug = tk.Label(frame_debug, text=LANG["litem.debug.1"], bg=color_map["BG"], fg=color_map["TT"],
+        analysis_debug = tk.Label(frame_debug, text=_("litem.debug.1"), bg=color_map["BG"], fg=color_map["TT"],
                                   font=(DefaultFont, int(DefaultFontSize * 1.5)))
         analysis_debug.pack(side=tk.TOP, padx=10)
-        CTkLabel(frame_debug, text=LANG["litem.debug.2"], font=(DefaultFont, int(DefaultFontSize * 1.2), "bold"),
+        CTkLabel(frame_debug, text=_("litem.debug.2"), font=(DefaultFont, int(DefaultFontSize * 1.2), "bold"),
                  fg_color=color_map["BG"], text_color="#f70400").pack(side=tk.TOP, fill=tk.BOTH, padx=10)
 
     def TK_FrameMiddle(self):
@@ -516,11 +528,11 @@ class TKF:
         # - 标题容器
         frame_middle_top = CTkFrame(frame_middle, fg_color=color_map["BG"], corner_radius=DefaultCorner)
         frame_middle_top.pack(side=tk.TOP, fill=tk.X, padx=10, pady=10)
-        self.label_middle = tk.Label(frame_middle_top, text=LANG["litem.midTop.1"],
+        self.label_middle = tk.Label(frame_middle_top, text=_("litem.midTop.1"),
                                      font=(DefaultFont, DefaultFontSize * 3, 'bold'))
         self.label_middle.configure(bg=color_map["BG"], fg=color_map["TT"], bd=5)
         self.label_middle.pack(fill=tk.Y)
-        label_bottom = tk.Label(frame_middle_top, text=LANG["litem.midTop.2"],
+        label_bottom = tk.Label(frame_middle_top, text=_("litem.midTop.2"),
                                 font=(DefaultFont, int(DefaultFontSize * 1.4), "bold"))
         label_bottom.configure(bg=color_map["BG"], fg=color_map["PC"], bd=5)
         label_bottom.pack(side=tk.LEFT, fill=tk.X, padx=20, pady=10)
@@ -546,7 +558,7 @@ class TKF:
         process_frame.pack(side=tk.TOP, fill=tk.X, padx=5, pady=10)
         progress = ttk.Progressbar(process_frame, orient="horizontal", length=300, mode="determinate", name="pb")
         progress.pack(pady=5, side=tk.TOP, fill=tk.X)
-        process_text = tk.Label(process_frame, text=LANG["litem.procbar.1"].format(0, 0, 0))
+        process_text = tk.Label(process_frame, text=_("litem.procbar.1").format(0, 0, 0))
         process_text.pack(pady=5, side=tk.TOP, fill=tk.X)
 
         table_sty = ttk.Style()
@@ -561,14 +573,14 @@ class TKF:
 
         sroll = tk.Scrollbar(frame_chart, orient="vertical")
         sroll.pack(side=tk.RIGHT, fill=tk.Y, padx=10)
-        cc = ('blockID', 'num', 'unit', 'ID') if LANGUAGE == "zh" else ('blockID', 'num', 'unit')
+        cc = ('blockID', 'num', 'unit', 'ID') if LANGUAGE == "zh_CN" else ('blockID', 'num', 'unit')
         self.count_table = ttk.Treeview(frame_chart, height=7, columns=cc, yscrollcommand=sroll.set)
         sroll.config(command=self.count_table.yview)
-        self.count_table.heading('blockID', text=LANG["litem.chart.1"], anchor="center")
-        self.count_table.heading('num', text=LANG["litem.chart.2"], anchor="e")
-        self.count_table.heading('unit', text=LANG["litem.chart.3"], anchor="w")
-        if LANGUAGE == "zh":
-            self.count_table.heading('ID', text=LANG["litem.chart.4"], anchor="center")
+        self.count_table.heading('blockID', text=_("litem.chart.1"), anchor="center")
+        self.count_table.heading('num', text=_("litem.chart.2"), anchor="e")
+        self.count_table.heading('unit', text=_("litem.chart.3"), anchor="w")
+        if LANGUAGE == "zh_CN":
+            self.count_table.heading('ID', text=_("litem.chart.4"), anchor="center")
             self.count_table.column("ID", width=200)
         self.count_table.column("#0", width=40)
         self.count_table.column("blockID", width=150)
@@ -608,19 +620,19 @@ class TKF:
         self.stat_ver.pack(fill=tk.BOTH, side=tk.TOP, padx=5, pady=5)
         self.stat_desc = CTkFrame(frame_stati2, fg_color=color_map["PC"])
         self.stat_desc.pack(fill=tk.BOTH, side=tk.TOP, padx=5, pady=5)
-        tk.Label(self.stat_red, text=LANG["ui.stat.l1"], font=(DefaultFont, int(DefaultFontSize * 1.6), "bold"),
+        tk.Label(self.stat_red, text=_("ui.stat.l1"), font=(DefaultFont, int(DefaultFontSize * 1.6), "bold"),
                  bg=color_map["PC"], fg=color_map["BG"]).pack(fill=tk.X, side=tk.LEFT, padx=5, pady=5)
-        tk.Label(self.stat_redt, text=LANG["ui.stat.l2"], font=(DefaultFont, int(DefaultFontSize * 1.6), "bold"),
+        tk.Label(self.stat_redt, text=_("ui.stat.l2"), font=(DefaultFont, int(DefaultFontSize * 1.6), "bold"),
                  bg=color_map["PC"], fg=color_map["BG"]).pack(fill=tk.X, side=tk.LEFT, padx=5, pady=5)
-        tk.Label(self.stat_liq, text=LANG["ui.stat.l3"], font=(DefaultFont, int(DefaultFontSize * 1.6), "bold"),
+        tk.Label(self.stat_liq, text=_("ui.stat.l3"), font=(DefaultFont, int(DefaultFontSize * 1.6), "bold"),
                  bg=color_map["PC"], fg=color_map["BG"]).pack(fill=tk.X, side=tk.LEFT, padx=5, pady=5)
-        tk.Label(self.stat_den, text=LANG["ui.stat.l4"], font=(DefaultFont, int(DefaultFontSize * 1.6), "bold"),
+        tk.Label(self.stat_den, text=_("ui.stat.l4"), font=(DefaultFont, int(DefaultFontSize * 1.6), "bold"),
                  bg=color_map["PC"], fg=color_map["BG"]).pack(fill=tk.X, side=tk.LEFT, padx=5, pady=5)
-        tk.Label(self.stat_auth, text=LANG["ui.stat.l5"], font=(DefaultFont, int(DefaultFontSize * 1.6), "bold"),
+        tk.Label(self.stat_auth, text=_("ui.stat.l5"), font=(DefaultFont, int(DefaultFontSize * 1.6), "bold"),
                  bg=color_map["PC"], fg=color_map["BG"]).pack(fill=tk.X, side=tk.LEFT, padx=5, pady=5)
-        tk.Label(self.stat_ver, text=LANG["ui.stat.l6"], font=(DefaultFont, int(DefaultFontSize * 1.6), "bold"),
+        tk.Label(self.stat_ver, text=_("ui.stat.l6"), font=(DefaultFont, int(DefaultFontSize * 1.6), "bold"),
                  bg=color_map["PC"], fg=color_map["BG"]).pack(fill=tk.X, side=tk.LEFT, padx=5, pady=5)
-        tk.Label(self.stat_desc, text=LANG["ui.stat.l7"], font=(DefaultFont, int(DefaultFontSize * 1.6), "bold"),
+        tk.Label(self.stat_desc, text=_("ui.stat.l7"), font=(DefaultFont, int(DefaultFontSize * 1.6), "bold"),
                  bg=color_map["PC"], fg=color_map["BG"]).pack(fill=tk.X, side=tk.LEFT, padx=5, pady=5)
         self.a_red = tk.Label(self.stat_red, text="", font=(DefaultFont, int(DefaultFontSize * 1.6)),
                               bg=color_map["PC"], fg=color_map["MC"])
@@ -646,19 +658,19 @@ class TKF:
 
         redenmcframe = CTkFrame(frame_left, fg_color=color_map["MC"], corner_radius=DefaultCorner)
         redenmcframe.pack(side=tk.TOP, fill=tk.BOTH, expand=False, padx=10, pady=0)
-        redenLab = CTkLabel(redenmcframe, text=LANG["litem.reden.title"],
+        redenLab = CTkLabel(redenmcframe, text=_("litem.reden.title"),
                             font=(DefaultFont, int(DefaultFontSize * 1.6)), fg_color=color_map["MC"],
                             text_color=color_map["BG"])
         redenLab.grid(padx=5, pady=5, row=0, column=0, columnspan=2)
         redenenter = CTkEntry(redenmcframe, font=(DefaultFont, int(DefaultFontSize * 1.6)), fg_color=color_map["BG"],
                               text_color=color_map["MC"], width=200)
         redenenter.grid(padx=5, pady=5, row=1, column=0, columnspan=2)
-        redenselect = CTkComboBox(redenmcframe, values=[LANG["litem.reden.select.1"], LANG["litem.reden.select.2"],
-                                                        LANG["litem.reden.select.3"]],
+        redenselect = CTkComboBox(redenmcframe, values=[_("litem.reden.select.1"), _("litem.reden.select.2"),
+                                                        _("litem.reden.select.3")],
                                   font=(DefaultFont, int(DefaultFontSize * 1.6)), fg_color=color_map["MC"],
                                   text_color=color_map["BG"])
         redenselect.grid(padx=5, pady=5, row=2, column=0)
-        redenbtn = CTkButton(redenmcframe, text=LANG["litem.reden.btn"], font=(DefaultFont, int(DefaultFontSize * 1.6)),
+        redenbtn = CTkButton(redenmcframe, text=_("litem.reden.btn"), font=(DefaultFont, int(DefaultFontSize * 1.6)),
                              fg_color=color_map["BG"], text_color=color_map["MC"],
                              command=lambda: Redenmc(redenenter.get(), str(redenselect.get())))
         redenbtn.grid(padx=5, pady=5, row=2, column=1)
@@ -682,7 +694,7 @@ class TKF:
             block_name = block_id.split(":")[-1]
         img = load_image(block_name, images)
         self.count_table.insert('', 'end', image=img, values=(
-            cn_translate(block_name), str(count), convert_units(count, LANGUAGE), block_name) if LANGUAGE == "zh" else (
+            cn_translate(block_name), str(count), convert_units(count, LANGUAGE), block_name) if LANGUAGE == "zh_CN" else (
             block_name, str(count), convert_units(count, LANGUAGE)))
         litem.update_idletasks()
 
@@ -726,7 +738,7 @@ class TKF:
             os.startfile(output_file_path)
 
     plt.rcParams['font.sans-serif'] = ['Microsoft YaHei', 'SimHei', "Source Han Sans SC",
-                                       "Noto Sans CJK SC"] if LANGUAGE == "zh" else ["Noto Sans", "Segoe UI",
+                                       "Noto Sans CJK SC"] if LANGUAGE == "zh_CN" else ["Noto Sans", "Segoe UI",
                                                                                      "Helvetica Neue", "Arial",
                                                                                      "Liberation Sans"]
     plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
@@ -734,6 +746,7 @@ class TKF:
     # plt.figure(facecolor=color_map["MC"])
 
     def Draw_Chart(self):
+        global _
         self.ax1.clear()
         self.ax2.clear()
 
@@ -746,7 +759,7 @@ class TKF:
             labels1.append("其他")
             sizes1.append(other_count)
         self.ax1.pie(sizes1, labels=labels1, autopct='%1.1f%%', startangle=90)
-        self.ax1.set_title(LANG["ui.chart.t1"])
+        self.ax1.set_title(_("ui.chart.t1"))
 
         cla_bl = {}
         for category, blocks in Cla_Block.items():
@@ -769,7 +782,7 @@ class TKF:
             labels2.append("其他")
             sizes2.append(other_count)
         self.ax2.pie(sizes2, labels=labels2, autopct='%1.1f%%', startangle=90)
-        self.ax2.set_title(LANG["ui.chart.t2"])
+        self.ax2.set_title(_("ui.chart.t2"))
 
         self.canvas1.draw()
         self.canvas2.draw()
@@ -782,7 +795,7 @@ class TKF:
             self.progress["value"] += 1
             time.sleep(1)
             process_text.config(
-                text=LANG["litem.procbar.1"].format(self.progress["value"], self.progress["maximum"], i))
+                text=_("litem.procbar.1").format(self.progress["value"], self.progress["maximum"], i))
             litem.update_idletasks()
 
     def start_analysis(self):
@@ -802,7 +815,7 @@ class TKF:
         time2 = 0.000012 * byte + 2
         self.progress["value"] = 0
         if time1 > 5:
-            msgbox(LANG["ui.render.warn2"].format(time1, time2, time1 + time2))
+            msgbox(_("ui.render.warn2").format(time1, time2, time1 + time2))
             threading.Thread(self.PB(time1)).start()
         else:
             self.progress["maximum"] = 2
@@ -894,7 +907,7 @@ class TKF:
                             pbar.update(1)
                             self.progress["value"] += 1
                 process_text.config(
-                    text=LANG["litem.procbar.1"].format(self.progress["value"], self.progress["maximum"],
+                    text=_("litem.procbar.1").format(self.progress["value"], self.progress["maximum"],
                                                         int(time.time() - starttime)))
                 litem.update_idletasks()
 
@@ -920,7 +933,7 @@ class TKF:
         print(f"{Cla_Block}")
         # print(Block_pos)
         self.label_bottom.config(
-            text=LANG["litem.midTop.2b"].format(size_x, size_y, size_z, num, tim, len(Block)))
+            text=_("litem.midTop.2b").format(size_x, size_y, size_z, num, tim, len(Block)))
         top1 = self.Draw_Chart()
         sorted_block = sorted(Block.items(), key=lambda x: x[1], reverse=True)
         self.a_den.config(text=f"{num / (size_x * size_y * size_z) * 100:.1f}%")
@@ -928,17 +941,17 @@ class TKF:
             num - sorted_block[0][1] if len(Block) > 5 else num)
         if num > 10:
             if redly > 0.5:
-                me_type = LANG["ui.stat.type1"]
+                me_type = self._("ui.stat.type1")
             elif redly >= 0.3:
-                me_type = LANG["ui.stat.type2"]
+                me_type = self._("ui.stat.type2")
             elif redly >= 0.1:
-                me_type = LANG["ui.stat.type3"]
+                me_type = self._("ui.stat.type3")
             elif redly >= 0.01:
-                me_type = LANG["ui.stat.type4"]
+                me_type = self._("ui.stat.type4")
             elif redly < 0.01:
-                me_type = LANG["ui.stat.type5"]
+                me_type = self._("ui.stat.type5")
         else:
-            me_type = LANG["ui.stat.type6"]
+            me_type = self._("ui.stat.type6")
         self.a_red.config(text=f"{redly * 100:.1f}%")
         self.a_redt.config(text=f"{me_type}")
         fluid = sum(n for n, _ in Cla_Block["液体"])
@@ -967,7 +980,7 @@ class TKF:
             #     gl_view.destroy()
             #     if Li3d.get() and num>1000:
             #         if num>5000:
-            #             check = boolbox(LANG["ui.render.warn1"],default_choice="是/Y",cancel_choice="取消/N")
+            #             check = boolbox(_("ui.render.warn1"),default_choice="是/Y",cancel_choice="取消/N")
             #             if not check: return
             #             threading.Thread(target=LitRender.main_render_loop(Block_pos,bool(False)), daemon=True).start()
             #             return
@@ -979,7 +992,7 @@ class TKF:
             # else:
             #     if Li3d.get() and num>1000:
             #         if num>5000:
-            #             check = boolbox(LANG["ui.render.warn1"],default_choice="是/Y",cancel_choice="取消/N")
+            #             check = boolbox(_("ui.render.warn1"),default_choice="是/Y",cancel_choice="取消/N")
             #             if not check: return
             #         threading.Thread(target=LitRender.main_render_loop(Block_pos,bool(False)), daemon=True).start()
             #     else:
@@ -997,14 +1010,13 @@ class TKF:
 
 Tk = TKF()
 
-
-def on_exit():
+def m_on_exit():
     fw = Tk.on_exit()
     print(f"Log Rewrite:{fw}")
     data["Save"]["Basic"] = fw
     with open(grs(os.path.join('lang', 'data.json')), 'w') as js:
         json.dump(data, js, indent=2)
-atexit.register(on_exit)  # 退出绑定
+atexit.register(m_on_exit)  # 退出绑定
 
 
 class Github:
@@ -1032,17 +1044,17 @@ def Update(mode):
         return
     if latest_tag[-5:].replace('_', '.')!=APP_VERSION:
         print(latest_tag[-5:])
-        if boolbox(LANG["func.update.ms1"].format(latest_tag),title="Download"):
+        if boolbox(_("func.update.ms1").format(latest_tag),title="Download"):
             match mode:
                 case "GitHub":
                     webbrowser.open("https://github.com/albertchen857/LitematicaViewer/releases/latest/download/LitematicaViewer.7z")
     else:
-        msgbox(LANG["func.update.ms2"],title="Download")
+        msgbox(_("func.update.ms2"),title="Download")
 
 def Redenmc(search : str, mode : str):
-    s1 = str(LANG["litem.reden.select.1"])
-    s2 = str(LANG["litem.reden.select.2"])
-    s3 = str(LANG["litem.reden.select.3"])
+    s1 = str(_("litem.reden.select.1"))
+    s2 = str(_("litem.reden.select.2"))
+    s3 = str(_("litem.reden.select.3"))
     if mode == s1:
         webbrowser.open(
             "https://redenmc.com/litematica?q="+search)
@@ -1068,7 +1080,8 @@ def StepOpen():
 
 class LitStepChecker:
     def __init__(self):
-        global Block_pos
+        global Block_pos, _
+        self._ = _
         self.xl = max([x for (x, _, _), _, _ in Block_pos]) + 1
         self.yl = max([y for (_, y, _), _, _ in Block_pos]) + 1
         self.zl = max([z for (_, _, z), _, _ in Block_pos]) + 1
@@ -1096,7 +1109,7 @@ class LitStepChecker:
         self.prr = tk.IntVar(value=0) if self.largesize else tk.IntVar(value=1)
 
         self.LS = tk.Toplevel(litem)
-        self.LS.title(LANG["ui.ls.title"])
+        self.LS.title(_("ui.ls.title"))
         self.LS.iconbitmap(grs("icon.ico"))
         if sys.platform.startswith("win"):
             self.LS.state("zoomed")  # Windows 专用
@@ -1113,22 +1126,22 @@ class LitStepChecker:
         self.button_down.grid(row=0, column=2, padx=2, pady=5)
         self.button_sdown = tk.Button(self.frame, text="⇊", command=lambda: self.change_y("sdown"))
         self.button_sdown.grid(row=0, column=3, padx=2, pady=5)
-        self.checkbutton = tk.Checkbutton(self.frame, text=LANG["ui.ls.label1"], variable=self.ck)
+        self.checkbutton = tk.Checkbutton(self.frame, text=self._("ui.ls.label1"), variable=self.ck)
         self.checkbutton.grid(row=0, column=4, padx=2, pady=5)
-        self.cgrid = tk.Checkbutton(self.frame, text=LANG["ui.ls.label2"], variable=self.gr)
+        self.cgrid = tk.Checkbutton(self.frame, text=self._("ui.ls.label2"), variable=self.gr)
         self.cgrid.grid(row=0, column=5, padx=2, pady=5)
-        self.proprend = tk.Checkbutton(self.frame, text=LANG["ui.ls.label3"], variable=self.prr)
+        self.proprend = tk.Checkbutton(self.frame, text=self._("ui.ls.label3"), variable=self.prr)
         self.proprend.grid(row=0, column=6, padx=2, pady=5)
-        self.button_re = tk.Button(self.frame, text=LANG["ui.ls.label4"], command=lambda: self.update_canvas())
+        self.button_re = tk.Button(self.frame, text=self._("ui.ls.label4"), command=lambda: self.update_canvas())
         self.button_re.grid(row=0, column=7, padx=2, pady=5)
-        tk.Button(self.frame, text=LANG["ui.ls.label5"], command=lambda: msgbox(
-            LANG["ui.ls.notice"])).grid(
+        tk.Button(self.frame, text=self._("ui.ls.label5"), command=lambda: msgbox(
+            self._("ui.ls.notice"))).grid(
             row=0, column=8, padx=2, pady=5)
         self.label_y = tk.Label(self.frame, text="Y=0")
         self.label_y.grid(row=0, column=9, padx=2, pady=5)
-        self.label_rend = tk.Label(self.frame, text=f"{LANG["ui.ls.label6"]}={self.rendblock}")
+        self.label_rend = tk.Label(self.frame, text=f"{self._("ui.ls.label6")}={self.rendblock}")
         self.label_rend.grid(row=0, column=10, padx=2, pady=5)
-        self.label_prop = tk.Label(self.LS, text=LANG["ui.ls.label7"])
+        self.label_prop = tk.Label(self.LS, text=self._("ui.ls.label7"))
         self.label_prop.pack(fill=tk.Y, side=tk.TOP)
 
         self.frame2 = tk.Frame(self.LS, bg=color_map["BG"])
@@ -1166,7 +1179,7 @@ class LitStepChecker:
 
         pos_x = self.side + (self.LS.winfo_width() - 2 * self.side - self.xl * self.blockSide) // 2 + int(i) * self.blockSide
         pos_y = self.side + (self.LS.winfo_height() - 2 * self.side - self.zl * self.blockSide) // 2 + int(j) * self.blockSide
-        tx = LANG["ui.ls.palette"].format(cn_translate(id_tran_name(block_id)), (int(i),self.cy,int(j)), face, powered, half, wl, bp)
+        tx = _("ui.ls.palette").format(cn_translate(id_tran_name(block_id)), (int(i),self.cy,int(j)), face, powered, half, wl, bp)
         self.label_prop.config(text=tx)
         image = Image.open(grs(os.path.join('item', 'block_selected.png')))
         image = image.convert('RGBA').resize((self.blockSide, self.blockSide), Image.LANCZOS)
@@ -1193,7 +1206,7 @@ class LitStepChecker:
         self.draw_current_layer()
         if self.prr.get():
             self.draw_prop_layer()
-        self.label_rend.config(text=LANG["ui.ls.render"].format(self.rendblock,(time.time()-self.time1)))
+        self.label_rend.config(text=_("ui.ls.render").format(self.rendblock,(time.time()-self.time1)))
 
     def draw_line(self):
         self.canvas.create_line(self.side, self.side, self.LS.winfo_width() - self.side, self.side, fill=color_map["PC"],
@@ -1274,7 +1287,7 @@ class LitStepChecker:
                     image = Image.open(grs(os.path.join('block', 'info_update.png')))
                     image = image.convert('RGB').resize((self.blockSide, self.blockSide), Image.NEAREST)
                     self.combined_image.paste(image, (self.blockSide*i, self.blockSide*j))
-            self.label_rend.config(text=LANG["ui.ls.render"].format(self.rendblock,(time.time()-self.time1)))
+            self.label_rend.config(text=_("ui.ls.render").format(self.rendblock,(time.time()-self.time1)))
         photo = ImageTk.PhotoImage(self.combined_image)
         self.images.append(photo)
         self.canvas.create_image(self.side + (self.LS.winfo_width() - 2 * self.side - self.xl * self.blockSide) // 2, self.side + (self.LS.winfo_height() - 2 * self.side - self.zl * self.blockSide) // 2, anchor=tk.NW, image=photo)
