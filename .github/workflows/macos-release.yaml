@@ -1,0 +1,76 @@
+name: macOS Release
+
+# 只在这个分支手动触发，或者打 v* 标签时跑。
+# 产出 Intel 和 Apple Silicon 两个 dmg，打标签时顺便发一个 Release。
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-13   # Intel
+            arch: x64
+          - os: macos-14   # Apple Silicon
+            arch: arm64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Check tkinter
+        run: python -c "import tkinter; print('tkinter', tkinter.TkVersion)"
+
+      - name: Make .icns
+        run: python macos/make_icns.py
+
+      - name: Compile translations
+        run: python tools/lang_build.py
+
+      - name: Self test
+        run: |
+          python tools/lang_check.py
+          python -c "import sys; sys.path.insert(0,'script'); import lv.ui_main; print('modules ok')"
+
+      - name: Build .app
+        run: pyinstaller --noconfirm LitematicaViewer.spec
+
+      - name: Build .dmg
+        run: |
+          cd dist
+          hdiutil create -volname LitematicaViewer \
+            -srcfolder LitematicaViewer.app \
+            -ov -format UDZO LitematicaViewer-${{ matrix.arch }}.dmg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LitematicaViewer-macos-${{ matrix.arch }}
+          path: dist/*.dmg
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.dmg
+          body: |
+            macOS 版本没有 Apple 开发者证书签名，第一次打开需要右键 → 打开，
+            或者执行 `xattr -dr com.apple.quarantine /Applications/LitematicaViewer.app`。
+            详见 README_MACOS.md。
