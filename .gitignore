@@ -6,6 +6,19 @@ __pycache__/
 *.pyd
 build/
 sdist/
+# 打包配置要进版本库，其它 .spec 是 pyinstaller 随手生成的
 *.spec
+!LitematicaViewer.spec
 log.txt
 error.log
+
+# 3D 渲染时生成的临时数据，每次打开都会重写
+script/JSrender/payload.js
+# 由 lang/source/*.json 自动编译出来的，不进版本库
+lang/*/LC_MESSAGES/
+# 开发自检用的截图和样例文件
+shot*.png
+testdata/
+# macOS 图标的中间产物，由 macos/make_icns.py 生成
+icon.iconset/
+icon.icns

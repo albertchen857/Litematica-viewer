@@ -5,28 +5,26 @@ on:
     branches: ["*"]
   pull_request:
     branches: ["*"]
+  workflow_dispatch:
 
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: windows-latest
             platform: windows
             arch: x64
-            ext: exe
-          - os: macos-latest
+          - os: macos-13          # Intel
             platform: macos
             arch: x64
-            ext: app
-          - os: macos-14
+          - os: macos-14          # Apple Silicon
             platform: macos
             arch: arm64
-            ext: app
           - os: ubuntu-latest
             platform: linux
             arch: x64
-            ext:
 
     runs-on: ${{ matrix.os }}
 
@@ -36,32 +34,54 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
-          architecture: ${{ matrix.arch }}
+          python-version: "3.12"
+
+      # Linux 上 tkinter 不是默认装的，不装 pyinstaller 会打出一个开不了的包
+      - name: Install system Tk (Linux)
+        if: matrix.platform == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y python3-tk
+
+      # pywebview 在 Linux 上走 GTK/WebKit
+      - name: Install WebKit (Linux)
+        if: matrix.platform == 'linux'
+        run: sudo apt-get install -y libgirepository1.0-dev gir1.2-webkit2-4.1 python3-gi
 
       - name: Cache pip
         uses: actions/cache@v4
         with:
           path: |
             ~/.cache/pip
-            ~/Library/Caches/pip  # macOS
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
+            ~/Library/Caches/pip
+            ~\AppData\Local\pip\Cache
+          key: ${{ runner.os }}-${{ matrix.arch }}-pip-${{ hashFiles('requirements.txt') }}
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install --cache-dir ~/.cache/pip -r requirements.txt
-          pip install --cache-dir ~/.cache/pip pyinstaller imageio
+          pip install -r requirements.txt
+          pip install pyinstaller
 
-      - name: Build Application
+      # .mo 是从 lang/source/*.json 生成的，不进版本库，打包前必须先编译出来
+      - name: Compile translations
+        run: python tools/lang_build.py
+
+      - name: Check translations
+        run: python tools/lang_check.py
+
+      - name: Build
+        run: pyinstaller --noconfirm LitematicaViewer.spec
+
+      - name: Package macOS app
+        if: matrix.platform == 'macos'
         run: |
-          pyinstaller --noconfirm --name=LitematicaViewer --add-data "block:block" --add-data "item:item" --add-data "lang:lang" --add-data "icon.ico:." --add-data "tm_icon.ico:." --windowed --icon="icon.ico" --clean -D script/LitematicaViewer.py
+          cd dist
+          hdiutil create -volname LitematicaViewer -srcfolder LitematicaViewer.app \
+            -ov -format UDZO LitematicaViewer-${{ matrix.arch }}.dmg
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: LitematicaViewer-${{ matrix.platform }}-${{ matrix.arch }}
           path: |
-            dist/*
+            dist/*.dmg
+            dist/LitematicaViewer

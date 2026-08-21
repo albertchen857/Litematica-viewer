@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0"/>
+   <title>LitematicaViewer 3D</title>
+
+   <!--
+      这个页面是 LitematicaViewer 用的精简版，只保留渲染。
+      原版 index.html（Ending_Credits 的 litematic-viewer）还留着，可以单独打开当网页版用。
+
+      和原版的区别：
+        * 没有文件选择界面 —— 结构由 Python 写进 payload.js
+        * 不加载 materialize / fontawesome / Google Analytics
+        * 渲染核心（deepslate-helpers.js + viewer.js）原样复用，一行没改
+   -->
+
+   <!-- deepslate 渲染引擎。断网时会退化成下面的提示，不会白屏 -->
+   <script src="https://unpkg.com/deepslate@0.10.1"></script>
+   <script src="https://unpkg.com/gl-matrix@3.4.3/gl-matrix-min.js"></script>
+
+   <script src="resource/assets.js"></script>
+   <script src="resource/opaque.js"></script>
+
+   <script src="src/deepslate-helpers.js"></script>
+   <script src="src/viewer.js"></script>
+
+   <script src="payload.js"></script>
+   <script src="src/bridge.js"></script>
+
+   <style>
+      html, body { margin: 0; padding: 0; overflow: hidden; background: #111; color: #eee;
+                   font-family: "Segoe UI", "Microsoft YaHei", sans-serif; }
+      #viewer { position: fixed; left: 0; top: 0; width: 100%; height: 100%; z-index: -1; }
+      #main-content { padding: 40px; }
+      #hud { position: absolute; top: 8px; left: 12px; font-size: 13px; line-height: 1.6;
+             background: rgba(0,0,0,.55); padding: 8px 12px; border-radius: 6px; }
+      #hud b { color: #6cf; }
+      #materialList { position: absolute; top: 8px; right: 12px; max-height: 88vh;
+                      overflow-y: auto; background: rgba(0,0,0,.6); padding: 8px 10px;
+                      border-radius: 6px; font-size: 12px; min-width: 190px; }
+      #materialList .row { display: flex; justify-content: space-between; gap: 18px; padding: 1px 0; }
+      #materialList .row span:last-child { color: #6cf; }
+      #sliders { position: absolute; left: 12px; bottom: 12px; background: rgba(0,0,0,.55);
+                 padding: 8px 12px; border-radius: 6px; font-size: 12px; }
+      #sliders input { width: 220px; vertical-align: middle; }
+      #error { padding: 40px; font-size: 15px; line-height: 1.8; }
+      #error code { background: #222; padding: 2px 6px; border-radius: 3px; }
+   </style>
+</head>
+
+<body>
+   <div id="viewer"></div>
+   <div id="main-content"><div id="error">Loading…</div></div>
+
+   <div id="hud" hidden></div>
+   <div id="materialList" hidden></div>
+   <div id="sliders" hidden></div>
+</body>
+</html>
