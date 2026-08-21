@@ -38,7 +38,7 @@
   },
   "Save": {
     "First_open": "1",
-    "Language": "en_US",
+    "Language": "zh_CN",
     "ui": {
       "Font": "Arial",
       "FontSize": 10,
@@ -49,7 +49,9 @@
       "func": 1,
       "stat": 1,
       "analysis": 1,
-      "entity": 1
+      "entity": 1,
+      "thumb_rotate": 1,
+      "thumb_large": 0
     },
     "collapsed": {
       "side": false
