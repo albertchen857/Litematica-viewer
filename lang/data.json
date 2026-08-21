@@ -37,7 +37,6 @@
     }
   },
   "Save": {
-    "Basic": "00000000",
     "First_open": "1",
     "Language": "en_US",
     "ui": {
@@ -45,6 +44,17 @@
       "FontSize": 10,
       "ColorMap": "BlueAr",
       "cornerRadius": 10
+    },
+    "panels": {
+      "func": 1,
+      "stat": 1,
+      "analysis": 1,
+      "entity": 1
+    },
+    "collapsed": {
+      "new": false,
+      "replace": false,
+      "output": false
     }
   }
 }
