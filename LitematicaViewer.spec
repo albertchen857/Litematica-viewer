@@ -52,6 +52,11 @@ a = Analysis(
         "amulet_nbt",
         "customtkinter",
         "matplotlib.backends.backend_tkagg",
+        "OpenGL.GL",          # 内嵌 3D 缩略图，非 macOS
+        "OpenGL.GLU",
+        "pyopengltk",
+        "lv.ui_panels",
+        "lv.thumbnail",
     ],
     hookspath=[],
     hooksconfig={},

@@ -32,9 +32,11 @@
 | `blockmap.py` | Java ↔ 基岩 的 ID 与状态互转，带「没把握」报告 | — |
 | `analysis.py` | 材料折算、分类、密度、红石占比、容器扫描 | `numpy` |
 | `edit.py` | 生成长方体、批量替换、litematic 改版本号 | `numpy` `amulet-nbt` |
-| `render.py` | 写 `payload.js`，起子进程开 3D 窗口 | `subprocess` |
+| `render.py` | 写 `payload.js`，起子进程开 3D 窗口（手动全屏渲染） | `subprocess` |
+| `thumbnail.py` | 左上角内嵌的小缩略图，pyopengltk + 顶点数组；macOS 上留空 | `PyOpenGL` `pyopengltk` |
 | `tools.py` | 中文名、分类、单位换算、贴图加载 | `PIL` |
-| `ui_widgets.py` | `CollapsiblePanel` 等通用控件 | `tkinter` `customtkinter` |
+| `ui_widgets.py` | `CollapsiblePanel`（上下收）、`SideCollapsible`（左右收）等 | `tkinter` `customtkinter` |
+| `ui_panels.py` | 四块可复用面板：生成投影 / 替换方块 / REDENMC / 信息（指标+饼图） | `matplotlib` |
 | `ui_main.py` | 主窗口 | 上面全部 |
 | `ui_step.py` | 步骤查看器 | `PIL` `numpy` |
 | `ui_container.py` | 容器分析器 | `analysis` |
@@ -207,3 +209,28 @@ python tools/lang_check.py   # 翻译键有没有漏
 python tools/shot.py         # 开一次主界面截图，肉眼看布局
 python tools/shot_window.py step|container 文件路径 输出.png
 ```
+
+
+---
+
+## 六、0.9.1 的界面调整
+
+| 要求 | 落点 |
+|---|---|
+| 左上角内嵌 3D 缩略图，不能操作，受设置里「旋转」「大体积仍渲染」控制 | `thumbnail.py`，主界面 `App._build_left` |
+| 「手动3D渲染」保留，仍是打开全屏网页渲染器 | `App.open_3d` → `render.open_viewer` |
+| 刚打开默认渲染一个工作台 | `App._show_default_thumbnail` |
+| REDENMC 搜索放左下角 | `App._build_left` 里 `side=tk.BOTTOM` |
+| 表格图标别压到名字列 | `#0` 列宽 46 + `anchor="center"` |
+| 进度条用旧款式，放饼图下面 | `ChartsPanel`（`extras=True`） |
+| 右边三块合成一个左右收起的侧栏，默认收起 | `ui_widgets.SideCollapsible`，`App._build_side` |
+| 窗口变窄时：先收侧栏 → 再收饼图列 → 最后收左列 | `App._apply_layout`，阈值见文件顶部三个常量 |
+| 倍数输入放饼图上面，对账/提示放饼图下面，删掉「分析设置」面板 | `ChartsPanel` |
+| 四块功能各有独立窗口，入口在功能菜单 | `ui_panels.py` + `App.open_panel_window` |
+
+缩略图为什么用 pyopengltk 而不是纯软件渲染：这是明确选定的方案 ——
+Windows/Linux 上走硬件加速，macOS 上因为 pyopengltk 的 Cocoa 后端导入即失败，
+那个位置直接留一句说明，其它功能不受影响。相比旧版 `LitRender`，这里避开了两个性能坑：
+主色按方块 id 缓存（旧版每帧每方块都 `Image.open()` 读一次贴图），
+以及加载时用 numpy 把可见面摊成顶点数组、每帧只发一次 `glDrawArrays`
+（旧版是三层 Python 循环逐面 `glVertex3fv`）。

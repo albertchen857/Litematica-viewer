@@ -13,6 +13,8 @@ from .config import SAVE, colors, corner, font, save_settings
 
 ARROW_OPEN = "▼"
 ARROW_CLOSED = "▶"
+ARROW_LEFT = "◀"
+ARROW_RIGHT = "▶"
 
 
 def _panel_states() -> dict:
@@ -66,6 +68,72 @@ class CollapsiblePanel(CTkFrame):
             self.body.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=10, pady=8)
         else:
             self.body.pack_forget()
+        if self.key is not None:
+            _panel_states()[self.key] = not self._expanded
+            save_settings()
+
+    @property
+    def expanded(self) -> bool:
+        return self._expanded
+
+
+class SideCollapsible(tk.Frame):
+    """靠右的侧栏，左右方向收起。
+
+    收起时只剩窗口右边一条竖条（三角 + 竖排标题），点一下往左展开。
+    和上面按高度收起的 CollapsiblePanel 不一样，这个不占横向空间，
+    窗口拉窄的时候中间的表格能多留一点地方。内容往 ``panel.body`` 里放。
+    """
+
+    STRIP_WIDTH = 28
+
+    def __init__(self, parent, title: str, key: str = None, expanded: bool = False,
+                 width: int = 380):
+        theme = colors()
+        super().__init__(parent, bg=theme["BG"])
+        self.theme = theme
+        self.key = key
+        self.body_width = width
+        if key is not None:
+            expanded = not _panel_states().get(key, not expanded)
+        self._expanded = bool(expanded)
+
+        self.strip = tk.Canvas(
+            self, width=self.STRIP_WIDTH, bg=theme["MC"], highlightthickness=0, cursor="hand2"
+        )
+        self.strip.pack(side=tk.RIGHT, fill=tk.Y)
+        self.strip.bind("<Button-1>", lambda _event: self.toggle())
+        self.strip.bind("<Configure>", lambda _event: self._paint_strip())
+        self._title = title
+
+        self.body = tk.Frame(self, bg=theme["MC"], width=width)
+        self.body.pack_propagate(False)
+        if self._expanded:
+            self.body.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+
+    def _paint_strip(self) -> None:
+        """竖条上画一个三角和竖排标题。Canvas 的 angle 参数可以把文字转 90 度。"""
+        self.strip.delete("all")
+        height = max(self.strip.winfo_height(), 1)
+        arrow = ARROW_RIGHT if self._expanded else ARROW_LEFT
+        self.strip.create_text(
+            self.STRIP_WIDTH / 2, 14, text=arrow, fill=self.theme["BG"], font=font(1.1, bold=True)
+        )
+        self.strip.create_text(
+            self.STRIP_WIDTH / 2, height / 2, text=self._title, fill=self.theme["BG"],
+            font=font(1.2, bold=True), angle=90,
+        )
+
+    def toggle(self) -> None:
+        self.set_expanded(not self._expanded)
+
+    def set_expanded(self, expanded: bool) -> None:
+        self._expanded = bool(expanded)
+        if self._expanded:
+            self.body.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+        else:
+            self.body.pack_forget()
+        self._paint_strip()
         if self.key is not None:
             _panel_states()[self.key] = not self._expanded
             save_settings()

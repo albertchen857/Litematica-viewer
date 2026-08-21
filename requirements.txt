@@ -9,12 +9,16 @@ nbtlib>=2.0.4          # litemapy 的 NBT 库，写 .litematic 的实体时直�
 amulet-nbt==2.1.3      # 读写 .nbt / .mcstructure，支持小端
 numpy>=1.26
 
-# 3D 渲染窗口（独立子进程，见 script/webview_host.py）
+# 手动 3D 渲染：独立子进程里的网页渲染器（见 script/webview_host.py）
 pywebview>=5.0
+
+# 左上角内嵌的 3D 缩略图。pyopengltk 的 macOS(Cocoa) 后端导入即失败（issue #7），
+# 所以只在 Windows / Linux 上装；macOS 上那个位置会留空，不影响其它功能。
+pyopengl>=3.1.7 ; sys_platform != "darwin"
+pyopengltk>=0.0.4 ; sys_platform != "darwin"
 
 # 检查更新 / 刷新 JSrender 贴图资源
 requests>=2.31
 
-# 说明：0.9.0 起不再需要 pyopengl / pyopengltk（3D 改用网页渲染器，
-# 顺带解决了 macOS 上 pyopengltk 导入失败的问题）、easygui（弹窗改用原生 tkinter）、
-# tqdm、cefpython3、PyQt5。
+# 说明：0.9.0 起不再需要 easygui（弹窗改用原生 tkinter，easygui 在新版 Python
+# 上装不上）、tqdm、cefpython3、PyQt5。
