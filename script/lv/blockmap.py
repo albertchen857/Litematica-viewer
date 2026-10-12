@@ -91,10 +91,22 @@ def _java_props_to_bedrock(props: dict) -> dict:
             out["facing_direction"] = _FACING_TO_INT.get(value, "2")
         elif key == "axis":
             out["pillar_axis"] = value
-        elif key == "half":  # 楼梯/活板门的上下放置
-            out["upside_down_bit"] = "1" if value in ("top", "upper") else "0"
-        elif key == "type":  # 半砖
-            out["minecraft:vertical_half"] = "top" if value == "top" else "bottom"
+        elif key == "half":
+            # half 在 Java 里是两个完全不同的意思，基岩也是两个不同的状态，不能混：
+            #   楼梯/活板门  half=top|bottom    -> upside_down_bit   上下倒置
+            #   门/高草/床   half=upper|lower   -> upper_block_bit   两格方块的哪一半
+            # 旧写法一律映射到 upside_down_bit，回读就变成 top/bottom，
+            # 于是门和高草的上半格不再被识别成「不算材料」，数量会翻倍。
+            if value in ("upper", "lower"):
+                out["upper_block_bit"] = "1" if value == "upper" else "0"
+            else:
+                out["upside_down_bit"] = "1" if value == "top" else "0"
+        elif key == "type" and value in ("top", "bottom"):
+            # 只有半砖的 type 才是上下半。piston_head 的 type=normal、
+            # chest 的 type=single 也叫 type，旧写法会把它们一并改成 vertical_half。
+            out["minecraft:vertical_half"] = value
+        elif key == "type" and value == "double":
+            continue  # 双层半砖在基岩是另一个方块 id，由 _slab_to_bedrock 处理
         elif key == "mode":  # 比较器：比较/减法
             out["output_subtract_bit"] = "1" if value == "subtract" else "0"
         elif key == "rotation":  # 立式告示牌/旗帜/头颅的 16 向
@@ -118,6 +130,8 @@ def _bedrock_props_to_java(props: dict) -> dict:
             out["axis"] = value
         elif key == "upside_down_bit":
             out["half"] = "top" if value in ("1", "true") else "bottom"
+        elif key == "upper_block_bit":
+            out["half"] = "upper" if value in ("1", "true") else "lower"
         elif key in ("minecraft:vertical_half", "top_slot_bit"):
             out["type"] = "top" if value in ("top", "1", "true") else "bottom"
         elif key in _BOOL_PROPS_REVERSE:
@@ -163,25 +177,45 @@ _KNOWN_JAVA_PROPS = frozenset(
 _KNOWN_BEDROCK_PROPS = frozenset(
     {
         "facing_direction", "minecraft:facing_direction", "pillar_axis", "minecraft:block_face",
-        "upside_down_bit", "minecraft:vertical_half", "top_slot_bit", "minecraft:cardinal_direction",
+        "upside_down_bit", "upper_block_bit", "minecraft:vertical_half", "top_slot_bit", "minecraft:cardinal_direction",
         "output_subtract_bit", "ground_sign_direction", "repeater_delay",
         *_BOOL_PROPS_REVERSE,
     }
 )
 
 
+def _slab_to_bedrock(block_id: str, props: dict) -> str:
+    """双层半砖在基岩版是独立的方块 id，不是一个状态。
+
+    ``oak_slab[type=double]`` -> ``oak_double_slab``。不这么转的话 type=double
+    会在往返时丢掉，一块双层半砖就只算一个半砖（实际要两个）。
+    """
+    if props.get("type") == "double" and block_id.endswith("_slab"):
+        return block_id[: -len("_slab")] + "_double_slab"
+    return block_id
+
+
+def _slab_to_java(block_id: str) -> tuple:
+    """``oak_double_slab`` -> (``oak_slab``, {"type": "double"})。"""
+    if block_id.endswith("_double_slab"):
+        return block_id[: -len("_double_slab")] + "_slab", {"type": "double"}
+    return block_id, {}
+
+
 def java_to_bedrock(block: Block, report: ConversionReport = None) -> Block:
     props = block.properties
     if report is not None and not _KNOWN_JAVA_PROPS.issuperset(props):
         report.note(block.id)
-    return Block.make(ID_JAVA_TO_BEDROCK.get(block.id, block.id), _java_props_to_bedrock(props))
+    new_id = ID_JAVA_TO_BEDROCK.get(block.id, block.id)
+    return Block.make(_slab_to_bedrock(new_id, props), _java_props_to_bedrock(props))
 
 
 def bedrock_to_java(block: Block, report: ConversionReport = None) -> Block:
     props = block.properties
     if report is not None and not _KNOWN_BEDROCK_PROPS.issuperset(props):
         report.note(block.id)
-    return Block.make(ID_BEDROCK_TO_JAVA.get(block.id, block.id), _bedrock_props_to_java(props))
+    new_id, extra = _slab_to_java(ID_BEDROCK_TO_JAVA.get(block.id, block.id))
+    return Block.make(new_id, {**_bedrock_props_to_java(props), **extra})
 
 
 def is_waterlogged(block: Block) -> bool:

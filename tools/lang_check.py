@@ -19,7 +19,7 @@ CODE_DIR = os.path.join(ROOT, "script")
 # 所以直接找「长得像翻译键」的字符串字面量：已知命名空间开头 + 点分。
 NAMESPACES = (
     "litem.", "ui.", "app.", "cat.", "con.", "menu.", "cube.", "render.", "setting.",
-    "func.", "lang.", "thumb.", "side.",
+    "func.", "lang.", "thumb.", "side.", "tab.",
 )
 KEY_PATTERN = re.compile(r'"([a-z][\w]*(?:\.[\w]+)+)"')
 # "setting.json"、"log.txt" 这种文件名也长得像键，排掉

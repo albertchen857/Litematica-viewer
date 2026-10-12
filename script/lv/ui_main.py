@@ -29,7 +29,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from customtkinter import CTkFrame, CTkScrollableFrame
 
-from . import analysis, config, edit, formats, i18n, render, thumbnail, tools
+from . import analysis, config, edit, formats, i18n, render, snapshot, thumbnail, tools
 from .config import APP_VERSION, colors, corner, font
 from .i18n import _
 from .ui_panels import ChartsPanel, CubePanel, RedenPanel, ReplacePanel, StatsPanel
@@ -120,6 +120,7 @@ class App:
             ("litem.menuAnalysis.4", self.start_analysis),
             ("litem.menuAnalysis.2", lambda: self.export_text(False)),
             ("litem.menuAnalysis.3", lambda: self.export_text(True)),
+            ("menu.snapshot", self.save_snapshot),
         ):
             data_menu.add_command(label=_(key), command=command, font=item_font)
         data_menu.add_separator()
@@ -215,6 +216,7 @@ class App:
             ("litem.frameTop.3", self.open_step),
             ("litem.frameTop.4", self.open_container),
             ("litem.menuFunc.5", self.open_3d),
+            ("menu.snapshot", self.save_snapshot),
             ("litem.frameTop.5", lambda: messagebox.showinfo(_("litem.title"), _("litem.frameTop.hint"))),
         ):
             button(bar, _(key), command, 1.4, accent=True).pack(side=tk.LEFT, padx=4)
@@ -226,8 +228,10 @@ class App:
 
     def _build_side(self) -> None:
         """右边那条侧栏：生成投影 + 替换方块，左右方向收起，默认收起。"""
+        # key=None：不记住展开状态，每次打开程序都是收起的。
+        # 这块占地方又不是常用功能，默认让位给中间的表格。
         self.side = SideCollapsible(
-            self.root, _("side.tools"), key="side", expanded=False, width=390
+            self.root, _("side.tools"), key=None, expanded=False, width=390
         )
         scroller = CTkScrollableFrame(
             self.side.body, fg_color=self.theme["MC"], corner_radius=corner()
@@ -278,6 +282,20 @@ class App:
         )
         self.label_summary.pack(side=tk.LEFT, padx=16, pady=6)
 
+        # 表格上方的三个切换按钮：方块 / 实体 / 物品
+        tabs = tk.Frame(self.center, bg=self.theme["MC"])
+        tabs.pack(side=tk.TOP, fill=tk.X, padx=10, pady=(0, 6))
+        self.table_view = tk.StringVar(value="blocks")
+        self.tab_buttons = {}
+        for view, key in (("blocks", "tab.blocks"), ("entities", "tab.entities"), ("items", "tab.items")):
+            widget = button(tabs, _(key), lambda v=view: self.switch_table(v), 1.3)
+            widget.pack(side=tk.LEFT, padx=(0, 6))
+            self.tab_buttons[view] = widget
+        self.tab_count = tk.Label(
+            tabs, text="", font=font(1.1), bg=self.theme["MC"], fg=self.theme["BG"]
+        )
+        self.tab_count.pack(side=tk.LEFT, padx=10)
+
         table_area = tk.Frame(self.center, bg=self.theme["MC"])
         table_area.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
 
@@ -307,6 +325,7 @@ class App:
             self.table.heading("id", text=_("litem.chart.4"), anchor="center")
             self.table.column("id", width=200, anchor="w")
         self.table.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.switch_table("blocks")
 
     # ------------------------------------------------------------------ 布局
 
@@ -352,10 +371,15 @@ class App:
     # ------------------------------------------------------------------ 缩略图
 
     def _show_default_thumbnail(self) -> None:
-        """没导入文件时先渲染一个工作台。"""
-        self.thumb.set_structure(
-            edit.create_cube("minecraft:crafting_table", (1, 1, 1)), render_large=True
-        )
+        """没导入文件时先渲染一个工作台。
+
+        注意别覆盖已经分析出来的结构：命令行带文件时分析会先跑完，
+        这个定时器要是无条件设回工作台，缩略图就一直是个工作台了。
+        """
+        if self.structure is None:
+            self.thumb.set_structure(
+                edit.create_cube("minecraft:crafting_table", (1, 1, 1)), render_large=True
+            )
         self.thumb.set_rotate(bool(self.thumb_rotate.get()))
         self.thumb.start()
 
@@ -469,7 +493,7 @@ class App:
         for panel in self.charts_panels:
             panel.update(structure, result)
 
-        self._fill_table(result)
+        self.switch_table(self.table_view.get())
         self.thumb.set_structure(structure, bool(self.thumb_large.get()))
         try:
             with open(config.user_file("log.txt"), "w", encoding="utf-8") as f:
@@ -477,17 +501,38 @@ class App:
         except OSError as exc:
             print(f"[log.txt] {exc}")
 
+    def switch_table(self, view: str) -> None:
+        self.table_view.set(view)
+        for name, widget in self.tab_buttons.items():
+            # 当前这一页用强调色标出来
+            widget.configure(
+                fg_color=self.theme["PC"] if name == view else self.theme["BG"],
+                text_color=self.theme["BG"] if name == view else self.theme["TT"],
+            )
+        self._fill_table(self.result)
+
     def _fill_table(self, result) -> None:
+        """按当前标签页填表。方块 / 实体 / 物品 三份数据都来自同一次分析。"""
         self.table.delete(*self.table.get_children())
+        if result is None:
+            self.tab_count.config(text="")
+            return
+
+        view = self.table_view.get()
+        rows = {
+            "blocks": result.sorted_only_blocks,
+            "entities": result.sorted_entities,
+            "items": result.sorted_items,
+        }[view]()
+
         chinese = i18n.is_chinese()
-        for block_id, count in result.sorted_blocks():
-            name = block_id.split(":")[-1]
-            if block_id.startswith(analysis.ENTITY_PREFIX):
-                name = block_id[len(analysis.ENTITY_PREFIX):].split(":")[-1]
-            values = (tools.display_name(block_id), count, tools.convert_units(count), name)
+        for entry_id, count in rows:
+            name = entry_id.split(":")[-1]
+            values = (tools.display_name(entry_id), count, tools.convert_units(count), name)
             self.table.insert(
                 "", "end", image=tools.block_image(name), values=values if chinese else values[:3]
             )
+        self.tab_count.config(text=_("tab.count", len(rows), sum(n for _k, n in rows)))
 
     # -- 导出 ---------------------------------------------------------------
 
@@ -627,6 +672,26 @@ class App:
             return
         messagebox.showinfo(_("litem.title"), _("app.save.done", os.path.basename(target)))
         config.reveal(os.path.dirname(target))
+
+    def save_snapshot(self) -> None:
+        """按标准等轴渲染一张结构照片存成 PNG。纯 PIL 软件渲染，macOS 上也能用。"""
+        if not self._require_structure():
+            return
+        stem = os.path.splitext(os.path.basename(self.file_path))[0]
+        path = filedialog.asksaveasfilename(
+            defaultextension=".png", filetypes=[("PNG", "*.png")],
+            initialfile=f"{stem}.png", title=_("menu.snapshot"),
+        )
+        if not path:
+            return
+        try:
+            count = snapshot.save(self.structure, path)
+        except Exception as exc:
+            traceback.print_exc()
+            messagebox.showerror(_("litem.title"), _("app.save.fail", exc))
+            return
+        messagebox.showinfo(_("litem.title"), _("app.snapshot.done", count, os.path.basename(path)))
+        config.reveal(os.path.dirname(path))
 
     def open_3d(self) -> None:
         """手动 3D 渲染 = 打开全屏的网页渲染器（和左上角那个只能看的缩略图是两回事）。"""

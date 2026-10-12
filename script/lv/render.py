@@ -10,6 +10,7 @@
 这个由 pywebview 自带的 http 服务解决。
 """
 
+import base64
 import json
 import os
 import subprocess
@@ -51,16 +52,25 @@ def build_payload(structure, title: str = None) -> dict:
         if occurrences and not block.is_air:
             counts[block.id] = counts.get(block.id, 0) + int(occurrences)
 
+    # 坐标和调色板下标用 base64 的 Int32Array 传，不用 JSON 数字数组。
+    # 40 万方块的话，JSON 文本要好几 MB、解析还慢；二进制只有 3.2MB 且一次性解完，
+    # 这是「浏览器加载超时」的主因之一。
     return {
         "name": title or structure.name or "structure",
         "size": [size_x, size_y, size_z],
         "palette": [{"name": b.id, "props": b.properties} for b in region.palette],
-        "idx": filled.tolist(),
-        "state": flat[filled].tolist(),
+        "count": int(len(filled)),
+        # 调色板一般只有几十到几百条，16 位够用，数组直接小一半
+        "state_bits": 16 if len(region.palette) < 0xFFFF else 32,
+        "idx_b64": base64.b64encode(filled.astype("<i4").tobytes()).decode("ascii"),
+        "state_b64": base64.b64encode(
+            flat[filled].astype("<u2" if len(region.palette) < 0xFFFF else "<i4").tobytes()
+        ).decode("ascii"),
         "counts": dict(sorted(counts.items(), key=lambda kv: -kv[1])),
         "labels": {
             "blocks": _("render.hud.blocks"),
             "layer": _("render.hud.layer"),
+            "building": _("render.hud.building"),
             "controls": _("render.hud.controls"),
             "empty": _("render.empty"),
         },
@@ -74,7 +84,7 @@ def write_payload(structure, title: str = None) -> int:
         f.write("window.LV_PAYLOAD = ")
         json.dump(payload, f, ensure_ascii=False, separators=(",", ":"))
         f.write(";\n")
-    return len(payload["idx"])
+    return payload["count"]
 
 
 def _host_command(title: str) -> list:

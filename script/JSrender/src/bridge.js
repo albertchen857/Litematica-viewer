@@ -31,28 +31,51 @@ function lvFail(message) {
    document.getElementById('error').innerHTML = message;
 }
 
-// payload -> deepslate.Structure。只放 y 在 [yMin, yMax] 之间的方块，配合下面的滑块切层看。
-function lvBuildStructure(payload, yMin, yMax) {
+// Python 把坐标和调色板下标压成了 base64 的 Int32Array，这里解回来。
+// 大结构用 JSON 数字数组的话，光文本就有好几 MB，解析还慢 —— 那是加载超时的主因。
+function lvDecode(b64, bits) {
+   const binary = atob(b64);
+   const bytes = new Uint8Array(binary.length);
+   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+   return bits === 16 ? new Uint16Array(bytes.buffer) : new Int32Array(bytes.buffer);
+}
+
+// 每次最多连续处理这么多方块，然后让出主线程。
+// 一次性 addBlock 几十万个会把页面卡死，浏览器/WebView 会判定脚本无响应。
+const LV_CHUNK = 20000;
+
+// 分块构建 deepslate.Structure，边建边回报进度。只放 y 在 [yMin, yMax] 之间的方块。
+function lvBuildStructureAsync(payload, yMin, yMax, onProgress, onDone) {
    const [sx, sy, sz] = payload.size;
    const structure = new deepslate.Structure([sx, sy, sz]);
    const layer = sy * sz;
+   const total = payload.count;
+   let i = 0;
 
-   for (let i = 0; i < payload.idx.length; i++) {
-      const flat = payload.idx[i];
-      const y = Math.floor(flat / sz) % sy;
-      if (y < yMin || y > yMax) continue;
-      const x = Math.floor(flat / layer);
-      const z = flat % sz;
-
-      const entry = payload.palette[payload.state[i]];
-      if (!entry) continue;
-      if (entry.props && Object.keys(entry.props).length) {
-         structure.addBlock([x, y, z], entry.name, entry.props);
+   function step() {
+      const end = Math.min(i + LV_CHUNK, total);
+      for (; i < end; i++) {
+         const flat = payload.idx[i];
+         const y = Math.floor(flat / sz) % sy;
+         if (y < yMin || y > yMax) continue;
+         const entry = payload.palette[payload.state[i]];
+         if (!entry) continue;
+         const position = [Math.floor(flat / layer), y, flat % sz];
+         if (entry.props && Object.keys(entry.props).length) {
+            structure.addBlock(position, entry.name, entry.props);
+         } else {
+            structure.addBlock(position, entry.name);
+         }
+      }
+      if (i < total) {
+         onProgress(i / total);
+         setTimeout(step, 0);   // 让出一帧，页面不会被判定成卡死
       } else {
-         structure.addBlock([x, y, z], entry.name);
+         onProgress(1);
+         onDone(structure);
       }
    }
-   return structure;
+   step();
 }
 
 function lvBuildHud(payload) {
@@ -106,7 +129,11 @@ function lvStart() {
       return;
    }
    if (!payload) { lvFail('payload.js 没有内容，请从主程序重新打开 3D 渲染。'); return; }
-   if (!payload.idx.length) { lvFail(payload.labels.empty || '这个结构里没有方块。'); return; }
+   if (!payload.count) { lvFail(payload.labels.empty || '这个结构里没有方块。'); return; }
+
+   // 二进制一次性解完，比逐个解析 JSON 数字快得多
+   payload.idx = lvDecode(payload.idx_b64, 32);
+   payload.state = lvDecode(payload.state_b64, payload.state_bits);
 
    lvSeedSettings();
    createRenderCanvas();          // 来自 viewer.js
@@ -114,8 +141,29 @@ function lvStart() {
    lvBuildMaterialList(payload);
 
    const [, sy] = payload.size;
-   setStructure(lvBuildStructure(payload, 0, sy - 1), true);   // 来自 viewer.js
-   lvBuildSliders(payload, (lo, hi) => setStructure(lvBuildStructure(payload, lo, hi)));
+   const hud = document.getElementById('hud');
+   const baseHud = hud.innerHTML;
+   let building = false;
+
+   function rebuild(lo, hi, reset) {
+      if (building) return;      // 拖滑块拖太快时别叠着建
+      building = true;
+      lvBuildStructureAsync(
+         payload, lo, hi,
+         (ratio) => {
+            hud.innerHTML = baseHud +
+               `<br><b>${payload.labels.building} ${Math.round(ratio * 100)}%</b>`;
+         },
+         (structure) => {
+            hud.innerHTML = baseHud;
+            building = false;
+            setStructure(structure, reset);   // 来自 viewer.js
+         }
+      );
+   }
+
+   rebuild(0, sy - 1, true);
+   lvBuildSliders(payload, (lo, hi) => rebuild(lo, hi, false));
 }
 
 // 贴图图集要先加载完，deepslate 才能建材质。图集是同目录的 png，

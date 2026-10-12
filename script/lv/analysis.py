@@ -113,8 +113,27 @@ class Result:
                 return _(f"ui.stat.{key}")
         return _("ui.stat.type5")
 
+    items: dict = field(default_factory=dict)  # 容器里物品的合计 {物品id: 个数}
+
     def sorted_blocks(self) -> list:
+        """全部条目（方块 + 实体），导出和饼图用这个，保持和以前一致。"""
         return sorted(self.blocks.items(), key=lambda kv: kv[1], reverse=True)
+
+    def sorted_only_blocks(self) -> list:
+        return sorted(
+            ((k, v) for k, v in self.blocks.items() if not k.startswith(ENTITY_PREFIX)),
+            key=lambda kv: kv[1], reverse=True,
+        )
+
+    def sorted_entities(self) -> list:
+        return sorted(
+            ((k[len(ENTITY_PREFIX):], v) for k, v in self.blocks.items()
+             if k.startswith(ENTITY_PREFIX)),
+            key=lambda kv: kv[1], reverse=True,
+        )
+
+    def sorted_items(self) -> list:
+        return sorted(self.items.items(), key=lambda kv: kv[1], reverse=True)
 
     def category_totals(self) -> dict:
         return {name: sum(n for n, _id in items) for name, items in self.categories.items() if items}
@@ -161,6 +180,7 @@ def analyse(structure: Structure, count_entities: bool = True, multiplier: int =
         placed=placed,
         volume=structure.volume,
         declared=int(structure.meta.get("declared_blocks") or 0),
+        items=item_totals(structure),
     )
     result.fluid = sum(n for n, _id in categories.get("fluid", []))
 
@@ -197,6 +217,19 @@ def _item_entry(raw: dict) -> tuple:
     except (TypeError, ValueError):
         slot = 0
     return (str(item_id), count, slot)
+
+
+def item_totals(structure: Structure) -> dict:
+    """把所有容器里的物品加起来，{物品id: 总个数}。
+
+    「物品」标签页用这个 —— 原来这些数字只能在容器分析器里一个个看，
+    现在直接给个合计。
+    """
+    totals = {}
+    for container in containers(structure):
+        for item_id, count, _slot in container.items:
+            totals[item_id] = totals.get(item_id, 0) + count
+    return totals
 
 
 def containers(structure: Structure) -> list:
