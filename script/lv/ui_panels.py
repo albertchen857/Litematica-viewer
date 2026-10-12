@@ -16,7 +16,7 @@ from customtkinter import CTkComboBox, CTkEntry, CTkLabel, CTkFrame
 from . import analysis, tools
 from .config import colors, corner, font
 from .i18n import _
-from .ui_widgets import button, entry, field_row, label
+from .ui_widgets import BlockPicker, button, entry, field_row, label
 
 matplotlib.use("TkAgg")
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg  # noqa: E402
@@ -57,8 +57,9 @@ class CubePanel(_Panel):
             row=0, column=0, columnspan=4, padx=5, pady=(6, 10)
         )
         label(body, _("litem.funcNew.2"), 1.1).grid(row=1, column=0, padx=5, pady=4, sticky="e")
-        self.entry_id = entry(body, 18)
-        self.entry_id.grid(row=1, column=1, columnspan=3, padx=2, pady=4, sticky="w")
+        # 半下拉：点开能按贴图挑，也能直接敲没收录的方块
+        self.entry_id = BlockPicker(body, width=20)
+        self.entry_id.grid(row=1, column=1, columnspan=3, padx=2, pady=4, sticky="ew")
 
         self.entry_origin = field_row(body, _("litem.funcNew.3"), 2, (5, 5, 5))
         self.entry_size = field_row(body, _("litem.funcNew.4"), 3, (5, 5, 5))
@@ -84,7 +85,7 @@ class CubePanel(_Panel):
 
     def values(self) -> dict:
         return {
-            "block": self.entry_id.get().strip(),
+            "block": self.entry_id.get(),
             "size": [v.get() or 1 for v in self.entry_size],
             "origin": [v.get() or 0 for v in self.entry_origin],
             "hollow": bool(self.hollow.get()),
@@ -105,22 +106,60 @@ class ReplacePanel(_Panel):
         self.entry_min = field_row(body, _("litem.funcChange.2"), 1, (5, 5, 5))
         self.entry_max = field_row(body, _("litem.funcChange.3"), 2, (5, 5, 5))
 
-        label(body, _("litem.funcChange.4"), 1.1).grid(row=3, column=0, padx=5, pady=4, sticky="ne")
-        self.text = tk.Text(
-            body, width=22, height=5, bg=self.theme["BG"], fg=self.theme["PC"], font=font()
-        )
-        self.text.grid(row=3, column=1, columnspan=3, padx=2, pady=4, sticky="ew")
+        label(body, _("litem.funcChange.4"), 1.1).grid(row=3, column=0, padx=5, pady=(8, 2), sticky="w")
+        # 一行一条替换规则，不再让用户手写 "a-b,c-d" 那串文本
+        self.rows_holder = tk.Frame(body, bg=self.theme["MC"])
+        self.rows_holder.grid(row=4, column=0, columnspan=4, padx=2, pady=2, sticky="ew")
+        self.rows = []
 
+        button(body, _("rule.add"), self.add_row, 1.1).grid(
+            row=5, column=0, columnspan=4, padx=4, pady=(2, 8), sticky="ew"
+        )
         button(body, _("litem.funcChange.5"), lambda: app.replace_blocks(self), 1.3,
-               accent=True).grid(row=4, column=0, columnspan=4, padx=4, pady=8, sticky="ew")
+               accent=True).grid(row=6, column=0, columnspan=4, padx=4, pady=4, sticky="ew")
         label(body, _("litem.funcChange.6"), 0.95, wraplength=300, justify="left").grid(
-            row=5, column=0, columnspan=4, padx=5, pady=2, sticky="w"
+            row=7, column=0, columnspan=4, padx=5, pady=2, sticky="w"
         )
         body.grid_columnconfigure(3, weight=1)
+        self.add_row()
+
+    def add_row(self, source: str = "", target: str = "") -> None:
+        row = tk.Frame(self.rows_holder, bg=self.theme["MC"])
+        row.pack(fill=tk.X, pady=2)
+        picker_from = BlockPicker(row, width=13)
+        picker_from.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        label(row, "→", 1.2).pack(side=tk.LEFT, padx=4)
+        picker_to = BlockPicker(row, width=13)
+        picker_to.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        entry_pair = (picker_from, picker_to)
+        remove = tk.Label(row, text="−", font=font(1.5, bold=True), bg=self.theme["PC"],
+                          fg=self.theme["BG"], width=2, cursor="hand2")
+        remove.pack(side=tk.LEFT, padx=(4, 0))
+        remove.bind("<Button-1>", lambda _e: self.remove_row(row, entry_pair))
+
+        if source:
+            picker_from.set(source)
+        if target:
+            picker_to.set(target)
+        self.rows.append((row, entry_pair))
+
+    def remove_row(self, row, pair) -> None:
+        row.destroy()
+        self.rows = [r for r in self.rows if r[1] is not pair]
+        if not self.rows:          # 至少留一行，否则面板看着像坏了
+            self.add_row()
 
     def values(self) -> dict:
+        # 拼回 "a-b,c-d" 交给 edit.parse_rules，这样属性写法（hopper{"facing":"west"}）
+        # 仍然有效 —— 直接在选择框里敲进去就行
+        pairs = []
+        for _row, (picker_from, picker_to) in self.rows:
+            source, target = picker_from.get(), picker_to.get()
+            if source and target:
+                pairs.append(f"{source}-{target}")
         return {
-            "rules": self.text.get("1.0", tk.END),
+            "rules": ",".join(pairs),
             "limits": (
                 (self.entry_min[0].get(), self.entry_max[0].get()),
                 (self.entry_min[1].get(), self.entry_max[1].get()),

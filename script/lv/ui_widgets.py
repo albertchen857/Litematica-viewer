@@ -6,10 +6,12 @@
 """
 
 import tkinter as tk
+from tkinter import ttk
 
 from customtkinter import CTkButton, CTkFrame
 
 from .config import SAVE, colors, corner, font, save_settings
+from .i18n import is_chinese
 
 ARROW_OPEN = "▼"
 ARROW_CLOSED = "▶"
@@ -141,6 +143,139 @@ class SideCollapsible(tk.Frame):
     @property
     def expanded(self) -> bool:
         return self._expanded
+
+
+class BlockPicker(tk.Frame):
+    """带贴图的方块选择框 —— 半下拉：既能点着选，也能自己敲。
+
+    ttk.Combobox 的下拉项只能是纯文字，放不了方块贴图，所以这里自己拼一个：
+    左边是一个普通 Entry（想输什么输什么，包括没收录的方块），右边一个 ▾，
+    点开之后弹一个带图标的列表，边打字边过滤。
+
+    这么做的关键是「不把清单当白名单」：清单只是推荐项，程序没收录的方块
+    直接在输入框里敲进去照样能用。
+    """
+
+    MAX_ROWS = 160  # 匹配太多就只显示前面这些，再多也看不过来，还卡
+
+    def __init__(self, master, width: int = 22, on_pick=None, **kwargs):
+        theme = colors()
+        super().__init__(master, bg=theme["MC"], **kwargs)
+        self.theme = theme
+        self.on_pick = on_pick
+        self._popup = None
+        self._rows = []
+        self._icons = []  # PhotoImage 必须留引用
+
+        self.entry = tk.Entry(
+            self, width=width, bg=theme["BG"], fg=theme["PC"],
+            insertbackground=theme["PC"], font=font(),
+        )
+        self.entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.entry.bind("<KeyRelease>", self._on_type)
+        self.entry.bind("<Down>", lambda _e: self.open())
+        self.entry.bind("<Escape>", lambda _e: self.close())
+        self.entry.bind("<FocusOut>", self._maybe_close)
+
+        self.arrow = tk.Label(
+            self, text="▾", font=font(1.1, bold=True), bg=theme["PC"], fg=theme["BG"],
+            width=2, cursor="hand2",
+        )
+        self.arrow.pack(side=tk.LEFT, fill=tk.Y)
+        self.arrow.bind("<Button-1>", lambda _e: self.toggle())
+
+    # -- 对外 --------------------------------------------------------------
+
+    def get(self) -> str:
+        return self.entry.get().strip()
+
+    def set(self, value: str) -> None:
+        self.entry.delete(0, tk.END)
+        self.entry.insert(0, value)
+
+    def toggle(self) -> None:
+        self.close() if self._popup else self.open()
+
+    def close(self) -> None:
+        if self._popup is not None:
+            self._popup.destroy()
+            self._popup = None
+            self._icons.clear()
+
+    # -- 内部 --------------------------------------------------------------
+
+    def _maybe_close(self, _event) -> None:
+        # 焦点挪到弹窗里的条目上时不要关，否则点一下就没了
+        self.after(150, lambda: None if self._hovering() else self.close())
+
+    def _hovering(self) -> bool:
+        if self._popup is None:
+            return False
+        widget = self._popup.winfo_containing(*self.winfo_pointerxy())
+        return widget is not None and str(widget).startswith(str(self._popup))
+
+    def _on_type(self, event) -> None:
+        if event.keysym in ("Escape", "Return", "Tab"):
+            return
+        self.open()
+
+    def open(self) -> None:
+        from . import tools
+
+        keyword = self.get().lower()
+        choices = tools.block_choices(is_chinese())
+        matched = [c for c in choices if keyword in c[0].lower() or keyword in c[1].lower()]
+        matched = matched[: self.MAX_ROWS]
+        if not matched:
+            self.close()
+            return
+
+        if self._popup is None:
+            self._popup = tk.Toplevel(self)
+            self._popup.overrideredirect(True)   # 无边框，像真的下拉
+            self._popup.attributes("-topmost", True)
+            self._popup.configure(bg=self.theme["PC"])
+        for child in self._popup.winfo_children():
+            child.destroy()
+        self._icons.clear()
+
+        canvas = tk.Canvas(self._popup, bg=self.theme["BG"], highlightthickness=0,
+                           width=250, height=min(260, 26 * len(matched)))
+        bar = ttk.Scrollbar(self._popup, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=bar.set)
+        bar.pack(side=tk.RIGHT, fill=tk.Y)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        holder = tk.Frame(canvas, bg=self.theme["BG"])
+        canvas.create_window(0, 0, anchor=tk.NW, window=holder)
+
+        for name, text in matched:
+            row = tk.Frame(holder, bg=self.theme["BG"], cursor="hand2")
+            row.pack(fill=tk.X)
+            try:
+                icon = tools.block_image(name, 18)
+                self._icons.append(icon)
+                tk.Label(row, image=icon, bg=self.theme["BG"]).pack(side=tk.LEFT, padx=4)
+            except Exception:
+                pass
+            tk.Label(row, text=text, font=font(), bg=self.theme["BG"], fg=self.theme["TT"],
+                     anchor="w").pack(side=tk.LEFT, fill=tk.X, expand=True)
+            for widget in (row, *row.winfo_children()):
+                widget.bind("<Button-1>", lambda _e, n=name: self._pick(n))
+
+        holder.update_idletasks()
+        canvas.configure(scrollregion=canvas.bbox("all"))
+        canvas.bind_all("<MouseWheel>",
+                        lambda e: canvas.yview_scroll(-e.delta // 120, "units"))
+
+        self._popup.geometry(
+            f"+{self.entry.winfo_rootx()}+{self.entry.winfo_rooty() + self.entry.winfo_height()}"
+        )
+
+    def _pick(self, name: str) -> None:
+        self.set(name)
+        self.close()
+        if self.on_pick:
+            self.on_pick(name)
 
 
 # --------------------------------------------------------------------------- 省事的小工厂

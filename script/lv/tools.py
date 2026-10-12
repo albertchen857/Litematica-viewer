@@ -121,3 +121,23 @@ def block_image(block_name: str, size: int = 20):
 
 def clear_image_cache() -> None:
     _image_cache.clear()
+
+
+@functools.lru_cache(maxsize=2)
+def block_choices(chinese: bool) -> tuple:
+    """下拉选择用的方块清单 ``((方块名, 显示文字), ...)``。
+
+    以 block/ 目录下真有贴图的为准（下拉里每行都要显示图标），
+    中文名取自 setting.json；没收录中文名的（banner、各种 _lit 变体等）就用原名。
+    注意这只是「推荐项」，不是白名单 —— 选择框允许直接手输没收录的方块。
+    """
+    folder = res("block")
+    if not os.path.isdir(folder):
+        return ()
+    names = sorted(
+        os.path.splitext(f)[0] for f in os.listdir(folder) if f.endswith(".png")
+    )
+    table = game_data()["Blocks"]
+    if not chinese:
+        return tuple((n, n) for n in names)
+    return tuple((n, f"{table[n]}  {n}" if n in table else n) for n in names)

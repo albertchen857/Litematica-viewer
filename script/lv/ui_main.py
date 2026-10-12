@@ -33,7 +33,7 @@ from . import analysis, config, edit, formats, i18n, render, snapshot, thumbnail
 from .config import APP_VERSION, colors, corner, font
 from .i18n import _
 from .ui_panels import ChartsPanel, CubePanel, RedenPanel, ReplacePanel, StatsPanel
-from .ui_widgets import SideCollapsible, button
+from .ui_widgets import BlockPicker, SideCollapsible, button
 
 GITHUB_URL = "https://github.com/albertchen857/LitematicaViewer"
 BILIBILI_URL = "https://space.bilibili.com/3494373232741268"
@@ -60,6 +60,8 @@ class App:
         self.result = None
         self.file_path = ""
         self.busy = False
+        self.ignored = set()   # 右键「忽略」掉的条目，只影响显示
+        self.row_ids = {}      # Treeview 行 -> 条目 id，右键菜单要用
 
         panels = config.SAVE["panels"]
         self.do_entity = tk.IntVar(value=panels.get("entity", 1))
@@ -212,7 +214,7 @@ class App:
         bar.pack(side=tk.TOP, fill=tk.X)
         for key, command in (
             ("litem.frameTop.1", self.import_file),
-            ("litem.frameTop.2", self.start_analysis),
+            ("menu.analyse", self.start_analysis),
             ("litem.frameTop.3", self.open_step),
             ("litem.frameTop.4", self.open_container),
             ("litem.menuFunc.5", self.open_3d),
@@ -282,19 +284,25 @@ class App:
         )
         self.label_summary.pack(side=tk.LEFT, padx=16, pady=6)
 
-        # 表格上方的三个切换按钮：方块 / 实体 / 物品
+        # 表格上方的切换页签：方块 / 实体 / 物品 / 总数。
+        # 直角、彼此不留缝，连成一条，所以用 tk.Label 自己画，不用 CTkButton（它带圆角）
         tabs = tk.Frame(self.center, bg=self.theme["MC"])
         tabs.pack(side=tk.TOP, fill=tk.X, padx=10, pady=(0, 6))
         self.table_view = tk.StringVar(value="blocks")
         self.tab_buttons = {}
-        for view, key in (("blocks", "tab.blocks"), ("entities", "tab.entities"), ("items", "tab.items")):
-            widget = button(tabs, _(key), lambda v=view: self.switch_table(v), 1.3)
-            widget.pack(side=tk.LEFT, padx=(0, 6))
+        for view, key in (("blocks", "tab.blocks"), ("entities", "tab.entities"),
+                          ("items", "tab.items"), ("all", "tab.all")):
+            widget = tk.Label(
+                tabs, text=_(key), font=font(1.3, bold=True), cursor="hand2",
+                padx=22, pady=7, bd=0, relief="flat",
+            )
+            widget.pack(side=tk.LEFT)
+            widget.bind("<Button-1>", lambda _e, v=view: self.switch_table(v))
             self.tab_buttons[view] = widget
         self.tab_count = tk.Label(
             tabs, text="", font=font(1.1), bg=self.theme["MC"], fg=self.theme["BG"]
         )
-        self.tab_count.pack(side=tk.LEFT, padx=10)
+        self.tab_count.pack(side=tk.LEFT, padx=12)
 
         table_area = tk.Frame(self.center, bg=self.theme["MC"])
         table_area.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
@@ -325,6 +333,7 @@ class App:
             self.table.heading("id", text=_("litem.chart.4"), anchor="center")
             self.table.column("id", width=200, anchor="w")
         self.table.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.table.bind("<Button-3>", self._on_table_right_click)
         self.switch_table("blocks")
 
     # ------------------------------------------------------------------ 布局
@@ -450,6 +459,7 @@ class App:
         if not self.file_path and not self.import_file():
             return
         self.busy = True
+        self.ignored.clear()   # 「分析/重置」：重新分析就把忽略的条目放出来
         self.charts.start_progress()
         self.label_summary.config(text=_("app.busy"))
         # Tk 的变量和控件只能在主线程读，先取好再丢给工作线程
@@ -504,35 +514,128 @@ class App:
     def switch_table(self, view: str) -> None:
         self.table_view.set(view)
         for name, widget in self.tab_buttons.items():
-            # 当前这一页用强调色标出来
+            active = name == view
             widget.configure(
-                fg_color=self.theme["PC"] if name == view else self.theme["BG"],
-                text_color=self.theme["BG"] if name == view else self.theme["TT"],
+                bg=self.theme["PC"] if active else self.theme["BG"],
+                fg=self.theme["BG"] if active else self.theme["TT"],
             )
         self._fill_table(self.result)
 
-    def _fill_table(self, result) -> None:
-        """按当前标签页填表。方块 / 实体 / 物品 三份数据都来自同一次分析。"""
-        self.table.delete(*self.table.get_children())
-        if result is None:
-            self.tab_count.config(text="")
-            return
-
+    def _table_rows(self, result) -> list:
+        """当前页要显示哪些行。四份数据都来自同一次分析。"""
         view = self.table_view.get()
-        rows = {
+        if view == "all":
+            # 总数：方块 + 实体 + 容器里的物品，合并同名条目
+            merged = {}
+            for entry_id, count in result.sorted_only_blocks():
+                merged[entry_id] = merged.get(entry_id, 0) + count
+            for entry_id, count in result.sorted_entities():
+                merged[entry_id] = merged.get(entry_id, 0) + count
+            for entry_id, count in result.sorted_items():
+                merged[entry_id] = merged.get(entry_id, 0) + count
+            return sorted(merged.items(), key=lambda kv: kv[1], reverse=True)
+        return {
             "blocks": result.sorted_only_blocks,
             "entities": result.sorted_entities,
             "items": result.sorted_items,
         }[view]()
 
+    def _fill_table(self, result) -> None:
+        self.table.delete(*self.table.get_children())
+        self.row_ids = {}
+        if result is None:
+            self.tab_count.config(text="")
+            return
+
+        rows = [r for r in self._table_rows(result) if r[0] not in self.ignored]
         chinese = i18n.is_chinese()
         for entry_id, count in rows:
             name = entry_id.split(":")[-1]
             values = (tools.display_name(entry_id), count, tools.convert_units(count), name)
-            self.table.insert(
+            item = self.table.insert(
                 "", "end", image=tools.block_image(name), values=values if chinese else values[:3]
             )
-        self.tab_count.config(text=_("tab.count", len(rows), sum(n for _k, n in rows)))
+            self.row_ids[item] = entry_id   # 右键菜单要知道点的是哪一条
+        hidden = _("tab.hidden", len(self.ignored)) if self.ignored else ""
+        self.tab_count.config(
+            text=_("tab.count", len(rows), sum(n for _k, n in rows)) + hidden
+        )
+
+    # -- 表格右键菜单 --------------------------------------------------------
+
+    def _on_table_right_click(self, event) -> None:
+        item = self.table.identify_row(event.y)
+        if not item or item not in self.row_ids:
+            return
+        self.table.selection_set(item)
+        entry_id = self.row_ids[item]
+
+        menu = tk.Menu(self.root, tearoff=0)
+        menu.add_command(
+            label=_("row.ignore", tools.display_name(entry_id)),
+            command=lambda: self.ignore_entry(entry_id), font=font(),
+        )
+        menu.add_command(
+            label=_("row.replace"),
+            command=lambda: self.quick_replace(entry_id), font=font(),
+        )
+        if self.ignored:
+            menu.add_separator()
+            menu.add_command(label=_("row.unignore"), command=self.clear_ignored, font=font())
+        menu.tk_popup(event.x_root, event.y_root)
+
+    def ignore_entry(self, entry_id: str) -> None:
+        """把这一条从表格里藏起来。只影响显示，不动文件，「分析/重置」可以还原。"""
+        self.ignored.add(entry_id)
+        self._fill_table(self.result)
+
+    def clear_ignored(self) -> None:
+        self.ignored.clear()
+        self._fill_table(self.result)
+
+    def quick_replace(self, entry_id: str) -> None:
+        """右键某一行直接换方块：弹个小窗选目标，确认后另存。"""
+        if not self._require_structure():
+            return
+        top = tk.Toplevel(self.root)
+        top.title(_("row.replace"))
+        top.configure(bg=self.theme["MC"])
+        top.transient(self.root)
+        config.set_icon(top)
+
+        tk.Label(
+            top, text=_("row.replace.from", tools.display_name(entry_id)), font=font(1.3),
+            bg=self.theme["MC"], fg=self.theme["BG"],
+        ).pack(padx=20, pady=(18, 6))
+        picker = BlockPicker(top, width=24)
+        picker.pack(padx=20, pady=6, fill=tk.X)
+        picker.entry.focus_set()
+
+        def confirm() -> None:
+            target = picker.get()
+            if not target:
+                return
+            top.destroy()
+            source = entry_id.split(":")[-1]
+            try:
+                rules = edit.parse_rules(
+                    f"{source}-{target}",
+                    name_to_id=lambda n: tools.translate(n, to_chinese=False),
+                )
+                structure, replaced = edit.replace_blocks(self.structure, rules)
+            except (edit.RuleError, ValueError) as exc:
+                messagebox.showerror(_("litem.title"), _("app.replace.badrule", exc))
+                return
+            if not replaced:
+                messagebox.showinfo(_("litem.title"), _("app.replace.none"))
+                return
+            stem = os.path.splitext(os.path.basename(self.file_path))[0]
+            self._save_structure_as(structure, f"{stem}_Modified", _("app.replace.done", replaced))
+
+        button(top, _("litem.funcChange.5"), confirm, 1.3, accent=True).pack(
+            padx=20, pady=(10, 18), fill=tk.X
+        )
+        top.bind("<Return>", lambda _e: confirm())
 
     # -- 导出 ---------------------------------------------------------------
 
