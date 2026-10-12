@@ -117,8 +117,24 @@ function lvBuildSliders(payload, onChange) {
    maxInput.addEventListener('change', apply);
 }
 
-function lvStart() {
-   const payload = window.LV_PAYLOAD;
+// 这份 bridge.js 认得的 payload 版本。Python 那边 render.PAYLOAD_FORMAT 要一致。
+const LV_FORMAT = 2;
+
+// payload 里必须有的字段。缺了就说清楚缺哪个，而不是等着某处抛
+// "Cannot read properties of undefined (reading 'length')" 这种看不懂的错。
+const LV_REQUIRED = ['format', 'size', 'palette', 'count', 'idx_b64', 'state_b64', 'labels'];
+
+function lvCheckPayload(payload) {
+   if (!payload || typeof payload !== 'object') return 'payload 是空的';
+   const missing = LV_REQUIRED.filter(k => !(k in payload));
+   if (missing.length) return '缺少字段：' + missing.join('、');
+   if (payload.format !== LV_FORMAT) {
+      return `payload 版本是 ${payload.format}，这个页面认的是 ${LV_FORMAT}`;
+   }
+   return null;
+}
+
+function lvStart(payload) {
    if (typeof deepslate === 'undefined' || typeof glMatrix === 'undefined') {
       lvFail(
          'deepslate / gl-matrix 没能加载。<br><br>' +
@@ -128,7 +144,16 @@ function lvStart() {
       );
       return;
    }
-   if (!payload) { lvFail('payload.js 没有内容，请从主程序重新打开 3D 渲染。'); return; }
+   const problem = lvCheckPayload(payload);
+   if (problem) {
+      lvFail(
+         `结构数据对不上：<code>${problem}</code><br><br>` +
+         (payload && payload.labels && payload.labels.stale
+            ? payload.labels.stale
+            : '多半是页面脚本被缓存成旧版了。关掉这个 3D 窗口，从主程序重新打开一次即可。')
+      );
+      return;
+   }
    if (!payload.count) { lvFail(payload.labels.empty || '这个结构里没有方块。'); return; }
 
    // 二进制一次性解完，比逐个解析 JSON 数字快得多
@@ -168,13 +193,26 @@ function lvStart() {
 
 // 贴图图集要先加载完，deepslate 才能建材质。图集是同目录的 png，
 // 通过 pywebview 的内置 http 服务提供，所以 canvas.getImageData 不会被跨域限制挡住。
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+   // payload 用 fetch 读而不是 <script> 引：no-store 保证永远拿到主程序刚写的那份，
+   // 不会出现「新 payload 配旧脚本」。加个时间戳是给不认 no-store 的 webview 兜底。
+   let payload = null;
+   try {
+      const response = await fetch('payload.json?t=' + Date.now(), { cache: 'no-store' });
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      payload = await response.json();
+   } catch (err) {
+      console.error(err);
+      lvFail('读不到结构数据 payload.json：<code>' + err + '</code><br><br>请从主程序重新打开 3D 渲染。');
+      return;
+   }
+
    const atlas = new Image();
    atlas.crossOrigin = 'anonymous';
    atlas.onload = () => {
       try {
          loadDeepslateResources(atlas);   // 来自 deepslate-helpers.js
-         lvStart();
+         lvStart(payload);
       } catch (err) {
          console.error(err);
          lvFail('渲染初始化失败：<code>' + err + '</code>');

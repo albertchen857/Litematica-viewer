@@ -4,10 +4,10 @@
 放在同一个进程里必冲突（macOS 上更是直接崩）。旧版试过在线程里起 OpenGL 窗口
 和 http 服务，都会和 Tk 打架。开子进程之后两边各跑各的，关掉 3D 窗口也不影响主程序。
 
-数据怎么过去：写一个 ``script/JSrender/payload.js``，里面就一句
-``window.LV_PAYLOAD = {...}``，页面用 <script> 直接读，不用 fetch，也就没有跨域问题。
-贴图图集要走 http（canvas.getImageData 对 file:// 的图片会报安全错误），
-这个由 pywebview 自带的 http 服务解决。
+数据怎么过去：写一个 ``script/JSrender/payload.json``，页面用 fetch 读。
+走 http 而不是 file://，一来 canvas.getImageData 读贴图图集不会被安全限制挡住，
+二来 fetch 能带 cache:"no-store"，不会出现「新 payload 配旧脚本」的版本错配。
+http 服务由 pywebview 自带的那个提供。
 """
 
 import base64
@@ -23,7 +23,13 @@ from .formats import flatten_regions
 from .i18n import _
 
 VIEWER_HTML = res("script", "JSrender", "viewer.html")
-PAYLOAD_JS = res("script", "JSrender", "payload.js")
+# 用 .json 而不是 .js：页面拿 fetch(cache:"no-store") 去读，彻底避开缓存。
+# 之前用 <script src="payload.js"> 时，webview 的持久缓存会留着旧的 bridge.js，
+# 拿它去读新格式的 payload 就会报 "Cannot read properties of undefined (reading 'length')"。
+PAYLOAD_JSON = res("script", "JSrender", "payload.json")
+
+# payload 结构变了就把这个加一。页面发现对不上会直接说清楚，而不是抛一个看不懂的 TypeError。
+PAYLOAD_FORMAT = 2
 
 # 超过这个数量就先问一下用户。deepslate 是逐面建网格的，几百万方块会卡很久。
 BLOCK_WARN_LIMIT = 400_000
@@ -56,6 +62,7 @@ def build_payload(structure, title: str = None) -> dict:
     # 40 万方块的话，JSON 文本要好几 MB、解析还慢；二进制只有 3.2MB 且一次性解完，
     # 这是「浏览器加载超时」的主因之一。
     return {
+        "format": PAYLOAD_FORMAT,
         "name": title or structure.name or "structure",
         "size": [size_x, size_y, size_z],
         "palette": [{"name": b.id, "props": b.properties} for b in region.palette],
@@ -73,17 +80,16 @@ def build_payload(structure, title: str = None) -> dict:
             "building": _("render.hud.building"),
             "controls": _("render.hud.controls"),
             "empty": _("render.empty"),
+            "stale": _("render.stale"),
         },
     }
 
 
 def write_payload(structure, title: str = None) -> int:
     payload = build_payload(structure, title)
-    os.makedirs(os.path.dirname(PAYLOAD_JS), exist_ok=True)
-    with open(PAYLOAD_JS, "w", encoding="utf-8") as f:
-        f.write("window.LV_PAYLOAD = ")
+    os.makedirs(os.path.dirname(PAYLOAD_JSON), exist_ok=True)
+    with open(PAYLOAD_JSON, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, separators=(",", ":"))
-        f.write(";\n")
     return payload["count"]
 
 

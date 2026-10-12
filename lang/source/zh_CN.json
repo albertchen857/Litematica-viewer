@@ -118,6 +118,7 @@
   "render.hud.building": "构建中",
   "render.hud.controls": "左键拖动转视角 · 中键拖动平移 · 滚轮前后 · WASD/空格/Shift 移动",
   "render.hud.layer": "显示层数 Y",
+  "render.stale": "多半是页面脚本被缓存成旧版了。关掉这个 3D 窗口，从主程序重新打开一次即可。",
   "setting.colormap": "更换界面主题色\n目前",
   "setting.font": "选择字体\n目前:{}\n如字体前有@则为竖排字体",
   "setting.fontsize": "选择字体大小\n目前:{} | 默认:10\n字体大小建议选择5~15",

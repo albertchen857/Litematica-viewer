@@ -118,6 +118,7 @@
   "render.hud.building": "Building",
   "render.hud.controls": "Drag to rotate · Middle-drag to pan · Wheel to move · WASD/Space/Shift",
   "render.hud.layer": "Visible layers Y",
+  "render.stale": "Most likely the page scripts were cached from an older version. Close this 3D window and reopen it from the main program.",
   "setting.colormap": "Change interface theme color\nCurrent",
   "setting.font": "Select font\nCurrent:{}\nIf the font name starts with @, it is a vertical font",
   "setting.fontsize": "Select font size\nCurrent:{} | Default:10\nRecommended font size range: 5–15",

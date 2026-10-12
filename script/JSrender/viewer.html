@@ -3,6 +3,9 @@
 <head>
    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0"/>
+   <!-- 别缓存本地脚本：webview 的持久缓存留着旧 bridge.js 去读新 payload，
+        会报 "Cannot read properties of undefined (reading 'length')" -->
+   <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate"/>
    <title>LitematicaViewer 3D</title>
 
    <!--
@@ -22,11 +25,20 @@
    <script src="resource/assets.js"></script>
    <script src="resource/opaque.js"></script>
 
-   <script src="src/deepslate-helpers.js"></script>
-   <script src="src/viewer.js"></script>
+   <!--
+      本地脚本一律带时间戳加载。
+      webview / 浏览器会把 bridge.js 这类子资源缓存住（<meta> 的 Cache-Control 只管
+      HTML 文档本身，管不到子资源），结果就是主程序写了新格式的 payload，页面却还在用
+      旧的 bridge.js，报一句看不懂的 "Cannot read properties of undefined (reading 'length')"。
+      document.write 在解析阶段写入，能保证这几个脚本的执行顺序不变。
 
-   <script src="payload.js"></script>
-   <script src="src/bridge.js"></script>
+      payload 本身不在这里引，由 bridge.js 用 fetch(cache:"no-store") 去读。
+   -->
+   <script>
+      for (const src of ['src/deepslate-helpers.js', 'src/viewer.js', 'src/bridge.js']) {
+         document.write('<script src="' + src + '?t=' + Date.now() + '"><\/script>');
+      }
+   </script>
 
    <style>
       html, body { margin: 0; padding: 0; overflow: hidden; background: #111; color: #eee;

@@ -30,7 +30,12 @@ def main(argv: list) -> int:
         return 1
 
     webview.create_window(title, url=html_path, width=1280, height=800, background_color="#111111")
-    webview.start(http_server=True, private_mode=False)
+    # private_mode=True：每次开窗用全新的配置目录，不留持久缓存。
+    # 之前用 False（本来是想让 localStorage 存下鼠标操作偏好），结果 webview 把
+    # viewer.html / bridge.js 一起缓存住了 —— 主程序写了新格式的结构数据，页面却还在
+    # 跑旧脚本，报 "Cannot read properties of undefined (reading 'length')"。
+    # 那点偏好 bridge.js 每次都会填默认值，丢了也没影响，不值得为它冒版本错配的风险。
+    webview.start(http_server=True, private_mode=True)
     return 0
 
 
