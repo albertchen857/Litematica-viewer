@@ -674,24 +674,32 @@ class App:
         config.reveal(os.path.dirname(target))
 
     def save_snapshot(self) -> None:
-        """按标准等轴渲染一张结构照片存成 PNG。纯 PIL 软件渲染，macOS 上也能用。"""
+        """按标准等轴渲染一张缩略图，写进投影文件自己的预览图字段。
+
+        写的是 Litematica 的 Metadata.PreviewImageData（140×140 的 ARGB 数组），
+        所以存完在游戏里的投影浏览界面就能看到缩略图。
+        这个字段是 .litematic 专有的，另外两种格式没有对应的地方。
+        """
         if not self._require_structure():
             return
-        stem = os.path.splitext(os.path.basename(self.file_path))[0]
-        path = filedialog.asksaveasfilename(
-            defaultextension=".png", filetypes=[("PNG", "*.png")],
-            initialfile=f"{stem}.png", title=_("menu.snapshot"),
-        )
-        if not path:
+        if formats.detect_format(self.file_path) != formats.LITEMATIC:
+            messagebox.showwarning(_("litem.title"), _("app.snapshot.onlylitematic"))
+            return
+        # 要原地改用户的文件，先问一声
+        if not messagebox.askyesno(
+            _("litem.title"), _("app.snapshot.ask", os.path.basename(self.file_path))
+        ):
             return
         try:
-            count = snapshot.save(self.structure, path)
+            count = snapshot.embed(self.structure, self.file_path)
         except Exception as exc:
             traceback.print_exc()
             messagebox.showerror(_("litem.title"), _("app.save.fail", exc))
             return
-        messagebox.showinfo(_("litem.title"), _("app.snapshot.done", count, os.path.basename(path)))
-        config.reveal(os.path.dirname(path))
+        messagebox.showinfo(
+            _("litem.title"),
+            _("app.snapshot.done", count, os.path.basename(self.file_path)),
+        )
 
     def open_3d(self) -> None:
         """手动 3D 渲染 = 打开全屏的网页渲染器（和左上角那个只能看的缩略图是两回事）。"""

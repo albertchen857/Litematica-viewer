@@ -115,8 +115,53 @@ def render(structure, size: int = 1024, background=(0, 0, 0, 0)) -> Image.Image:
 
 
 def save(structure, path: str, size: int = 1024) -> int:
-    """渲染并保存，返回画了多少个方块。"""
+    """渲染并保存成 PNG，返回画了多少个方块。"""
     region = flatten_regions(structure)
     count = int(_surface(np.asarray(region.indices)).sum())
     render(structure, size).save(path)
     return count
+
+
+# --------------------------------------------------------------------------- 写进投影文件
+
+# Litematica 自己的预览图就是 140×140，照抄这个尺寸，不然它的投影浏览界面显示会不对
+PREVIEW_SIZE = 140
+# 预览图要不透明，用 Litematica 自己那种浅灰蓝打底
+PREVIEW_BG = (240, 243, 247, 255)
+
+
+def to_argb_ints(image: Image.Image) -> np.ndarray:
+    """PIL 图 -> Litematica 要的 ARGB int32 数组（行优先）。
+
+    打包方式是 (a<<24)|(r<<16)|(g<<8)|b。带 alpha 的值超过 2^31，
+    NBT 的 int 是有符号的，astype(int32) 正好按补码回绕成负数，和 Java 一致。
+    """
+    pixels = np.asarray(image.convert("RGBA"), dtype=np.uint32)
+    r, g, b, a = pixels[:, :, 0], pixels[:, :, 1], pixels[:, :, 2], pixels[:, :, 3]
+    return ((a << 24) | (r << 16) | (g << 8) | b).reshape(-1).astype(np.int32)
+
+
+def embed(structure, path: str) -> int:
+    """把等轴缩略图写进 .litematic 的 Metadata.PreviewImageData，原地改文件。
+
+    这是 Litematica 专有的字段（.nbt / .mcstructure 没有对应的地方），
+    写进去之后在游戏里的投影浏览界面就能看到缩略图。
+    返回渲染了多少个方块。
+    """
+    import amulet_nbt as nbt
+
+    from .formats import LITEMATIC, detect_format
+
+    if detect_format(path) != LITEMATIC:
+        raise ValueError(path)
+
+    image = render(structure, PREVIEW_SIZE, background=PREVIEW_BG)
+    named = nbt.load(path, compressed=True)
+    metadata = named.tag.get("Metadata")
+    if metadata is None:
+        metadata = named.tag["Metadata"] = nbt.CompoundTag({})
+    metadata["PreviewImageData"] = nbt.IntArrayTag(to_argb_ints(image))
+    named.save_to(path, compressed=True)
+
+    region = flatten_regions(structure)
+    return int(_surface(np.asarray(region.indices)).sum())
