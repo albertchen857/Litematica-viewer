@@ -1,4 +1,4 @@
-**简体中文** | [English](./README_EN.md)
+**简体中文** | [English](./README_EN.md) | [繁體中文](./README_ZHT.md)
 
 # LitematicaViewer 投影查看器 v0.9.0
 
