@@ -161,9 +161,9 @@ class App:
         menu.add_cascade(label=_("litem.menuAnaSet.title"), menu=setting_menu)
 
         func_menu = tk.Menu(menu, tearoff=0)
-        for version, title in edit.VERSION_CHOICES:
+        for version, title_key in edit.VERSION_CHOICES:
             func_menu.add_command(
-                label=f"{_('menu.convert')} {title}",
+                label=f"{_('menu.convert')} {_(title_key)}",
                 command=lambda v=version: self.convert_version(v), font=item_font,
             )
         func_menu.add_separator()

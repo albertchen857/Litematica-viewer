@@ -88,7 +88,7 @@
   "litem.menuHelp.2": "关于作者",
   "litem.menuHelp.3": "下载最新版本Github",
   "litem.menuHelp.6": "Redenmc投影社区",
-  "litem.menuHelp.7": "语言-中/英",
+  "litem.menuHelp.7": "语言",
   "litem.menuHelp.title": "帮助",
   "litem.menuSetting.1": "界面颜色",
   "litem.menuSetting.2": "界面字体",
@@ -107,6 +107,9 @@
   "litem.title": "投影查看器",
   "menu.convert": "转换到",
   "menu.saveas": "另存为…",
+  "menu.version.3": "1.13 (1.12 可能出错)",
+  "menu.version.6": "1.14 ~ 1.20.5",
+  "menu.version.7": "1.20.6+",
   "menu.window.info": "信息显示",
   "menu.window.suffix": "独立窗口",
   "render.empty": "这个结构里没有方块可以渲染。",
@@ -145,5 +148,9 @@
   "ui.stat.type3": "生电机器",
   "ui.stat.type4": "结构性机器",
   "ui.stat.type5": "建筑",
-  "ui.stat.type6": "方块太少"
+  "ui.stat.type6": "方块太少",
+  "unit.box": "盒",
+  "unit.lc": "箱",
+  "unit.stack": "组",
+  "unit.unit": "个"
 }

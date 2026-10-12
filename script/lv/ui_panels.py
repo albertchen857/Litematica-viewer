@@ -22,9 +22,11 @@ matplotlib.use("TkAgg")
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg  # noqa: E402
 from matplotlib.figure import Figure  # noqa: E402
 
-# 饼图标签会出现中文，matplotlib 默认字体画不出来（一堆方框）
+# 饼图标签会出现中文，matplotlib 默认字体画不出来（一堆方框）。
+# 前四个是简中字体，中间三个是台繁字体（做逐字回退，简繁混排都不出方框）。
 matplotlib.rcParams["font.sans-serif"] = [
     "Microsoft YaHei", "SimHei", "PingFang SC", "Noto Sans CJK SC",
+    "Microsoft JhengHei", "PingFang TC", "Noto Sans CJK TC",
     "Segoe UI", "Helvetica Neue", "Arial", "DejaVu Sans",
 ]
 matplotlib.rcParams["axes.unicode_minus"] = False

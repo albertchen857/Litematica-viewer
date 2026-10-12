@@ -31,9 +31,13 @@ datas = [
     ("script/JSrender/resource/*", "script/JSrender/resource"),
 ]
 
-# 预编译好的 .mo 一起带上，避免打包后还得现场编译（有些系统临时目录是只读的）
-for locale in ("zh_CN", "en_US"):
-    folder = os.path.join("lang", locale, "LC_MESSAGES")
+# 预编译好的 .mo 一起带上，避免打包后还得现场编译（有些系统临时目录是只读的）。
+# 语言列表直接扫 lang/source，加新语言时这里不用再改。
+source_dir = os.path.join("lang", "source")
+for name in sorted(os.listdir(source_dir)):
+    if not name.endswith(".json"):
+        continue
+    folder = os.path.join("lang", name[:-5], "LC_MESSAGES")
     if os.path.isdir(folder):
         datas.append((os.path.join(folder, "*.mo"), folder.replace("\\", "/")))
 

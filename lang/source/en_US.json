@@ -88,7 +88,7 @@
   "litem.menuHelp.2": "About the Author",
   "litem.menuHelp.3": "Download latest version (GitHub)",
   "litem.menuHelp.6": "Redenmc Projection Community",
-  "litem.menuHelp.7": "Language-CN/EN",
+  "litem.menuHelp.7": "Language",
   "litem.menuHelp.title": "Help",
   "litem.menuSetting.1": "Interface Color",
   "litem.menuSetting.2": "Interface Font",
@@ -107,6 +107,9 @@
   "litem.title": "Projection Viewer",
   "menu.convert": "Convert to",
   "menu.saveas": "Save as…",
+  "menu.version.3": "1.13 (1.12 may fail)",
+  "menu.version.6": "1.14 ~ 1.20.5",
+  "menu.version.7": "1.20.6+",
   "menu.window.info": "Info display",
   "menu.window.suffix": "own window",
   "render.empty": "This structure has no blocks to render.",
@@ -145,5 +148,9 @@
   "ui.stat.type3": "Technical Machine",
   "ui.stat.type4": "Structural Machine",
   "ui.stat.type5": "Architecture",
-  "ui.stat.type6": "Too few blocks"
+  "ui.stat.type6": "Too few blocks",
+  "unit.box": "Box",
+  "unit.lc": "LC",
+  "unit.stack": "St",
+  "unit.unit": "u"
 }
