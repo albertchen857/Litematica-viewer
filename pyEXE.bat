@@ -1,1 +1,0 @@
-pyinstaller LitematicaViewer.spec
