@@ -103,7 +103,7 @@ if IS_MAC:
         icon=ICON,
         bundle_identifier="com.albertchen857.litematicaviewer",
         info_plist={
-            "CFBundleShortVersionString": "0.9.0",
+            "CFBundleShortVersionString": "0.9.2",
             "NSHighResolutionCapable": True,
             "LSMinimumSystemVersion": "11.0",
             "CFBundleDocumentTypes": [
