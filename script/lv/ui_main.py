@@ -29,7 +29,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from customtkinter import CTkFrame, CTkScrollableFrame
 
-from . import analysis, config, edit, formats, i18n, render, snapshot, thumbnail, tools
+from . import analysis, assets, config, edit, formats, i18n, render, snapshot, thumbnail, tools
 from .config import APP_VERSION, colors, corner, font
 from .i18n import _
 from .ui_panels import ChartsPanel, CubePanel, RedenPanel, ReplacePanel, StatsPanel
@@ -70,6 +70,7 @@ class App:
         self.show_charts = tk.IntVar(value=panels.get("analysis", 1))
         self.thumb_rotate = tk.IntVar(value=panels.get("thumb_rotate", 1))
         self.thumb_large = tk.IntVar(value=panels.get("thumb_large", 0))
+        self.auto_assets = tk.IntVar(value=config.SAVE.get("auto_update_assets", 1))
 
         # 独立窗口里的信息面板也要跟着刷新，所以统一登记在这两个表里
         self.stats_panels = []
@@ -109,6 +110,8 @@ class App:
             config.save_settings()
 
         # 刚打开先摆个工作台在缩略图里，不然左上角是空的
+        # 开机对一次方块资源版本，对不上就后台拉最新的
+        assets.check_in_background()
         self.root.after(400, self._show_default_thumbnail)
         self.root.after(800, self._offer_last_file)
 
@@ -153,6 +156,10 @@ class App:
         setting_menu.add_checkbutton(
             label=_("thumb.large"), variable=self.thumb_large,
             command=self._refresh_thumbnail, font=item_font,
+        )
+        setting_menu.add_checkbutton(
+            label=_("assets.auto"), variable=self.auto_assets,
+            command=lambda: assets.set_enabled(bool(self.auto_assets.get())), font=item_font,
         )
         setting_menu.add_separator()
         for key, command in (

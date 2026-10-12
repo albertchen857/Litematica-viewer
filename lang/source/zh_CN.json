@@ -16,6 +16,7 @@
   "app.snapshot.done": "已把 {} 个方块渲染成缩略图，写进 {}",
   "app.snapshot.onlylitematic": "预览图是 Litematica 专有的字段，只有 .litematic 文件能写。\n可以先「另存为」成 .litematic 再生成。",
   "app.update.fail": "检查更新失败：{}",
+  "assets.auto": "启动时自动更新方块资源",
   "cat.clay": "粘土类",
   "cat.concrete": "混凝土",
   "cat.container": "容器",

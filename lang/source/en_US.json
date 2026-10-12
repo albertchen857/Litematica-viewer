@@ -16,6 +16,7 @@
   "app.snapshot.done": "Rendered {} blocks into the thumbnail, written to {}",
   "app.snapshot.onlylitematic": "The preview field is Litematica-specific; only .litematic files have it.\nSave as .litematic first, then generate.",
   "app.update.fail": "Update check failed: {}",
+  "assets.auto": "Auto-update block assets on start",
   "cat.clay": "Clay",
   "cat.concrete": "Concrete",
   "cat.container": "Containers",

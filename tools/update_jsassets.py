@@ -134,6 +134,10 @@ def main(argv: list) -> int:
 
     added, updated = update_name_tables(names)
 
+    # 记下版本，开机自动检查（script/lv/assets.py）靠它判断要不要更新
+    with open(os.path.join(RESOURCE, "version.json"), "w", encoding="utf-8") as f:
+        json.dump({"version": version}, f, ensure_ascii=False, indent=2)
+
     print(f"\n完成（{version}）")
     print(f"  assets.js  {os.path.getsize(assets_path):>9,} bytes  "
           f"blockstates {len(assets['blockstates'])} / models {len(assets['models'])} / "
