@@ -22,20 +22,20 @@
    <script src="https://unpkg.com/deepslate@0.10.1"></script>
    <script src="https://unpkg.com/gl-matrix@3.4.3/gl-matrix-min.js"></script>
 
-   <script src="resource/assets.js"></script>
-   <script src="resource/opaque.js"></script>
-
    <!--
-      本地脚本一律带时间戳加载。
-      webview / 浏览器会把 bridge.js 这类子资源缓存住（<meta> 的 Cache-Control 只管
-      HTML 文档本身，管不到子资源），结果就是主程序写了新格式的 payload，页面却还在用
-      旧的 bridge.js，报一句看不懂的 "Cannot read properties of undefined (reading 'length')"。
+      所有本地脚本都带时间戳加载，一个都不能漏。
+      webview / 浏览器会把这些子资源缓存住（<meta> 的 Cache-Control 只管 HTML 文档
+      本身，管不到子资源）。漏掉的后果是实打实的：
+        * 漏掉 bridge.js  -> 旧脚本读新 payload，报 "reading 'length'"
+        * 漏掉 assets.js  -> 新 atlas.png 配旧贴图索引，整张图 UV 全错位
+      resource/atlas.png 的时间戳在 bridge.js 里加。
       document.write 在解析阶段写入，能保证这几个脚本的执行顺序不变。
 
       payload 本身不在这里引，由 bridge.js 用 fetch(cache:"no-store") 去读。
    -->
    <script>
-      for (const src of ['src/deepslate-helpers.js', 'src/viewer.js', 'src/bridge.js']) {
+      for (const src of ['resource/assets.js', 'resource/opaque.js',
+                         'src/deepslate-helpers.js', 'src/viewer.js', 'src/bridge.js']) {
          document.write('<script src="' + src + '?t=' + Date.now() + '"><\/script>');
       }
    </script>

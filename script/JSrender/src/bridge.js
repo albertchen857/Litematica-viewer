@@ -219,5 +219,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
    };
    atlas.onerror = () => lvFail('贴图图集 resource/atlas.png 加载失败。');
-   atlas.src = 'resource/atlas.png';
+   // 图集也要带时间戳：换了 Minecraft 版本之后，新 atlas.png 配缓存里的旧 assets.js
+   // （或者反过来）会让所有贴图的 UV 对不上，整个结构的材质全是错的
+   atlas.src = 'resource/atlas.png?t=' + Date.now();
 });
