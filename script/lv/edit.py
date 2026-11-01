@@ -178,7 +178,8 @@ def _limit_mask(shape: tuple, origin: tuple, limits) -> np.ndarray:
 
 # --------------------------------------------------------------------------- 跨版本
 
-VERSION_CHOICES = ((7, "1.20.6+"), (6, "1.14 ~ 1.20.5"), (3, "1.13 (1.12 可能出错)"))
+# (版本号, 菜单里显示的 i18n 键)。显示文案由界面层翻译，这里只放数据。
+VERSION_CHOICES = ((7, "menu.version.7"), (6, "menu.version.6"), (3, "menu.version.3"))
 
 
 def change_litematic_version(path: str, version: int) -> str:

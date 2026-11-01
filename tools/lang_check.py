@@ -20,6 +20,7 @@ CODE_DIR = os.path.join(ROOT, "script")
 NAMESPACES = (
     "litem.", "ui.", "app.", "cat.", "con.", "menu.", "cube.", "render.", "setting.",
     "func.", "lang.", "thumb.", "side.", "tab.", "rule.", "row.", "assets.",
+    "func.", "lang.", "thumb.", "side.", "unit.",
 )
 KEY_PATTERN = re.compile(r'"([a-z][\w]*(?:\.[\w]+)+)"')
 # "setting.json"、"log.txt" 这种文件名也长得像键，排掉
