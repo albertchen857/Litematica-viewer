@@ -1,6 +1,6 @@
 [简体中文](./README.md) | **English** | [繁體中文](./README_ZHT.md)
 
-# LitematicaViewer v0.9.2
+# LitematicaViewer v0.9.4
 
 ### Minecraft tool - A tool to easily check Minecraft structure files
 

@@ -10,7 +10,7 @@ import subprocess
 import sys
 
 APP_NAME = "LitematicaViewer"
-APP_VERSION = "0.9.2"
+APP_VERSION = "0.9.4"
 
 IS_WIN = sys.platform.startswith("win")
 IS_MAC = sys.platform == "darwin"

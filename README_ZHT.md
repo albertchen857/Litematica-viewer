@@ -1,6 +1,6 @@
 [简体中文](./README.md) | [English](./README_EN.md) | **繁體中文**
 
-# LitematicaViewer 投影檢視器 v0.9.0
+# LitematicaViewer 投影檢視器 v0.9.4
 
 ### Minecraft 工具 - 讓投影檢視更加輕量便捷
 

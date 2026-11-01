@@ -1,6 +1,6 @@
 **简体中文** | [English](./README_EN.md) | [繁體中文](./README_ZHT.md)
 
-# LitematicaViewer 投影查看器 v0.9.2
+# LitematicaViewer 投影查看器 v0.9.4
 
 ### Minecraft tool - 让我的世界投影查看更加的轻量便捷
 
