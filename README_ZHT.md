@@ -5,9 +5,9 @@
 ### Minecraft 工具 - 讓投影檢視更加輕量便捷
 
 [![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/v/release/Albertchen857/LitematicaViewer)]()
-[![三连](https://img.shields.io/badge/-一键三连-00A1D6?logo=bilibili&logoColor=white)](https://www.bilibili.com/video/BV1H9ZVYtEta/)
+[![三连](https://img.shields.io/badge/-一键三连-00A1D6?logo=bilibili&logoColor=white)](https://www.bilibili.com/video/BV1YLWJ6TEeR)
 [![转发](https://img.shields.io/badge/-转发-00A1D6?logo=bilibili&logoColor=white)](https://space.bilibili.com/3494373232741268)
-[![YoutubeIntro](https://img.shields.io/badge/-Youtube-00A1D6?logo=youtube&logoColor=red)](https://www.youtube.com/watch?v=0nofWrfKJeg)
+[![YoutubeIntro](https://img.shields.io/badge/-Youtube-00A1D6?logo=youtube&logoColor=red)](https://www.youtube.com/watch?v=jgHMK4hmpoM)
 
 GITHUB 連結: https://github.com/albertchen857/LitematicaViewer
 穩定版 EXE 在右側 Release 下載，最新預覽版請自行 clone 執行（發現問題歡迎提 ISSUE）
