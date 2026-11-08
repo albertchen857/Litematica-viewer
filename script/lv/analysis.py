@@ -193,6 +193,25 @@ def analyse(structure: Structure, count_entities: bool = True, multiplier: int =
     return result
 
 
+def analyse_regions(structure: Structure, count_entities: bool = True, multiplier: int = 1) -> list:
+    """多子区域的投影每个区域单独分析一份，返回 [(区域名, Result), ...]。
+
+    只有一个区域时返回空列表 —— 那份就是「总体」，没必要再算一遍。
+    每个区域包成只含它自己的 Structure 再走 analyse，统计逻辑不用另写。
+    """
+    if len(structure.regions) <= 1:
+        return []
+    results, seen = [], set()
+    for index, region in enumerate(structure.regions):
+        name = region.name or f"Region{index + 1}"
+        if name in seen:          # 重名的区域按钮会互相顶掉，补个序号
+            name = f"{name} #{index + 1}"
+        seen.add(name)
+        part = Structure(regions=[region], name=name, source_format=structure.source_format)
+        results.append((name, analyse(part, count_entities=count_entities, multiplier=multiplier)))
+    return results
+
+
 # --------------------------------------------------------------------------- 容器
 
 @dataclass

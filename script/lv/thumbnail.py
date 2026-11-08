@@ -12,6 +12,9 @@
 平台支持：pyopengltk 的 macOS(Cocoa) 后端基本没人维护，导入就会失败
 （见 issue #7），所以 macOS 上这个缩略图直接不出现，位置留空。
 Windows / Linux 上正常工作。
+
+交互：左键拖拽转视角（拖的时候自动旋转先停），滚轮缩放。
+右键菜单（手动 3D 渲染 / 两个缩略图开关）由 ui_main 挂在 ``widget`` 上。
 """
 
 import sys
@@ -181,10 +184,44 @@ class _GLThumbnail:
         self._vertices = np.zeros((0, 3), np.float32)
         self._colours = np.zeros((0, 3), np.float32)
         self._distance = 3.0
-        self._angle = 35.0
+        self._angle = 35.0          # 绕竖轴（左右拖）
+        self._pitch = 28.0          # 俯仰（上下拖），28° 和旧版固定视角一样
+        self._zoom = 1.0            # 滚轮缩放倍数，换结构时复位
+        self._drag = None
         self._rotate = True
         self._blocked = False
         self._job = None
+
+        self.widget.bind("<ButtonPress-1>", self._on_press)
+        self.widget.bind("<B1-Motion>", self._on_drag)
+        self.widget.bind("<ButtonRelease-1>", self._on_release)
+        self.widget.bind("<MouseWheel>", lambda e: self._on_wheel(e.delta))
+        self.widget.bind("<Button-4>", lambda _e: self._on_wheel(120))    # Linux 的滚轮
+        self.widget.bind("<Button-5>", lambda _e: self._on_wheel(-120))
+
+    # -- 鼠标 --------------------------------------------------------------
+
+    def _on_press(self, event) -> None:
+        self._drag = (event.x, event.y)
+        self.stop()   # 拖的时候别跟自动旋转抢
+
+    def _on_drag(self, event) -> None:
+        if self._drag is None:
+            return
+        dx, dy = event.x - self._drag[0], event.y - self._drag[1]
+        self._drag = (event.x, event.y)
+        self._angle = (self._angle + dx * 0.6) % 360
+        self._pitch = max(-89.0, min(89.0, self._pitch + dy * 0.6))
+        self._paint()
+
+    def _on_release(self, _event) -> None:
+        self._drag = None
+        self._schedule()
+
+    def _on_wheel(self, delta: int) -> None:
+        # 往前滚拉近；限制在 0.15~5 倍，不然一下就钻进结构里或者缩成一个点
+        self._zoom = max(0.15, min(5.0, self._zoom * (0.88 ** (delta / 120))))
+        self._paint()
 
     # -- 对外 --------------------------------------------------------------
 
@@ -205,7 +242,9 @@ class _GLThumbnail:
         else:
             self._vertices, self._colours = vertices, colours
             # 相机拉到刚好装得下整个结构
-            self._distance = float(max(region.size)) * 1.6 + 3.0
+            # （1.6 是旧版 gluLookAt(d, 0.75d, d) 的实际距离 √(1+1+0.75²)）
+            self._distance = (float(max(region.size)) * 1.6 + 3.0) * 1.6
+            self._zoom = 1.0
         self._paint()
 
     def set_rotate(self, rotate: bool) -> None:
@@ -227,7 +266,7 @@ class _GLThumbnail:
 
     def _schedule(self) -> None:
         self.stop()
-        if self._rotate and not self._blocked and self.widget.winfo_exists():
+        if self._rotate and not self._blocked and self._drag is None and self.widget.winfo_exists():
             self._job = self.widget.after(120, self._tick)
 
     def _tick(self) -> None:
@@ -241,7 +280,7 @@ class _GLThumbnail:
 
         glMatrixMode(GL_PROJECTION)
         glLoadIdentity()
-        gluPerspective(45.0, 1.0, 0.1, 4000.0)
+        gluPerspective(45.0, 1.0, 0.5, 20000.0)  # 远平面要够滚轮拉远
         glMatrixMode(GL_MODELVIEW)
 
     def _paint(self) -> None:
@@ -255,19 +294,19 @@ class _GLThumbnail:
             return
         from OpenGL.GL import (
             glClear, glColorPointer, glDisableClientState, glDrawArrays,
-            glEnableClientState, glLoadIdentity, glRotatef, glVertexPointer,
+            glEnableClientState, glLoadIdentity, glRotatef, glTranslatef, glVertexPointer,
             GL_COLOR_ARRAY, GL_COLOR_BUFFER_BIT, GL_DEPTH_BUFFER_BIT, GL_FLOAT,
             GL_QUADS, GL_VERTEX_ARRAY,
         )
-        from OpenGL.GLU import gluLookAt
 
         try:
             self.widget.tkMakeCurrent()
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
             glLoadIdentity()
-            distance = self._distance
-            gluLookAt(distance, distance * 0.75, distance, 0, 0, 0, 0, 1, 0)
-            glRotatef(self._angle, 0, 1, 0)
+            # 相机固定在 -Z 方向，转的是结构：先俯仰再绕竖轴
+            glTranslatef(0, 0, -self._distance * self._zoom)
+            glRotatef(self._pitch, 1, 0, 0)
+            glRotatef(self._angle + 45.0, 0, 1, 0)
 
             if len(self._vertices):
                 glEnableClientState(GL_VERTEX_ARRAY)

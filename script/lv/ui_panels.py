@@ -33,12 +33,15 @@ matplotlib.rcParams["axes.unicode_minus"] = False
 
 
 class _Panel:
-    """所有面板的公共部分：自己建一个 Frame，对外暴露 .frame。"""
+    """所有面板的公共部分：自己建一个 Frame，对外暴露 .frame。
 
-    def __init__(self, parent, app):
+    ``bg`` 是外框底色，要和放它的那块地方一样，不然里面圆角的四个角会露出一块方的。
+    """
+
+    def __init__(self, parent, app, bg: str = "MC"):
         self.app = app
         self.theme = colors()
-        self.frame = tk.Frame(parent, bg=self.theme["MC"])
+        self.frame = tk.Frame(parent, bg=self.theme[bg])
 
     def pack(self, **kwargs):
         self.frame.pack(**kwargs)
@@ -173,8 +176,8 @@ class ReplacePanel(_Panel):
 # --------------------------------------------------------------------------- REDENMC 搜索
 
 class RedenPanel(_Panel):
-    def __init__(self, parent, app):
-        super().__init__(parent, app)
+    def __init__(self, parent, app, bg: str = "MC"):
+        super().__init__(parent, app, bg)
         holder = CTkFrame(self.frame, fg_color=self.theme["MC"], corner_radius=corner())
         holder.pack(fill=tk.BOTH, expand=True)
 
@@ -210,10 +213,13 @@ STAT_ROWS = (
 
 
 class StatsPanel(_Panel):
-    """左侧那 7 个指标。布局照旧：左边标题，右边数值。"""
+    """左侧那 7 个指标。布局照旧：左边标题，右边数值。
 
-    def __init__(self, parent, app):
-        super().__init__(parent, app)
+    「简介」那一行右键可以改简介。
+    """
+
+    def __init__(self, parent, app, bg: str = "MC"):
+        super().__init__(parent, app, bg)
         holder = CTkFrame(self.frame, fg_color=self.theme["MC"], corner_radius=corner())
         holder.pack(fill=tk.BOTH, expand=True)
         inner = tk.Frame(holder, bg=self.theme["MC"])
@@ -233,6 +239,14 @@ class StatsPanel(_Panel):
             )
             value.pack(side=tk.RIGHT, padx=8, pady=4)
             self.values[name] = value
+            if name == "desc":
+                for widget in (line, *line.winfo_children()):
+                    widget.bind("<Button-3>", self._desc_menu)
+
+    def _desc_menu(self, event) -> None:
+        menu = tk.Menu(self.frame, tearoff=0)
+        menu.add_command(label=_("menu.desc.edit"), command=self.app.edit_description, font=font())
+        menu.tk_popup(event.x_root, event.y_root)
 
     def update(self, structure, result) -> None:
         if structure is None or result is None:
@@ -279,7 +293,8 @@ class ChartsPanel(_Panel):
             figure.patch.set_facecolor(self.theme["BG"])
             axis = figure.add_subplot(111)
             canvas = FigureCanvasTkAgg(figure, master=holder)
-            canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+            # 留一圈边，外面 CTkFrame 的圆角才露得出来
+            canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
             self.figures.append(figure)
             self.axes.append(axis)
             self.canvases.append(canvas)

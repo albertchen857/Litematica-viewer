@@ -29,7 +29,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from customtkinter import CTkFrame, CTkScrollableFrame
 
-from . import analysis, assets, config, edit, formats, i18n, render, snapshot, thumbnail, tools
+from . import analysis, assets, config, edit, formats, i18n, render, snapshot, thumbnail, tools, world
 from .config import APP_VERSION, colors, corner, font
 from .i18n import _
 from .ui_panels import ChartsPanel, CubePanel, RedenPanel, ReplacePanel, StatsPanel
@@ -50,6 +50,9 @@ WIDTH_FOR_SIDE = 1250
 WIDTH_FOR_CHARTS = 1000
 WIDTH_FOR_LEFT = 720
 
+HINT_YELLOW = "#FFD400"   # 「提示&教程」按钮的明黄色底
+TAB_SCALE = 1.3           # 表格页签字号；子区域按钮是它的 80%
+
 
 class App:
     def __init__(self, open_path: str = ""):
@@ -62,6 +65,10 @@ class App:
         self.busy = False
         self.ignored = set()   # 右键「忽略」掉的条目，只影响显示
         self.row_ids = {}      # Treeview 行 -> 条目 id，右键菜单要用
+        # 多子区域的投影：每个子区域单独分析一份，和「总体」并列，表格上方的按钮切换。
+        # 和 方块/实体/物品/总数 页签互不干扰：这里选「哪份数据」，页签选「看哪一类」。
+        self.region_results = []   # [(区域名, Result), ...]，单区域时为空
+        self.region_view = None    # None = 总体，否则是区域名
 
         panels = config.SAVE["panels"]
         self.do_entity = tk.IntVar(value=panels.get("entity", 1))
@@ -135,6 +142,8 @@ class App:
             save_menu.add_command(
                 label=f"{title} ({extension})", command=lambda f=fmt: self.save_as(f), font=item_font
             )
+        save_menu.add_separator()
+        save_menu.add_command(label=_("menu.world"), command=self.export_world, font=item_font)
         menu.add_cascade(label=_("litem.menuAnalysis.title"), menu=data_menu)
 
         setting_menu = tk.Menu(menu, tearoff=0)
@@ -228,7 +237,10 @@ class App:
             ("menu.snapshot", self.save_snapshot),
             ("litem.frameTop.5", lambda: messagebox.showinfo(_("litem.title"), _("litem.frameTop.hint"))),
         ):
-            button(bar, _(key), command, 1.4, accent=True).pack(side=tk.LEFT, padx=4)
+            widget = button(bar, _(key), command, 1.4, accent=True)
+            if key == "litem.frameTop.5":   # 提示&教程：明黄色，新用户一眼能找到
+                widget.configure(fg_color=HINT_YELLOW, text_color="#343a40", hover_color="#FFE45C")
+            widget.pack(side=tk.LEFT, padx=4)
 
         for text, url, colour in (("GitHub", GITHUB_URL, "#24292f"), ("Bilibili", BILIBILI_URL, "#FF6699")):
             widget = button(bar, text, lambda u=url: webbrowser.open(u), 1.4)
@@ -257,19 +269,27 @@ class App:
         holder.pack(side=tk.TOP, fill=tk.X, padx=8, pady=8)
         self.thumb = thumbnail.create(holder, 250)
         self.thumb.widget.pack(padx=10, pady=10)
+        self.thumb.widget.bind("<Button-3>", self._thumb_menu)
 
-        stats = StatsPanel(self.left, self)
+        stats = StatsPanel(self.left, self, bg="BG")
         stats.pack(side=tk.TOP, fill=tk.X, padx=8, pady=4)
         self.stats_panels.append(stats)
 
-        button(self.left, _("litem.menuFunc.5"), self.open_3d, 1.4, accent=True).pack(
-            side=tk.TOP, fill=tk.X, padx=8, pady=4
+        # 一行两个按钮：左半「手动3D渲染」，右半「修改简介」
+        row = tk.Frame(self.left, bg=self.theme["BG"])
+        row.pack(side=tk.TOP, fill=tk.X, padx=8, pady=4)
+        row.grid_columnconfigure((0, 1), weight=1, uniform="half")
+        button(row, _("litem.menuFunc.5"), self.open_3d, 1.4, accent=True).grid(
+            row=0, column=0, sticky="ew", padx=(0, 3)
+        )
+        button(row, _("menu.desc.edit"), self.edit_description, 1.4, accent=True).grid(
+            row=0, column=1, sticky="ew", padx=(3, 0)
         )
         # REDENMC 搜索钉在左下角
-        RedenPanel(self.left, self).pack(side=tk.BOTTOM, fill=tk.X, padx=8, pady=8)
+        RedenPanel(self.left, self, bg="BG").pack(side=tk.BOTTOM, fill=tk.X, padx=8, pady=8)
 
     def _build_charts(self) -> None:
-        self.charts_column = tk.Frame(self.root, bg=self.theme["MC"])
+        self.charts_column = CTkFrame(self.root, fg_color=self.theme["MC"], corner_radius=corner())
         charts = ChartsPanel(self.charts_column, self, extras=True)
         charts.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
         self.charts = charts
@@ -291,16 +311,16 @@ class App:
         )
         self.label_summary.pack(side=tk.LEFT, padx=16, pady=6)
 
-        # 表格上方的切换页签：方块 / 实体 / 物品 / 总数。
+        # 表格上方的切换页签：总数 / 方块 / 实体 / 物品，默认总数。
         # 直角、彼此不留缝，连成一条，所以用 tk.Label 自己画，不用 CTkButton（它带圆角）
         tabs = tk.Frame(self.center, bg=self.theme["MC"])
         tabs.pack(side=tk.TOP, fill=tk.X, padx=10, pady=(0, 6))
-        self.table_view = tk.StringVar(value="blocks")
+        self.table_view = tk.StringVar(value="all")
         self.tab_buttons = {}
-        for view, key in (("blocks", "tab.blocks"), ("entities", "tab.entities"),
-                          ("items", "tab.items"), ("all", "tab.all")):
+        for view, key in (("all", "tab.all"), ("blocks", "tab.blocks"),
+                          ("entities", "tab.entities"), ("items", "tab.items")):
             widget = tk.Label(
-                tabs, text=_(key), font=font(1.3, bold=True), cursor="hand2",
+                tabs, text=_(key), font=font(TAB_SCALE, bold=True), cursor="hand2",
                 padx=22, pady=7, bd=0, relief="flat",
             )
             widget.pack(side=tk.LEFT)
@@ -310,14 +330,25 @@ class App:
             tabs, text="", font=font(1.1), bg=self.theme["MC"], fg=self.theme["BG"]
         )
         self.tab_count.pack(side=tk.LEFT, padx=12)
+        self._build_region_bar(tabs)
 
         table_area = tk.Frame(self.center, bg=self.theme["MC"])
         table_area.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
 
         style = ttk.Style()
+        # Windows 默认主题的 Treeview 底板是系统画的，fieldbackground 设了也是白的。
+        # 从 clam 主题借一个会听话的 field 元素换上去，空白处才能变成主色（淡蓝）。
+        try:
+            style.element_create("LV.field", "from", "clam")
+        except tk.TclError:
+            pass   # 已经建过（比如重复建窗口）
+        style.layout("LV.Treeview", [("LV.field", {"sticky": "nswe", "border": "1", "children": [
+            ("Treeview.padding", {"sticky": "nswe", "children": [
+                ("Treeview.treearea", {"sticky": "nswe"})]})]})])
         style.configure("LV.Treeview", font=font(1.2), rowheight=28,
-                        background=self.theme["PC"], fieldbackground=self.theme["PC"],
-                        foreground=self.theme["BG"])
+                        background=self.theme["PC"], fieldbackground=self.theme["MC"],
+                        foreground=self.theme["BG"], bordercolor=self.theme["MC"],
+                        lightcolor=self.theme["MC"], darkcolor=self.theme["MC"])
         style.configure("LV.Treeview.Heading", font=font(1.3, bold=True),
                         background=self.theme["PC"], foreground=self.theme["MC"])
 
@@ -341,7 +372,23 @@ class App:
             self.table.column("id", width=200, anchor="w")
         self.table.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.table.bind("<Button-3>", self._on_table_right_click)
-        self.switch_table("blocks")
+        self.switch_table("all")
+
+    def _build_region_bar(self, parent) -> None:
+        """页签同一行的右边：子区域按钮，从右往左排，最右边是「总体」。
+
+        按钮多到放不下时用一个 Canvas 当横向滚动容器，滚轮左右滑。
+        只有一个区域的投影不显示这一条。
+        """
+        self.region_canvas = tk.Canvas(parent, bg=self.theme["MC"], highlightthickness=0,
+                                       width=1, height=1)
+        self.region_inner = tk.Frame(self.region_canvas, bg=self.theme["MC"])
+        self.region_window = self.region_canvas.create_window(0, 0, anchor="ne",
+                                                              window=self.region_inner)
+        self.region_buttons = {}
+        self.region_canvas.bind("<Configure>", lambda _e: self._place_region_bar())
+        self._bind_region_wheel(self.region_canvas)
+        self._bind_region_wheel(self.region_inner)
 
     # ------------------------------------------------------------------ 布局
 
@@ -405,6 +452,21 @@ class App:
         else:
             self._show_default_thumbnail()
 
+    def _thumb_menu(self, event) -> None:
+        """缩略图右键：手动 3D 渲染 + 设置菜单里那两个缩略图开关（共用同一个变量）。"""
+        menu = tk.Menu(self.root, tearoff=0)
+        menu.add_command(label=_("litem.menuFunc.5"), command=self.open_3d, font=font())
+        menu.add_separator()
+        menu.add_checkbutton(
+            label=_("thumb.rotate"), variable=self.thumb_rotate, font=font(),
+            command=lambda: self.thumb.set_rotate(bool(self.thumb_rotate.get())),
+        )
+        menu.add_checkbutton(
+            label=_("thumb.large"), variable=self.thumb_large, font=font(),
+            command=self._refresh_thumbnail,
+        )
+        menu.tk_popup(event.x_root, event.y_root)
+
     # ------------------------------------------------------------------ 独立窗口
 
     def open_panel_window(self, kind: str) -> None:
@@ -433,8 +495,8 @@ class App:
             charts.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(8, 16), pady=16)
             self.stats_panels.append(stats)
             self.charts_panels.append(charts)
-            stats.update(self.structure, self.result)
-            charts.update(self.structure, self.result)
+            stats.update(self.structure, self.view_result())
+            charts.update(self.structure, self.view_result())
 
             def forget() -> None:
                 for registry, panel in ((self.stats_panels, stats), (self.charts_panels, charts)):
@@ -480,7 +542,9 @@ class App:
         try:
             structure = formats.load(path)
             result = analysis.analyse(structure, count_entities=count_entities, multiplier=multiplier)
-            self.root.after(0, self._analysis_done, structure, result, path, time.time() - started)
+            regions = analysis.analyse_regions(structure, count_entities, multiplier)
+            self.root.after(0, self._analysis_done, structure, result, path,
+                            time.time() - started, regions)
         except Exception as exc:
             traceback.print_exc()
             self.root.after(0, self._analysis_failed, exc)
@@ -491,11 +555,14 @@ class App:
         self.label_summary.config(text=_("litem.midTop.2"))
         messagebox.showerror(_("litem.title"), _("app.load.fail", exc))
 
-    def _analysis_done(self, structure, result, path: str, seconds: float) -> None:
+    def _analysis_done(self, structure, result, path: str, seconds: float, regions=()) -> None:
         self.busy = False
         self.structure = structure
         self.result = result
         self.file_path = path
+        self.region_results = list(regions)
+        self.region_view = None
+        self._fill_region_bar()
 
         size_x, size_y, size_z = structure.size
         self.label_file.config(text=os.path.basename(path))
@@ -505,12 +572,7 @@ class App:
         )
         self.charts.finish_progress(result.placed, seconds)
 
-        for panel in self.stats_panels:
-            panel.update(structure, result)
-        for panel in self.charts_panels:
-            panel.update(structure, result)
-
-        self.switch_table(self.table_view.get())
+        self._refresh_views()
         self.thumb.set_structure(structure, bool(self.thumb_large.get()))
         try:
             with open(config.user_file("log.txt"), "w", encoding="utf-8") as f:
@@ -526,7 +588,83 @@ class App:
                 bg=self.theme["PC"] if active else self.theme["BG"],
                 fg=self.theme["BG"] if active else self.theme["TT"],
             )
-        self._fill_table(self.result)
+        self._fill_table(self.view_result())
+
+    # -- 子区域 ---------------------------------------------------------------
+
+    def view_result(self):
+        """当前选中的那份数据：「总体」就是整份分析，否则是对应子区域的。"""
+        for name, result in self.region_results:
+            if name == self.region_view:
+                return result
+        return self.result
+
+    def _refresh_views(self) -> None:
+        result = self.view_result()
+        for panel in self.stats_panels:
+            panel.update(self.structure, result)
+        for panel in self.charts_panels:
+            panel.update(self.structure, result)
+        self.switch_table(self.table_view.get())
+
+    def switch_region(self, name) -> None:
+        self.region_view = name
+        self._paint_region_buttons()
+        self._refresh_views()
+
+    def _fill_region_bar(self) -> None:
+        for widget in self.region_inner.winfo_children():
+            widget.destroy()
+        self.region_buttons = {}
+        if not self.region_results:
+            self.region_canvas.pack_forget()
+            return
+        # 从右往左：总体、区域1、区域2……；Frame 里是从左往右 pack，所以倒过来放
+        entries = [(None, _("tab.region.all"))] + [(n, n) for n, _r in self.region_results]
+        for name, text in reversed(entries):
+            widget = tk.Label(
+                self.region_inner, text=text, font=font(TAB_SCALE * 0.8, bold=True),
+                cursor="hand2", padx=18, pady=5, bd=0, relief="flat",
+            )
+            widget.pack(side=tk.LEFT)
+            widget.bind("<Button-1>", lambda _e, n=name: self.switch_region(n))
+            self._bind_region_wheel(widget)
+            self.region_buttons[name] = widget
+        self._paint_region_buttons()
+        self.region_inner.update_idletasks()
+        # 先于「N 种 · 共 M 个」那行字占位置：窗口窄时宁可那行字被截，也要留出至少
+        # 两三个按钮宽的滚动区，不然按钮条会被挤成一条缝
+        self.region_canvas.configure(height=self.region_inner.winfo_reqheight(),
+                                     width=min(self.region_inner.winfo_reqwidth(), 280))
+        self.region_canvas.pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=(12, 0),
+                                before=self.tab_count)
+        self.root.after_idle(self._place_region_bar)
+
+    def _paint_region_buttons(self) -> None:
+        for name, widget in self.region_buttons.items():
+            active = name == self.region_view
+            widget.configure(
+                bg=self.theme["PC"] if active else self.theme["BG"],
+                fg=self.theme["BG"] if active else self.theme["TT"],
+            )
+
+    def _place_region_bar(self) -> None:
+        """放得下就贴右边；放不下就让内容比画布宽，可以横向滚，默认停在最右（总体）。"""
+        view_width = self.region_canvas.winfo_width()
+        content = self.region_inner.winfo_reqwidth()
+        height = self.region_inner.winfo_reqheight()
+        right = max(view_width, content)
+        self.region_canvas.coords(self.region_window, right, 0)
+        self.region_canvas.configure(scrollregion=(0, 0, right, height))
+        self.region_canvas.xview_moveto(1.0)
+
+    def _bind_region_wheel(self, widget) -> None:
+        def scroll(event):
+            if self.region_inner.winfo_reqwidth() > self.region_canvas.winfo_width():
+                step = -1 if (getattr(event, "delta", 0) > 0 or event.num == 4) else 1
+                self.region_canvas.xview_scroll(step * 3, "units")
+        for sequence in ("<MouseWheel>", "<Shift-MouseWheel>", "<Button-4>", "<Button-5>"):
+            widget.bind(sequence, scroll)
 
     def _table_rows(self, result) -> list:
         """当前页要显示哪些行。四份数据都来自同一次分析。"""
@@ -564,6 +702,8 @@ class App:
             )
             self.row_ids[item] = entry_id   # 右键菜单要知道点的是哪一条
         hidden = _("tab.hidden", len(self.ignored)) if self.ignored else ""
+        if self.region_view is not None:
+            hidden = f"  [{self.region_view}]" + hidden
         self.tab_count.config(
             text=_("tab.count", len(rows), sum(n for _k, n in rows)) + hidden
         )
@@ -594,11 +734,11 @@ class App:
     def ignore_entry(self, entry_id: str) -> None:
         """把这一条从表格里藏起来。只影响显示，不动文件，「分析/重置」可以还原。"""
         self.ignored.add(entry_id)
-        self._fill_table(self.result)
+        self._fill_table(self.view_result())
 
     def clear_ignored(self) -> None:
         self.ignored.clear()
-        self._fill_table(self.result)
+        self._fill_table(self.view_result())
 
     def quick_replace(self, entry_id: str) -> None:
         """右键某一行直接换方块：弹个小窗选目标，确认后另存。"""
@@ -810,6 +950,89 @@ class App:
             _("litem.title"),
             _("app.snapshot.done", count, os.path.basename(self.file_path)),
         )
+
+    def export_world(self) -> None:
+        """导出成一个虚空背景的 Java 存档，里面只有这个投影。选的是「存档放在哪个文件夹里」。"""
+        if not self._require_structure():
+            return
+        parent = filedialog.askdirectory(title=_("menu.world"))
+        if not parent:
+            return
+        stem = os.path.splitext(os.path.basename(self.file_path))[0] or "Schematic"
+        folder, n = os.path.join(parent, stem), 1
+        while os.path.exists(folder):   # 不覆盖已有存档
+            n += 1
+            folder = os.path.join(parent, f"{stem} ({n})")
+
+        self.label_summary.config(text=_("app.busy"))
+        structure = self.structure
+
+        def work() -> None:
+            try:
+                info = world.export(structure, folder)
+                self.root.after(0, done, info, None)
+            except Exception as exc:
+                traceback.print_exc()
+                self.root.after(0, done, None, exc)
+
+        def done(info, error) -> None:
+            self.label_summary.config(text=_("litem.midTop.2"))
+            if self.result is not None:
+                size_x, size_y, size_z = structure.size
+                self.label_summary.config(text=_(
+                    "litem.midTop.2b", size_x, size_y, size_z, self.result.placed,
+                    self.charts.multiplier(), self.result.kinds))
+            if error is not None:
+                messagebox.showerror(_("litem.title"), _("app.save.fail", error))
+                return
+            message = _("app.world.done", os.path.basename(folder), info["chunks"], info["entities"])
+            if info["clipped"]:
+                message += "\n\n" + _("app.world.clipped")
+            messagebox.showinfo(_("litem.title"), message)
+            config.reveal(folder)
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def edit_description(self) -> None:
+        """改简介。.litematic 可以直接写回原文件；另外两种格式没有简介字段，只改内存里的，
+        之后「另存为 .litematic」会带上。"""
+        if not self._require_structure():
+            return
+        top = tk.Toplevel(self.root)
+        top.title(_("menu.desc.edit"))
+        top.configure(bg=self.theme["MC"])
+        top.transient(self.root)
+        config.set_icon(top)
+
+        tk.Label(top, text=_("menu.desc.edit"), font=font(1.3, bold=True),
+                 bg=self.theme["MC"], fg=self.theme["BG"]).pack(padx=20, pady=(16, 6))
+        text = tk.Text(top, width=46, height=8, font=font(1.1), wrap="word",
+                       bg=self.theme["BG"], fg=self.theme["TT"], insertbackground=self.theme["PC"])
+        text.insert("1.0", self.structure.description or "")
+        text.pack(padx=20, pady=6, fill=tk.BOTH, expand=True)
+        text.focus_set()
+
+        def confirm() -> None:
+            value = text.get("1.0", "end-1c").strip()
+            top.destroy()
+            self.structure.description = value
+            self._refresh_views()
+            if formats.detect_format(self.file_path) != formats.LITEMATIC:
+                messagebox.showinfo(_("litem.title"), _("app.desc.memory"))
+                return
+            if not messagebox.askyesno(
+                _("litem.title"), _("app.desc.ask", os.path.basename(self.file_path))
+            ):
+                return
+            try:
+                formats.set_litematic_description(self.file_path, value)
+            except Exception as exc:
+                traceback.print_exc()
+                messagebox.showerror(_("litem.title"), _("app.save.fail", exc))
+                return
+            messagebox.showinfo(_("litem.title"), _("app.save.done", os.path.basename(self.file_path)))
+
+        button(top, "OK", confirm, 1.3, accent=True).pack(padx=20, pady=(6, 16), fill=tk.X)
 
     def open_3d(self) -> None:
         """手动 3D 渲染 = 打开全屏的网页渲染器（和左上角那个只能看的缩略图是两回事）。"""

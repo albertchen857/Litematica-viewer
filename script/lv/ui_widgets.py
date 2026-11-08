@@ -85,6 +85,9 @@ class SideCollapsible(tk.Frame):
     收起时只剩窗口右边一条竖条（三角 + 竖排标题），点一下往左展开。
     和上面按高度收起的 CollapsiblePanel 不一样，这个不占横向空间，
     窗口拉窄的时候中间的表格能多留一点地方。内容往 ``panel.body`` 里放。
+
+    竖条和内容区都是圆角的：内容区用 CTkFrame，竖条是 Canvas 上自己画的圆角矩形。
+    竖条收起时是主色（MC），展开后换成深一档的强调色（PC），一眼能看出是开着的。
     """
 
     STRIP_WIDTH = 28
@@ -101,22 +104,24 @@ class SideCollapsible(tk.Frame):
         self._expanded = bool(expanded)
 
         self.strip = tk.Canvas(
-            self, width=self.STRIP_WIDTH, bg=theme["MC"], highlightthickness=0, cursor="hand2"
+            self, width=self.STRIP_WIDTH, bg=theme["BG"], highlightthickness=0, cursor="hand2"
         )
         self.strip.pack(side=tk.RIGHT, fill=tk.Y)
         self.strip.bind("<Button-1>", lambda _event: self.toggle())
         self.strip.bind("<Configure>", lambda _event: self._paint_strip())
         self._title = title
 
-        self.body = tk.Frame(self, bg=theme["MC"], width=width)
+        self.body = CTkFrame(self, fg_color=theme["MC"], corner_radius=corner(), width=width)
         self.body.pack_propagate(False)
         if self._expanded:
-            self.body.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+            self.body.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(0, 4))
 
     def _paint_strip(self) -> None:
         """竖条上画一个三角和竖排标题。Canvas 的 angle 参数可以把文字转 90 度。"""
         self.strip.delete("all")
         height = max(self.strip.winfo_height(), 1)
+        rounded_rect(self.strip, 0, 0, self.STRIP_WIDTH, height, corner(),
+                     self.theme["PC"] if self._expanded else self.theme["MC"])
         arrow = ARROW_RIGHT if self._expanded else ARROW_LEFT
         self.strip.create_text(
             self.STRIP_WIDTH / 2, 14, text=arrow, fill=self.theme["BG"], font=font(1.1, bold=True)
@@ -132,7 +137,7 @@ class SideCollapsible(tk.Frame):
     def set_expanded(self, expanded: bool) -> None:
         self._expanded = bool(expanded)
         if self._expanded:
-            self.body.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+            self.body.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(0, 4))
         else:
             self.body.pack_forget()
         self._paint_strip()
@@ -279,6 +284,14 @@ class BlockPicker(tk.Frame):
 
 
 # --------------------------------------------------------------------------- 省事的小工厂
+
+def rounded_rect(canvas, x0, y0, x1, y1, radius, fill):
+    """在 Canvas 上画圆角矩形。tk 自己没有，用 smooth 多边形拼一个。"""
+    r = max(0, min(radius, (x1 - x0) / 2, (y1 - y0) / 2))
+    points = (x0 + r, y0, x1 - r, y0, x1, y0, x1, y0 + r, x1, y1 - r, x1, y1,
+              x1 - r, y1, x0 + r, y1, x0, y1, x0, y1 - r, x0, y0 + r, x0, y0)
+    return canvas.create_polygon(points, smooth=True, fill=fill, outline="")
+
 
 def label(master, text: str, scale: float = 1.0, bold: bool = False, bg: str = "MC", fg: str = "TT", **kwargs):
     theme = colors()

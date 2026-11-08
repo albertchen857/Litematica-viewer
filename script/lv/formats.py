@@ -201,6 +201,16 @@ def _save_litematic(structure: Structure, path: str, report=None) -> None:
     schematic.save(path)
 
 
+def set_litematic_description(path: str, text: str) -> None:
+    """只改 Metadata.Description，其它字段（含预览图）原样保留，所以不走 litemapy 整体重写。"""
+    named = nbt.load(path, compressed=True)
+    metadata = named.tag.get("Metadata")
+    if metadata is None:
+        metadata = named.tag["Metadata"] = nbt.CompoundTag({})
+    metadata["Description"] = nbt.StringTag(text)
+    named.save_to(path, compressed=True)
+
+
 # --------------------------------------------------------------------------- .nbt (Java)
 
 def _load_java_nbt(path: str) -> Structure:
