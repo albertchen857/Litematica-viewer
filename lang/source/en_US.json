@@ -77,7 +77,7 @@
   "litem.funcNew.4": "Size (Width, Height, Length)",
   "litem.funcNew.5": "Generate",
   "litem.funcNew.6": "ID input can be pure English or Chinese name",
-  "litem.log": "LitematicaViewer Projection Viewer V0.7.6 Update Log\n        1. Updated: Added property editing to block replacement feature\n        2. Updated: Step Viewer UI for planar projection (can view each layer’s blocks with texture and properties)\n        3. Added: Projection correctness check (DEBUG button at bottom right of main interface)",
+  "litem.log": "LitematicaViewer V{} - What's new\n1. Supports .litematic / .nbt / .mcstructure with conversion between them, plus export as a void world save\n2. Redesigned UI: draggable/zoomable 3D thumbnail, web 3D renderer, sub-region switching, table tabs and right-click ignore/replace\n3. Added Traditional Chinese; switch language anytime under Help → Language",
   "litem.menuAnaSet.1": "Analyze entities?",
   "litem.menuAnaSet.2": "Show projection panel?",
   "litem.menuAnaSet.3": "Show statistics panel?",

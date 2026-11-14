@@ -77,7 +77,7 @@
   "litem.funcNew.4": "宽高长",
   "litem.funcNew.5": "生成",
   "litem.funcNew.6": "ID输入可以为纯英文或中文名",
-  "litem.log": "LitematicaViewer投影查看器V0.7.6更新报告Log\n        1. 更新 投影替换方块增加属性编辑功能\n        2. 更新 平面投影步骤查看器UI界面 (可查看每一层的方块渲染,包含纹理和属性)\n        3. 添加 投影分析正确性检测 (主界面右下角的DEBUG)",
+  "litem.log": "LitematicaViewer 投影查看器 V{} 更新内容\n1. 支持 .litematic / .nbt / .mcstructure 三种格式互转，并可导出为虚空世界存档\n2. 界面重做：可拖拽缩放的 3D 缩略图、网页 3D 渲染、多子区域切换、表格页签与右键忽略/替换\n3. 新增繁体中文，语言可在「帮助 → 语言」随时切换",
   "litem.menuAnaSet.1": "是否分析实体",
   "litem.menuAnaSet.2": "是否显示投影面板",
   "litem.menuAnaSet.3": "是否显示统计面板",

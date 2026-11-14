@@ -54,6 +54,47 @@ HINT_YELLOW = "#FFD400"   # 「提示&教程」按钮的明黄色底
 TAB_SCALE = 1.3           # 表格页签字号；子区域按钮是它的 80%
 
 
+def ask_language_first_time() -> None:
+    """第一次打开时让用户选语言。必须在 i18n.install() 和主窗口之前调用。
+
+    这时候还不知道用户看得懂哪种文字，所以提示语三种都写，按钮用各语言自己的名字。
+    直接关掉窗口就保持默认（简体中文）。
+    """
+    if config.SAVE.get("First_open") != "0":
+        return
+    theme = colors()
+    window = tk.Tk()
+    window.title("Language / 语言 / 語言")
+    window.configure(bg=theme["BG"])
+    window.resizable(False, False)
+    config.set_icon(window)
+    tk.Label(
+        window, text="请选择语言\n請選擇語言\nPlease choose your language",
+        font=font(1.4, bold=True), bg=theme["BG"], fg=theme["TT"], justify="center",
+    ).pack(padx=40, pady=(24, 14))
+
+    def pick(locale: str) -> None:
+        config.SAVE["Language"] = locale
+        window.destroy()
+
+    # 这里用原生 tk.Button：CTkButton 会挂定时器，窗口销毁后再触发会报 Tcl 错误
+    for locale in ("en_US", "zh_CN", "zh_TW"):
+        tk.Button(
+            window, text=i18n.display_name(locale), command=lambda l=locale: pick(l),
+            font=font(1.4), bg=theme["PC"], fg=theme["BG"], activebackground=theme["MC"],
+            activeforeground=theme["BG"], relief="flat", bd=0, cursor="hand2", pady=6,
+        ).pack(padx=40, pady=5, fill=tk.X)
+    tk.Frame(window, height=18, bg=theme["BG"]).pack()
+    window.update_idletasks()   # 放到屏幕中间
+    x = (window.winfo_screenwidth() - window.winfo_reqwidth()) // 2
+    y = (window.winfo_screenheight() - window.winfo_reqheight()) // 3
+    window.geometry(f"+{x}+{y}")
+    window.mainloop()
+
+    config.SAVE["First_open"] = "1"
+    config.save_settings()
+
+
 class App:
     def __init__(self, open_path: str = ""):
         self.root = tk.Tk()
@@ -111,10 +152,12 @@ class App:
         self.root.bind("<Configure>", self._on_resize)
         self._apply_layout()
 
-        if config.SAVE.get("First_open") == "0":
-            messagebox.showinfo(_("litem.title"), _("litem.log"))
-            config.SAVE["First_open"] = "1"
+        # 更新日志：每个版本只弹一次（记下看过的版本号），新装和升级后都会看到
+        if config.SAVE.get("Log_seen") != APP_VERSION:
+            config.SAVE["Log_seen"] = APP_VERSION
             config.save_settings()
+            self.root.after(300, lambda: messagebox.showinfo(
+                _("litem.title"), _("litem.log", APP_VERSION)))
 
         # 刚打开先摆个工作台在缩略图里，不然左上角是空的
         # 开机对一次方块资源版本，对不上就后台拉最新的

@@ -39,8 +39,9 @@ def main(argv: list) -> int:
     _install_crash_log()
 
     from lv import i18n
-    from lv.ui_main import App
+    from lv.ui_main import App, ask_language_first_time
 
+    ask_language_first_time()   # 只有第一次打开才弹，选完才加载语言
     i18n.install()
     # 支持 LitematicaViewer.exe 结构文件路径（双击关联打开、拖文件到图标上都走这条）
     open_path = argv[0] if argv and os.path.isfile(argv[0]) else ""
