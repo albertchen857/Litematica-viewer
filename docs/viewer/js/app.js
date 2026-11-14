@@ -82,6 +82,8 @@ function load(structure, isOriginal) {
   state.structure = structure;
   state.steps = null;
   state.region = null;
+  showInspect(null);
+  $("steps-exit").hidden = true;
   const all = analyse(structure, gamedata);
   const regions = structure.regions.length > 1
     ? structure.regions.map((r, i) => [r.name || `Region${i + 1}`, analyse(structure, gamedata, { regions: [r] })])
@@ -187,9 +189,24 @@ function renderInfo() {
 
 // ---------------------------------------------------------------- 工具：分步拆解
 
+// 细分程度 1~9（粗 → 细）：一个滑块同时管颜色合并阈值和「小组并入邻组」的块数。
+// 第 5 档就是原来的默认值（8, 4）。跨层上限固定 64，不放出来。
+const DETAIL = [[24, 16], [18, 12], [14, 8], [11, 6], [8, 4], [6, 3], [4, 2], [2, 1], [0, 1]];
+function stepParams() {
+  const [simThreshold, minBlocks] = DETAIL[(+$("opt-detail").value || 5) - 1];
+  return {
+    simThreshold, minBlocks,
+    maxMaterials: Math.max(1, +$("opt-maxmat").value || 9),
+    mergeShapes: $("opt-shapes").checked,
+    bandMerge: $("opt-band").checked,
+    crossLayer: $("opt-cross").checked,
+    crossPerLayer: 64, crossMaxSpan: 64,
+  };
+}
+
 function runSteps() {
   try {
-    state.steps = splitSteps(state.structure, window.Splitter);
+    state.steps = splitSteps(state.structure, window.Splitter, stepParams());
   } catch (err) {
     alert(String(err.message).startsWith("too many") ? t("tooMany", err.message.split(": ")[1]) : t("failed", err.message));
     return;
@@ -199,8 +216,89 @@ function runSteps() {
   range.max = state.steps.steps.length - 1;
   range.value = 0;
   $("steps").hidden = false;
+  $("steps-exit").hidden = false;
   $("layers").hidden = true; // 分步时按步骤显示，层滑块先收起来
   showStep(0);
+}
+
+// 退出分步：回到完整的投影，层滑块放回来
+function exitSteps() {
+  state.steps = null;
+  $("steps").hidden = true;
+  $("steps-exit").hidden = true;
+  setupLayers(state.structure);
+  draw(state.structure, false);
+}
+
+// ---------------------------------------------------------------- 点选信息（左上角）
+
+// 1.21.5 起名字、告示牌文字存成文本组件对象（{"text": "..."} 或带 extra 的），老版本是 JSON 字符串
+function textOf(value) {
+  if (value == null) return "";
+  if (typeof value !== "object") return String(value);
+  if (Array.isArray(value)) return value.map(textOf).join("");
+  return (value.text ?? value.translate ?? "") + (value.extra ? textOf(value.extra) : "");
+}
+
+const CONTAINER_SIZES = [
+  [/(^|:)(chest|trapped_chest|barrel|.*shulker_box)$/, 27], [/(^|:)hopper$/, 5], [/(dispenser|dropper|crafter)$/, 9],
+  [/(furnace|smoker)$/, 3], [/brewing_stand$/, 5], [/chiseled_bookshelf$/, 6], [/(hopper_minecart)$/, 5], [/(chest_minecart|chest_boat)$/, 27],
+];
+const containerSize = (id) => (CONTAINER_SIZES.find(([re]) => re.test(id)) || [null, 0])[1];
+
+function showInspect(hit) {
+  const box = $("inspect");
+  if (!hit) { box.hidden = true; return; }
+  const id = hit.kind === "entity" ? hit.entity.id : hit.block.id;
+  const icon = blockIcon(id, 32);
+  $("inspect-icon").src = icon || "";
+  $("inspect-icon").hidden = !icon;
+  $("inspect-name").textContent = (hit.kind === "entity" ? t("entity") + " · " : "") + nameOf(id);
+  $("inspect-id").textContent = id;
+  const pos = hit.pos.map((v) => (Number.isInteger(v) ? v : v.toFixed(1))).join(", ");
+  const regionName = hit.region && state.structure.regions.length > 1 ? "  " + t("region", hit.region.name) : "";
+  $("inspect-pos").textContent = t("pos", pos) + regionName;
+
+  // 方块属性
+  const props = hit.kind === "block" ? Object.entries(hit.block.props) : [];
+  $("inspect-props").innerHTML = props.map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join("");
+
+  // 容器：方块实体（或运输矿车 / 展示框这类实体）里的物品，按槽位排成背包格子
+  const data = hit.kind === "entity" ? hit.entity.nbt || {} : hit.region.blockEntities.get(hit.local.join(",")) || {};
+  let items = [];
+  if (Array.isArray(data.Items)) items = data.Items;
+  else if (data.Item && typeof data.Item === "object") items = [data.Item];
+  else if (data.item && typeof data.item === "object") items = [data.item];
+  else if (data.RecordItem && typeof data.RecordItem === "object") items = [data.RecordItem];
+  items = items.filter((i) => i && (i.id || i.Name));
+  const slotOf = (item, n) => +(item.Slot ?? item.slot ?? n);
+  // 格子数按容器种类来（和桌面版容器分析器一样）；不认识的按用到的最大槽位凑整行
+  const capacity = containerSize(id);
+  const used = items.length ? Math.max(...items.map(slotOf)) + 1 : 0;
+  const slots = capacity ? Math.max(capacity, used) : Math.ceil(used / 9) * 9;
+  const cells = Array.from({ length: Math.min(slots, 54) }, () => ({ html: "", title: "" }));
+  $("inspect-items").style.gridTemplateColumns = `repeat(${Math.min(9, slots || 9)}, 1fr)`;
+  items.forEach((item, n) => {
+    const slot = slotOf(item, n);
+    const itemId = String(item.id || item.Name);
+    const count = Number(item.count ?? item.Count ?? 1);
+    if (slot < cells.length) {
+      cells[slot] = { html: `<img src="${blockIcon(itemId, 24)}" alt="">${count > 1 ? `<span>${count}</span>` : ""}`, title: `${nameOf(itemId)} ×${count}` };
+    }
+  });
+  $("inspect-items").innerHTML = cells.map((c) => `<div class="slot-cell" title="${esc(c.title)}">${c.html}</div>`).join("");
+
+  // 其他值得一看的：命令方块的命令、告示牌的字、自定义名字
+  const extra = [];
+  if (data.Command) extra.push(t("command", data.Command));
+  const lines = data.front_text?.messages || (data.Text1 ? [data.Text1, data.Text2, data.Text3, data.Text4] : null);
+  if (lines) {
+    const text = lines.map((m) => textOf(m).replace(/^"|"$/g, "")).filter((m) => m && m !== '""').join(" / ");
+    if (text) extra.push(t("text", text));
+  }
+  if (data.CustomName) extra.push(textOf(data.CustomName));
+  $("inspect-extra").textContent = extra.join("\n");
+  box.hidden = false;
 }
 
 function showStep(k) {
@@ -267,6 +365,8 @@ function bind() {
   });
 
   $("steps-run").addEventListener("click", runSteps);
+  $("steps-exit").addEventListener("click", exitSteps);
+  $("inspect-close").addEventListener("click", () => { showInspect(null); view.select(null); });
   $("step-range").addEventListener("change", (e) => showStep(+e.target.value));
   $("step-prev").addEventListener("click", () => showStep(state.step - 1));
   $("step-next").addEventListener("click", () => showStep(state.step + 1));
@@ -281,7 +381,8 @@ async function main() {
   applyLang();
   [gamedata] = await Promise.all([fetch("data/gamedata.json").then((r) => r.json()), loadResources()]);
   applyLang();
-  view = new View($("canvas"));
+  view = new View($("canvas"), { overlay: $("markers"), onPick: showInspect });
+  window.lvViewer = { view, state, showInspect }; // 方便在控制台里调试 / 以后扩展
 
   // 桌面版「手动3D渲染」：主程序把结构写进 payload.json，用 #desktop 打开本页
   if (location.hash === "#desktop") {

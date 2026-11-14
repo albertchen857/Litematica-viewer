@@ -44,6 +44,16 @@ def _b64(array: np.ndarray, dtype: str) -> str:
     return base64.b64encode(array.astype(dtype).tobytes()).decode("ascii")
 
 
+def _entity(entity: dict, region, structure) -> dict:
+    """实体坐标统一成相对区域原点。基岩版的 Pos 是世界坐标，要减掉结构原点。"""
+    from .formats import MCSTRUCTURE, _entity_position
+
+    pos = _entity_position(entity)
+    if structure.source_format == MCSTRUCTURE:
+        pos = [p - o for p, o in zip(pos, region.origin)]
+    return {"id": str(entity.get("id", "")), "pos": [float(v) for v in pos], "nbt": entity.get("nbt") or {}}
+
+
 def build_payload(structure, title: str = None) -> dict:
     """结构 -> 给网页用的 dict。
 
@@ -64,8 +74,11 @@ def build_payload(structure, title: str = None) -> dict:
             "state_bits": 32 if wide else 16,
             "idx_b64": _b64(filled, "<i4"),
             "state_b64": _b64(flat[filled], "<i4" if wide else "<u2"),
-            # 实体只传 id，网页那边计数用（种类数、实体页签和主界面对得上）
-            "entities": [str(e.get("id", "")) for e in region.entities],
+            # 实体：id + 相对区域原点的坐标 + 原始数据（点选时看得到展示框里的东西、矿车里的箱子）
+            "entities": [_entity(e, region, structure) for e in region.entities],
+            # 方块实体（箱子、漏斗、告示牌……），键是区域内坐标 "x,y,z"
+            "block_entities": {",".join(str(int(v)) for v in pos): data
+                               for pos, data in region.block_entities.items()},
         })
     return {
         "format": PAYLOAD_FORMAT,
@@ -83,7 +96,8 @@ def write_payload(structure, title: str = None) -> int:
     payload = build_payload(structure, title)
     os.makedirs(os.path.dirname(PAYLOAD_JSON), exist_ok=True)
     with open(PAYLOAD_JSON, "w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False, separators=(",", ":"))
+        # 方块实体 / 实体的 NBT 里偶尔有 numpy 数、字节串，default=str 兜底，别让整个 3D 窗口打不开
+        json.dump(payload, f, ensure_ascii=False, separators=(",", ":"), default=str)
     return sum(r["count"] for r in payload["regions"])
 
 

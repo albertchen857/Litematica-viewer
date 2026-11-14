@@ -6,7 +6,7 @@
 //   blocks 是调色板下标的一维数组，下标 = x*sy*sz + y*sz + z（和 Python 的 numpy C 序一致），
 //   palette[0] 永远是空气。后面的统计、渲染只认这个模型，不关心文件原来长什么样。
 //
-// NBT 解析用 deepslate 自带的 readNbt（能自动认 gzip；基岩版要传 littleEndian）。
+// NBT 解析用 deepslate 自带的 NbtFile.read（能自动认 gzip；基岩版要传 littleEndian）。
 
 const AIR = { id: "minecraft:air", props: {} };
 const AIR_IDS = new Set(["minecraft:air", "minecraft:cave_air", "minecraft:void_air"]);
@@ -14,22 +14,23 @@ export const isAir = (block) => AIR_IDS.has(block.id);
 
 // ---------------------------------------------------------------- NBT → 普通 JS 对象
 
-// deepslate 0.10 的标签长这样：{type, value}。列表是 {type:'list', value:{type:元素类型, value:[...]}}，
-// 列表里的 compound 元素直接是「键 → 标签」的对象。long 是 [高32位, 低32位]。
+// deepslate 0.27 的标签是类：getId() 给类型号（和 NBT 规范一致：1 Byte … 12 LongArray），
+// compound 用 forEach((键, 子标签))，列表 / 数组用 getItems()，long 用 getAsPair() 拿 [高32位, 低32位]。
+const LONG = 4, BYTE_ARRAY = 7, STRING = 8, LIST = 9, COMPOUND = 10, INT_ARRAY = 11, LONG_ARRAY = 12;
 function plain(tag) {
   if (!tag) return undefined;
-  switch (tag.type) {
-    case "compound": {
+  switch (tag.getId()) {
+    case COMPOUND: {
       const out = {};
-      for (const key in tag.value) out[key] = plain(tag.value[key]);
+      tag.forEach((key, value) => { out[key] = plain(value); });
       return out;
     }
-    case "list":
-      return tag.value.value.map((item) => plain({ type: tag.value.type, value: item }));
-    case "long":
-      return tag.value[0] * 4294967296 + (tag.value[1] >>> 0);
-    default:
-      return tag.value;
+    case LIST: return tag.getItems().map(plain);
+    case LONG: { const [hi, lo] = tag.getAsPair(); return hi * 4294967296 + (lo >>> 0); }
+    case LONG_ARRAY: return tag.getItems().map((l) => l.getAsPair());
+    case BYTE_ARRAY: case INT_ARRAY: return tag.getItems().map((v) => v.getAsNumber());
+    case STRING: return tag.getAsString();
+    default: return tag.getAsNumber();
   }
 }
 
@@ -57,19 +58,19 @@ function unpackLitematic(longs, bits, count) {
   return out;
 }
 
-function readLitematic(root) {
-  const meta = plain(root.Metadata) || {};
+function readLitematic(rootTag) {
+  const root = plain(rootTag);
+  const meta = root.Metadata || {};
   const regions = [];
-  for (const [name, tag] of Object.entries(root.Regions.value)) {
-    const r = tag.value;
-    const size = xyz(plain(r.Size));
-    const pos = xyz(plain(r.Position));
+  for (const [name, r] of Object.entries(root.Regions || {})) {
+    const size = xyz(r.Size);
+    const pos = xyz(r.Position);
     const [ax, ay, az] = size.map(Math.abs);
     // 尺寸可以是负的：区域从 Position 往负方向长。换成最小角当原点
     const origin = pos.map((p, i) => (size[i] < 0 ? p + size[i] + 1 : p));
-    const palette = plain(r.BlockStatePalette).map((b) => ({ id: b.Name, props: b.Properties || {} }));
+    const palette = r.BlockStatePalette.map((b) => ({ id: b.Name, props: b.Properties || {} }));
     const bits = Math.max(2, Math.ceil(Math.log2(palette.length)));
-    const packed = unpackLitematic(r.BlockStates.value, bits, ax * ay * az);
+    const packed = unpackLitematic(r.BlockStates, bits, ax * ay * az);
 
     // Litematica 的顺序是 y*sx*sz + z*sx + x，换成统一的 x*sy*sz + y*sz + z
     const blocks = new Uint32Array(ax * ay * az);
@@ -78,12 +79,13 @@ function readLitematic(root) {
         for (let x = 0; x < ax; x++, i++) blocks[x * ay * az + y * az + z] = packed[i];
 
     const blockEntities = new Map();
-    for (const te of plain(r.TileEntities) || []) blockEntities.set(`${te.x},${te.y},${te.z}`, te);
-    const entities = (plain(r.Entities) || []).map((e) => ({ id: e.id, pos: e.Pos, nbt: e }));
+    for (const te of r.TileEntities || []) blockEntities.set(`${te.x},${te.y},${te.z}`, te);
+    // Litematica 的实体坐标是相对区域原点的
+    const entities = (r.Entities || []).map((e) => ({ id: e.id, pos: e.Pos, nbt: e }));
     regions.push(normalise({ name, origin, size: [ax, ay, az], palette, blocks, blockEntities, entities }));
   }
   // 和桌面版一样按 Litematica 自己的格式版本给出游戏版本范围
-  const lm = plain(root.Version) || 0;
+  const lm = root.Version || 0;
   return {
     name: meta.Name || "", author: meta.Author || "", description: meta.Description || "",
     source: "litematic", version: lm <= 3 ? "1.12 / 1.13" : lm <= 6 ? "1.14 ~ 1.20.5" : "1.20.6+",
@@ -94,7 +96,7 @@ function readLitematic(root) {
 // ---------------------------------------------------------------- .nbt（Java 结构方块）
 
 function readJavaNbt(root) {
-  const data = plain({ type: "compound", value: root });
+  const data = plain(root);
   const size = data.size;
   const raw = data.palette || (data.palettes && data.palettes[0]) || [];
   const palette = [AIR, ...raw.map((b) => ({ id: b.Name, props: b.Properties || {} }))];
@@ -117,7 +119,7 @@ function readJavaNbt(root) {
 // ---------------------------------------------------------------- .mcstructure（基岩版）
 
 function readMcstructure(root) {
-  const data = plain({ type: "compound", value: root });
+  const data = plain(root);
   const [sx, sy, sz] = data.size;
   const body = data.structure;
   const def = body.palette.default;
@@ -134,10 +136,15 @@ function readMcstructure(root) {
       blockEntities.set(`${Math.floor(flat / (sz * sy))},${Math.floor(flat / sz) % sy},${flat % sz}`, value.block_entity_data);
     }
   }
-  const entities = (body.entities || []).map((e) => ({ id: e.identifier || "minecraft:unknown", pos: e.Pos, nbt: e }));
+  // 基岩版实体的 Pos 是世界坐标，减掉结构原点才是相对坐标
+  const origin = data.structure_world_origin || [0, 0, 0];
+  const entities = (body.entities || []).map((e) => ({
+    id: e.identifier || "minecraft:unknown", nbt: e,
+    pos: Array.isArray(e.Pos) ? e.Pos.map((v, i) => v - origin[i]) : null,
+  }));
   return {
     name: "", author: "", description: "", source: "mcstructure", version: data.format_version || 1, declared: 0,
-    regions: [normalise({ name: "structure", origin: data.structure_world_origin || [0, 0, 0], size: [sx, sy, sz], palette, blocks, blockEntities, entities })],
+    regions: [normalise({ name: "structure", origin, size: [sx, sy, sz], palette, blocks, blockEntities, entities })],
   };
 }
 
@@ -164,9 +171,10 @@ export function parse(fileName, bytes) {
   const ext = fileName.slice(fileName.lastIndexOf(".")).toLowerCase();
   const stem = fileName.slice(0, fileName.length - ext.length);
   let structure;
-  if (ext === ".litematic") structure = readLitematic(deepslate.readNbt(bytes).value);
-  else if (ext === ".nbt") structure = readJavaNbt(deepslate.readNbt(bytes).value);
-  else if (ext === ".mcstructure") structure = readMcstructure(deepslate.readNbt(bytes, { littleEndian: true }).value);
+  const read = (options) => deepslate.NbtFile.read(bytes, options).root;
+  if (ext === ".litematic") structure = readLitematic(read({}));
+  else if (ext === ".nbt") structure = readJavaNbt(read({}));
+  else if (ext === ".mcstructure") structure = readMcstructure(read({ littleEndian: true }));
   else throw new Error(`unsupported: ${ext}`);
   structure.name = structure.name || stem;
   structure.fileName = fileName;
@@ -175,7 +183,7 @@ export function parse(fileName, bytes) {
 
 // 桌面版传过来的 payload.json（script/lv/render.py 的 build_payload）→ 统一模型。
 // 每个区域只带非空气格子的线性下标和调色板下标（base64 二进制），这里铺回整块数组。
-// 实体只带 id（够计数），方块实体不传：容器内容在桌面版主界面里看。
+// 实体带 id / 坐标 / NBT，方块实体按区域内坐标 "x,y,z" 传，点选时都看得到。
 export const PAYLOAD_FORMAT = 3;
 function decode(b64, bits) {
   const raw = atob(b64), bytes = new Uint8Array(raw.length);
@@ -188,8 +196,9 @@ export function fromPayload(p) {
     const blocks = new Uint32Array(r.size[0] * r.size[1] * r.size[2]);
     const idx = decode(r.idx_b64, 32), state = decode(r.state_b64, r.state_bits);
     for (let i = 0; i < r.count; i++) blocks[idx[i]] = state[i];
-    const entities = (r.entities || []).map((id) => ({ id, nbt: {} }));
-    return normalise({ name: r.name, origin: r.origin, size: r.size, palette: r.palette, blocks, blockEntities: new Map(), entities });
+    const entities = (r.entities || []).map((e) => (typeof e === "string" ? { id: e, nbt: {} } : e));
+    const blockEntities = new Map(Object.entries(r.block_entities || {}));
+    return normalise({ name: r.name, origin: r.origin, size: r.size, palette: r.palette, blocks, blockEntities, entities });
   });
   return {
     name: p.name, author: p.author || "", description: p.description || "", source: p.source || "litematic",

@@ -6,8 +6,9 @@
   <title>投影查看器 · 网页版</title>
   <link rel="icon" href="../assets/icon.png">
   <link rel="stylesheet" href="viewer.css">
-  <!-- 渲染引擎：deepslate + gl-matrix（和桌面版「手动3D渲染」同一个版本） -->
-  <script src="https://unpkg.com/deepslate@0.10.1"></script>
+  <!-- 渲染引擎：deepslate 0.27（带透明网格和选中框）+ gl-matrix（相机矩阵）。
+       桌面版「手动3D渲染」打开的也是这个页面 -->
+  <script src="https://unpkg.com/deepslate@0.27.2/dist/deepslate.umd.cjs"></script>
   <script src="https://unpkg.com/gl-matrix@3.4.3/gl-matrix-min.js"></script>
   <!-- 方块模型 / 贴图索引 / 透明表，由 tools/build_web_data.py 从桌面版复制 -->
   <script src="resource/assets.js"></script>
@@ -50,6 +51,18 @@
   <!-- 左：3D -->
   <section class="stage" id="stage">
     <canvas id="canvas"></canvas>
+    <!-- 实体标记（deepslate 不画实体，用图标贴在实体位置上，可以点） -->
+    <div class="markers" id="markers"></div>
+
+    <!-- 点了方块 / 实体之后，左上角显示：译名、ID、属性；容器再列出里面的物品 -->
+    <div class="inspect" id="inspect" hidden>
+      <button class="inspect-close" id="inspect-close" aria-label="close">×</button>
+      <div class="inspect-head"><img id="inspect-icon" alt=""><div><b id="inspect-name"></b><code id="inspect-id"></code></div></div>
+      <p class="inspect-pos" id="inspect-pos"></p>
+      <table class="inspect-props" id="inspect-props"></table>
+      <div class="inspect-items" id="inspect-items"></div>
+      <p class="inspect-extra" id="inspect-extra"></p>
+    </div>
 
     <div class="empty" id="empty">
       <div class="empty-icon" aria-hidden="true">▼</div>
@@ -90,8 +103,20 @@
       <h2 class="card-title" data-t="tools">工具</h2>
 
       <div class="tool">
-        <div class="tool-head"><b data-t="steps">分步拆解</b><button class="btn btn-small" id="steps-run" data-t="split">拆分</button></div>
+        <div class="tool-head"><b data-t="steps">分步拆解</b>
+          <span><button class="btn btn-small" id="steps-run" data-t="split">拆分</button>
+          <button class="btn btn-small btn-plain" id="steps-exit" hidden data-t="stepsExit">退出分步</button></span></div>
         <p class="tool-note" data-t="stepsNote">按层、按材质把投影拆成一步步的建造顺序</p>
+        <!-- 拆分参数：细分程度一个滑块管两个数（颜色合并阈值、小组并入阈值），其余是开关。
+             跨层上限固定 64（每层最多 64 块、最多跨 64 层），不放出来 -->
+        <div class="step-opts">
+          <label class="opt-row"><span data-t="detail">细分程度</span>
+            <span class="opt-range"><small data-t="coarse">粗</small><input type="range" id="opt-detail" min="1" max="9" value="5"><small data-t="fine">细</small></span></label>
+          <label class="opt-row"><span data-t="maxMaterials">每步最多材料</span><input type="number" id="opt-maxmat" min="1" max="64" value="9"></label>
+          <label class="opt-check"><input type="checkbox" id="opt-shapes"> <span data-t="mergeShapes">楼梯 / 台阶并入同材质的方块</span></label>
+          <label class="opt-check"><input type="checkbox" id="opt-band" checked> <span data-t="bandMerge">连续几层一样就合成一步</span></label>
+          <label class="opt-check"><input type="checkbox" id="opt-cross" checked> <span data-t="crossLayer">允许跨层（柱子、墙一口气做完）</span></label>
+        </div>
         <div class="steps" id="steps" hidden>
           <div class="steps-nav">
             <button class="btn btn-small btn-plain" id="step-prev" aria-label="prev">◀</button>
