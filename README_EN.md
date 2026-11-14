@@ -1,6 +1,6 @@
 [简体中文](./README.md) | **English** | [繁體中文](./README_ZHT.md)
 
-# LitematicaViewer v0.9.4
+# LitematicaViewer v0.9.5
 
 ### Minecraft tool - A tool to easily check Minecraft structure files
 
@@ -16,8 +16,9 @@
 > Want more? **[Litematica Nova](https://github.com/LitematicaViewer/Litematica-Nova)** is the Pro edition of LitematicaViewer.
 
 GITHUB Link: https://github.com/albertchen857/LitematicaViewer
+Website: https://albertchen857.github.io/Litematica-viewer
 Stable builds are under Releases; clone the repo for the latest preview.
-Please give a star! Target 100 stars.
+Please give a star! Target 1000 stars.
 
 ## Supported formats
 
