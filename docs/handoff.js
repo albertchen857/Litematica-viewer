@@ -1,4 +1,4 @@
-// 主页 → 查看器 传文件。
+// 主页 → 查看器 传文件；以及查看器自己记住「上次打开的文件」。
 //
 // 文件没法塞进网址，所以主页把它暂存进浏览器自己的 IndexedDB，再跳到 viewer/?from=home；
 // 查看器打开后取出来、随即删掉。全程只在这台电脑的浏览器里，不经过任何服务器。
@@ -25,6 +25,24 @@
       tx.onerror = () => { db.close(); reject(tx.error); };
     }));
   }
+
+  // 「上次打开的文件」：查看器每次打开文件都存一份（只留最近一个），下次进来可以一键再开。
+  // 和上面的交接用同一个库、不同的键；取的时候不删。
+  const RECENT = "recent";
+  const RECENT_LIMIT = 64 * 1024 * 1024; // 太大的就不存了，免得把浏览器存储撑爆
+
+  root.LVRecent = {
+    save(file) {
+      if (file.size > RECENT_LIMIT) return Promise.resolve();
+      return file.arrayBuffer().then((data) => run("readwrite", (s) => s.put({ name: file.name, data, time: Date.now() }, RECENT)));
+    },
+    load() {
+      return run("readonly", (s) => s.get(RECENT)).then((v) => (v ? { file: new File([v.data], v.name), time: v.time } : null));
+    },
+    clear() {
+      return run("readwrite", (s) => s.delete(RECENT));
+    },
+  };
 
   root.LVHandoff = {
     // 存一个文件（只存一个：新的覆盖旧的）

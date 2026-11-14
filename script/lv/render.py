@@ -17,7 +17,7 @@ import sys
 
 import numpy as np
 
-from .config import language, res
+from .config import UI, language, res
 
 VIEWER_HTML = res("docs", "viewer", "index.html")
 PAYLOAD_JSON = res("docs", "viewer", "payload.json")
@@ -83,6 +83,7 @@ def build_payload(structure, title: str = None) -> dict:
     return {
         "format": PAYLOAD_FORMAT,
         "lang": language(),
+        "theme": UI.get("ColorMap", "BlueAr"),  # 3D 窗口跟主程序用同一套配色
         "name": title or structure.name or "structure",
         "author": structure.author,
         "description": structure.description,

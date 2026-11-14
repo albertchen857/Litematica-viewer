@@ -39,6 +39,8 @@
       <input type="file" id="file-input" accept=".litematic,.nbt,.mcstructure" hidden>
       <span data-t="open">打开文件</span>
     </label>
+    <!-- 配色：和桌面版设置里的五套主题一样（lang/data.json 的 Color_map） -->
+    <select class="lang" id="theme" aria-label="Theme"></select>
     <select class="lang" id="lang" aria-label="Language">
       <option value="zh_CN">简体中文</option>
       <option value="zh_TW">繁體中文</option>
@@ -63,20 +65,28 @@
       <div class="inspect-items" id="inspect-items"></div>
       <p class="inspect-extra" id="inspect-extra"></p>
     </div>
+    <div class="slot-tip" id="slot-tip" hidden></div>
 
     <div class="empty" id="empty">
       <div class="empty-icon" aria-hidden="true">▼</div>
       <p class="empty-title" data-t="dropTitle">把投影文件拖到这里</p>
       <p class="empty-sub"><span data-t="supports">支持</span> <code>.litematic</code> · <code>.nbt</code> · <code>.mcstructure</code></p>
       <p class="empty-note" data-t="local">文件只在你的浏览器里处理，不会上传</p>
+      <!-- 浏览器里存着上次打开的文件时出现（handoff.js 的 LVRecent） -->
+      <button class="btn btn-plain recent-btn" id="recent-btn" type="button" hidden></button>
     </div>
 
     <div class="progress" id="progress" hidden><div class="progress-bar" id="progress-bar"></div><span id="progress-text"></span></div>
 
-    <div class="layers" id="layers" hidden>
+    <!-- 显示层：一条双头滑块，左头调下限、右头调上限。按钮切换模式：
+           全部 = 两头拉满、灰掉；范围 = 两头都能拖；单层 = 只剩一个头（默认第 0 层） -->
+    <div class="layers" id="layers" data-mode="all" hidden>
       <span class="layers-label" data-t="layers">显示层</span>
-      <input type="range" id="layer-min" min="0" value="0" aria-label="min y">
-      <input type="range" id="layer-max" min="0" value="0" aria-label="max y">
+      <button class="btn btn-small btn-plain layer-mode" id="layer-mode" type="button"></button>
+      <div class="dual" id="dual">
+        <input type="range" id="layer-min" min="0" value="0" aria-label="min y">
+        <input type="range" id="layer-max" min="0" value="0" aria-label="max y">
+      </div>
       <span class="layers-value" id="layer-value"></span>
     </div>
     <p class="hint" id="hint" hidden data-t="controls">左键拖动旋转 · 右键拖动平移 · 滚轮缩放</p>

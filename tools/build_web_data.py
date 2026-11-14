@@ -58,6 +58,8 @@ def write_gamedata() -> None:
         "categoryKeywords": keywords,
         "categoryOrder": list(CATEGORY_IDS.values()) + ["entity", OTHER],
         "ui": {locale: ui_strings(locale) for locale in ("zh_CN", "zh_TW", "en_US")},
+        # 五套配色，和桌面版「设置 → 主题色」同一份（lang/data.json 的 Color_map）
+        "themes": load("data.json").get("Color_map", {}),
     }
     os.makedirs(os.path.join(OUT, "data"), exist_ok=True)
     with open(os.path.join(OUT, "data", "gamedata.json"), "w", encoding="utf-8") as f:

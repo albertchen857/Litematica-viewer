@@ -44,17 +44,21 @@ export function splitSteps(structure, splitter, params = {}) {
   return result;
 }
 
-// 做完第 k 步之后的样子：拆分结果 → 一个只有一个区域的统一模型，给 3D 直接渲染
-export function structureUpTo(result, k) {
+// 拆分结果 → 一个带「每格属于第几步」的统一模型（region.stepOf），给 3D 一次建好。
+// 之后切到第 k 步只是让 step ≤ k 的格子显示出来，见 render.js 的 View.setFilter。
+export function structureWithSteps(result) {
   const { size, palette } = result.input;
   const [sx, sy, sz] = size;
   const blocks = new Uint32Array(sx * sy * sz);
+  const stepOf = new Int32Array(sx * sy * sz).fill(-1);
   for (const b of result.blocks) {
-    if (b.step <= k) blocks[b.x * sy * sz + b.y * sz + b.z] = b.s + 1;
+    const i = b.x * sy * sz + b.y * sz + b.z;
+    blocks[i] = b.s + 1;
+    stepOf[i] = b.step;
   }
   return {
     regions: [{
-      name: "steps", origin: [0, 0, 0], size,
+      name: "steps", origin: [0, 0, 0], size, stepOf,
       palette: [{ id: "minecraft:air", props: {} }, ...palette.map((p) => ({ id: "minecraft:" + p.n, props: p.p }))],
       blocks, blockEntities: new Map(), entities: [],
     }],

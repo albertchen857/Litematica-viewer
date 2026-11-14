@@ -3,7 +3,14 @@
 
 :root {
   --mc: #3399ff; --pc: #0066cc; --bg: #f8f9fa; --tt: #343a40; --pr: #babcc2;
-  --card: #ffffff; --line: rgba(52, 58, 64, 0.08); --muted: #6c727a; --chip: #eceff3;
+  /* 下面这些都从五个主题色算出来，换主题（含深色的 Dark / DBlue）不用另写一套 */
+  --card: var(--bg);
+  --page: color-mix(in srgb, var(--tt) 5%, var(--bg));
+  /* 3D 背景压暗一点，浅色方块（石英、白色玻璃）才分得清边 */
+  --stage: color-mix(in srgb, var(--mc) 16%, color-mix(in srgb, var(--tt) 16%, var(--bg)));
+  --line: color-mix(in srgb, var(--tt) 10%, transparent);
+  --muted: color-mix(in srgb, var(--tt) 62%, var(--bg));
+  --chip: color-mix(in srgb, var(--tt) 8%, var(--bg));
   --r: 10px;
   --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
   --ease-settle: cubic-bezier(0.22, 1, 0.36, 1);
@@ -13,7 +20,7 @@
 }
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
-body { display: flex; flex-direction: column; font: 15px/1.5 var(--sans); color: var(--tt); background: var(--bg); }
+body { display: flex; flex-direction: column; font: 15px/1.5 var(--sans); color: var(--tt); background: var(--page); }
 code { font-family: var(--mono); }
 
 .btn {
@@ -42,7 +49,7 @@ code { font-family: var(--mono); }
 /* ---------------------------------------------------------------- 布局：左 3D，右信息 */
 
 .layout { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr var(--side); }
-.stage { position: relative; min-width: 0; background: #dfe7f1; overflow: hidden; }
+.stage { position: relative; min-width: 0; background: var(--stage); overflow: hidden; }
 #canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
 
 .empty {
@@ -60,17 +67,21 @@ code { font-family: var(--mono); }
 .empty-sub { margin: 0; }
 .empty-sub code { color: var(--pc); font-weight: 700; }
 .empty-note { margin: 0; color: var(--muted); font-size: 13px; }
+.recent-btn { margin-top: 12px; max-width: 80%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recent-btn[hidden] { display: none; }
 
 /* 实体标记：屏幕上的小图标，位置每帧按实体坐标投影出来 */
 .markers { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+/* 底色按实体种类取主题的五个颜色之一（生物 PC / 摆设 MC / 载具 TT / 掉落物 PR / 其他 BG），
+   和 3D 里碰撞箱的颜色一致，一眼对得上是哪个框 */
 .entity-marker {
   position: absolute; left: 0; top: 0; width: 24px; height: 24px; padding: 2px;
-  border: 0; border-radius: 6px; background: rgba(248, 249, 250, 0.85); cursor: pointer;
-  pointer-events: auto; box-shadow: inset 0 0 0 1px var(--line);
+  border: 0; border-radius: 6px; background: var(--cat, var(--pc)); cursor: pointer;
+  pointer-events: auto; box-shadow: 0 0 0 1px color-mix(in srgb, var(--tt) 30%, transparent);
 }
 .entity-marker[hidden] { display: none; }
 .entity-marker img { width: 20px; height: 20px; image-rendering: pixelated; display: block; }
-.entity-marker:hover { background: var(--card); box-shadow: inset 0 0 0 2px var(--pc); }
+.entity-marker:hover { box-shadow: 0 0 0 2px var(--tt); }
 
 /* 点选信息：左上角 */
 .inspect {
@@ -97,9 +108,24 @@ code { font-family: var(--mono); }
   display: grid; place-items: center;
 }
 .slot-cell img { width: 70%; height: 70%; image-rendering: pixelated; }
-.slot-cell span { position: absolute; right: 2px; bottom: 0; font: 700 10px var(--mono); color: var(--tt); text-shadow: 0 0 2px #fff; }
+.slot-cell span { position: absolute; right: 2px; bottom: 0; font: 700 10px var(--mono); color: var(--tt); text-shadow: 0 0 2px var(--bg); }
 .inspect-extra { margin: 8px 0 0; color: var(--muted); white-space: pre-wrap; word-break: break-all; }
 .inspect-extra:empty { display: none; }
+
+/* 容器格子的提示 */
+.slot-tip {
+  position: absolute; z-index: 3; display: grid; gap: 2px; padding: 6px 10px;
+  background: var(--tt); color: var(--bg); border-radius: 6px; font-size: 12px; pointer-events: none;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+.slot-tip[hidden] { display: none; }
+.slot-tip code { font: 11px var(--mono); opacity: 0.8; }
+.slot-tip span { font: 11px var(--mono); opacity: 0.8; }
+.slot-cell[data-id] { cursor: help; }
+.slot-cell[data-id]:hover { box-shadow: inset 0 0 0 2px var(--pc); }
+
+/* 步骤还在准备时，翻步骤的控件先灰掉 */
+.steps.is-loading .steps-nav { opacity: 0.4; pointer-events: none; }
 
 /* 分步拆解参数 */
 .step-opts { display: grid; gap: 6px; margin-top: 10px; font-size: 13px; }
@@ -123,15 +149,44 @@ code { font-family: var(--mono); }
 
 .layers {
   position: absolute; left: 16px; bottom: 16px;
-  display: grid; grid-template-columns: auto 160px; gap: 4px 12px; align-items: center;
-  padding: 12px 16px; background: var(--card); border-radius: var(--r); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+  display: grid; grid-template-columns: auto auto; gap: 6px 12px; align-items: center;
+  padding: 10px 14px; background: var(--card); border-radius: var(--r); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
   font-size: 13px;
 }
 .layers[hidden] { display: none; }
-.layers-label { grid-row: span 2; font-weight: 700; }
-.layers input { width: 160px; accent-color: var(--pc); }
-.layers-value { grid-column: 2; font: 12px var(--mono); color: var(--muted); }
-.hint { position: absolute; right: 16px; bottom: 16px; margin: 0; padding: 6px 10px; border-radius: 6px; background: rgba(248, 249, 250, 0.85); color: var(--muted); font-size: 12px; }
+.layers-label { font-weight: 700; }
+.layer-mode { justify-self: end; min-width: 56px; }
+.layers-value { grid-column: 1 / -1; font: 12px var(--mono); color: var(--muted); text-align: center; }
+
+/* 双头滑块：两个 range 叠在同一条轨道上，只有圆头能点；中间选中那段用 --a / --b 涂色 */
+.dual {
+  grid-column: 1 / -1; position: relative; width: 220px; height: 20px;
+  --a: 0%; --b: 100%;
+}
+.dual::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 8px; height: 4px; border-radius: 2px;
+  background: linear-gradient(to right, var(--chip) var(--a), var(--pc) var(--a), var(--pc) var(--b), var(--chip) var(--b));
+}
+.dual input {
+  position: absolute; inset: 0; width: 100%; margin: 0; background: none; pointer-events: none;
+  -webkit-appearance: none; appearance: none;
+}
+.dual input::-webkit-slider-runnable-track { background: none; height: 20px; }
+.dual input::-moz-range-track { background: none; }
+.dual input::-webkit-slider-thumb {
+  -webkit-appearance: none; pointer-events: auto; width: 16px; height: 16px; margin-top: 2px;
+  border-radius: 50%; background: var(--pc); border: 2px solid var(--bg); cursor: pointer;
+}
+.dual input::-moz-range-thumb { pointer-events: auto; width: 14px; height: 14px; border-radius: 50%; background: var(--pc); border: 2px solid var(--bg); cursor: pointer; }
+/* 全部：两头拉满、灰掉、拖不动 */
+.layers[data-mode="all"] .dual { opacity: 0.4; }
+.layers[data-mode="all"] .dual input::-webkit-slider-thumb { background: var(--pr); cursor: default; }
+.layers[data-mode="all"] .dual input::-moz-range-thumb { background: var(--pr); cursor: default; }
+/* 单层：只留右边那个头 */
+.layers[data-mode="single"] #layer-min { display: none; }
+.layers[data-mode="single"] .dual::before { background: var(--chip); }
+
+.hint { position: absolute; right: 16px; bottom: 16px; margin: 0; padding: 6px 10px; border-radius: 6px; background: color-mix(in srgb, var(--bg) 85%, transparent); color: var(--muted); font-size: 12px; }
 .hint[hidden] { display: none; }
 
 /* ---------------------------------------------------------------- 右侧信息栏 */
@@ -139,7 +194,7 @@ code { font-family: var(--mono); }
 .side {
   display: flex; flex-direction: column; gap: 12px;
   padding: 12px; overflow-y: auto;
-  background: var(--bg); box-shadow: inset 1px 0 0 var(--line);
+  background: var(--page); box-shadow: inset 1px 0 0 var(--line);
 }
 .card { background: var(--card); border-radius: 14px; box-shadow: inset 0 0 0 1px var(--line); padding: 16px; }
 .card-title { margin: 0 0 12px; font-size: 16px; }
@@ -164,7 +219,7 @@ code { font-family: var(--mono); }
 /* 页签：全站唯一的直角，连成一条 */
 .tabs { display: flex; }
 .tab { flex: 1; height: 36px; border: 0; border-radius: 0; background: var(--chip); color: var(--tt); font: 700 14px var(--sans); cursor: pointer; transition: background-color 120ms var(--ease-settle); }
-.tab:hover { background: #e2e6eb; }
+.tab:hover { background: color-mix(in srgb, var(--tt) 14%, var(--bg)); }
 .tab.is-active { background: var(--pc); color: var(--bg); }
 .tab-count { margin: 8px 0; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
 
@@ -173,24 +228,25 @@ code { font-family: var(--mono); }
 .row {
   display: grid; grid-template-columns: 24px 1fr auto; gap: 8px; align-items: center;
   min-height: 36px; padding: 4px 10px; color: var(--bg); font-size: 14px;
-  box-shadow: inset 0 -1px 0 rgba(248, 249, 250, 0.08);
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--bg) 8%, transparent);
 }
 .row img { width: 20px; height: 20px; image-rendering: pixelated; }
 .row .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row .right { display: grid; justify-items: end; gap: 2px; }
 .row .num { font: 500 14px var(--mono); font-variant-numeric: tabular-nums; }
-.row-more { padding: 8px 10px; color: rgba(248, 249, 250, 0.8); font-size: 13px; text-align: center; }
+.row-more { padding: 8px 10px; color: color-mix(in srgb, var(--bg) 80%, transparent); font-size: 13px; text-align: center; }
 
 /* 标志细节：盒 / 组 / 个 画成背包小格子 */
 .slots { display: inline-flex; gap: 3px; }
-.slot { display: inline-flex; align-items: center; gap: 1px; height: 18px; padding: 0 5px; border-radius: 4px; background: rgba(248, 249, 250, 0.16); font: 500 12px/1 var(--mono); }
+.slot { display: inline-flex; align-items: center; gap: 1px; height: 18px; padding: 0 5px; border-radius: 4px; background: color-mix(in srgb, var(--bg) 16%, transparent); font: 500 12px/1 var(--mono); }
 .slot small { font: 11px/1 var(--sans); opacity: 0.75; }
 
 /* 分类：一条带细条的排名列表，代替桌面版的饼图 */
 .cats { display: grid; gap: 8px; }
-.cat { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; font-size: 13px; }
+.cat { display: grid; grid-template-columns: 18px 1fr auto; gap: 4px 8px; align-items: center; font-size: 13px; }
+.cat img { width: 18px; height: 18px; image-rendering: pixelated; }
 .cat .num { font: 12px var(--mono); color: var(--muted); }
-.cat .bar { grid-column: span 2; height: 6px; border-radius: 3px; background: var(--chip); overflow: hidden; }
+.cat .bar { grid-column: 2 / -1; height: 6px; border-radius: 3px; background: var(--chip); overflow: hidden; }
 .cat .bar i { display: block; height: 100%; background: var(--pr); }
 .cat:first-child .bar i { background: var(--pc); }
 
