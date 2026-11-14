@@ -1,7 +1,7 @@
 """开机检查方块资源版本，和最新版对不上就自动拉一份。
 
-资源指 ``script/JSrender/resource/`` 下的 atlas.png + assets.js，
-本地版本记在同目录的 version.json 里。
+资源指 ``docs/viewer/resource/`` 下的 atlas.png + assets.js（桌面版和网页版共用这一份），
+本地版本记在同目录的 version.json 里。换完资源会顺手重建 icons.json（方块图标索引）。
 
 两条必须守住的规矩：
 
@@ -20,9 +20,9 @@ import os
 import re
 import threading
 
-from .config import SAVE, res, save_settings
+from .atlas import RESOURCE, write_icon_index
+from .config import SAVE, save_settings
 
-RESOURCE = res("script", "JSrender", "resource")
 VERSION_JSON = os.path.join(RESOURCE, "version.json")
 
 API_COMMITS = "https://api.github.com/repos/misode/mcmeta/commits"
@@ -110,6 +110,8 @@ def download(session, version: str) -> bool:
             f.write(data)
         os.replace(temp, target)
 
+    # 图标是现场从新图集里裁的，只要把索引跟着重建，新方块就自动有图标了
+    write_icon_index(RESOURCE)
     write_local_version(version)
     return True
 
@@ -126,8 +128,7 @@ def _worker(on_done) -> None:
             return
         print(f"[assets] 发现新版本 {latest}（本地 {current or '未知'}），开始下载…")
         if download(session, latest):
-            print(f"[assets] 已更新到 {latest}。"
-                  f"新方块的图标可以跑 tools/make_block_icons.py 补齐。")
+            print(f"[assets] 已更新到 {latest}，方块图标索引已重建。")
             if on_done:
                 on_done(latest)
     except Exception as exc:

@@ -1,7 +1,7 @@
 // 网页版查看器的界面层：读文件 → 统计 → 渲染 → 右侧信息栏 + 工具。
 // 算法都在别的模块里，这里只负责把它们接起来、把结果画到页面上。
 
-import { parse, bounds, EXTENSIONS } from "./formats.js";
+import { parse, bounds, EXTENSIONS, fromPayload } from "./formats.js";
 import { analyse, totalRows, unitParts } from "./analysis.js";
 import { loadResources, View, blockIcon } from "./render.js";
 import { splitSteps, structureUpTo } from "./tools/steps.js";
@@ -13,50 +13,24 @@ const TABLE_LIMIT = 300; // 表格最多先画这么多行，再多就显示「�
 
 // ---------------------------------------------------------------- 语言
 
-// 桌面版已有的词（指标名、分类、单位、页签）来自 gamedata.ui；下面这些是网页版自己的
-const TEXT = {
-  zh_CN: {
-    open: "打开文件", dropTitle: "把投影文件拖到这里", supports: "支持", local: "文件只在你的浏览器里处理，不会上传",
-    layers: "显示层", controls: "左键拖动旋转 · 右键拖动平移 · 滚轮缩放", noFile: "还没有打开文件", dropNow: "松手打开",
-    reading: "读取中", building: "构建中", more: "还有 {} 项", failed: "打不开这个文件：{}", unsupported: "只支持 .litematic / .nbt / .mcstructure",
-    size: "体积", count: "数量", kinds: "种类", tools: "工具", steps: "分步拆解", split: "拆分", contour: "等高图", convert: "转换",
-    stepsNote: "按层、按材质把投影拆成一步步的建造顺序", contourNote: "去掉树木花草，只留地表，按高度每 5 格换一种陶瓦 / 羊毛",
-    baseY: "最底层的世界 Y", restore: "还原原始投影", stepOf: "步骤 {} / {} · Y={}", total: "合计", tooMany: "方块太多（{}），分步拆解适合 6 万块以内",
-    contourDone: "等高图：{} 个地表方块", mismatch: "文件自称 {} 个方块，和实际数出来的不一样",
-  },
-  zh_TW: {
-    open: "開啟檔案", dropTitle: "把投影檔案拖到這裡", supports: "支援", local: "檔案只在你的瀏覽器裡處理，不會上傳",
-    layers: "顯示層", controls: "左鍵拖曳旋轉 · 右鍵拖曳平移 · 滾輪縮放", noFile: "還沒有開啟檔案", dropNow: "放開以開啟",
-    reading: "讀取中", building: "建構中", more: "還有 {} 項", failed: "無法開啟這個檔案：{}", unsupported: "只支援 .litematic / .nbt / .mcstructure",
-    size: "體積", count: "數量", kinds: "種類", tools: "工具", steps: "分步拆解", split: "拆分", contour: "等高圖", convert: "轉換",
-    stepsNote: "按層、按材質把投影拆成一步步的建造順序", contourNote: "去掉樹木花草，只留地表，按高度每 5 格換一種陶瓦 / 羊毛",
-    baseY: "最底層的世界 Y", restore: "還原原始投影", stepOf: "步驟 {} / {} · Y={}", total: "合計", tooMany: "方塊太多（{}），分步拆解適合 6 萬塊以內",
-    contourDone: "等高圖：{} 個地表方塊", mismatch: "檔案自稱 {} 個方塊，和實際數出來的不一樣",
-  },
-  en_US: {
-    open: "Open file", dropTitle: "Drop your schematic here", supports: "Supports", local: "Your file is processed in your browser and never uploaded",
-    layers: "Layers", controls: "Left-drag to rotate · right-drag to pan · scroll to zoom", noFile: "No file open", dropNow: "Release to open",
-    reading: "Reading", building: "Building", more: "{} more", failed: "Can't open this file: {}", unsupported: "Only .litematic / .nbt / .mcstructure",
-    size: "Size", count: "Blocks", kinds: "Kinds", tools: "Tools", steps: "Step splitter", split: "Split", contour: "Contour map", convert: "Convert",
-    stepsNote: "Split the build into ordered steps by layer and material", contourNote: "Strip trees and plants, keep the surface, recolor every 5 blocks of height",
-    baseY: "World Y of bottom layer", restore: "Restore original", stepOf: "Step {} / {} · Y={}", total: "Total", tooMany: "Too many blocks ({}); the splitter handles up to 60,000",
-    contourDone: "Contour: {} surface blocks", mismatch: "The file claims {} blocks, which differs from the actual count",
-  },
-};
+// 所有界面文字都在 lang/source/*.json 里（和桌面版同一套翻译）：
+//   指标名、分类、单位、页签用桌面版原有的键；网页版自己的文字是 web.* 键。
+// tools/build_web_data.py 把它们导出到 data/gamedata.json 的 ui 里。
+const LANGS = ["zh_CN", "zh_TW", "en_US"];
 
 function pickLang() {
   const q = new URLSearchParams(location.search).get("lang");
   const saved = localStorage.getItem("lv-viewer-lang");
   const nav = (navigator.language || "").toLowerCase();
   const guess = nav.startsWith("zh") ? (/tw|hk|hant/.test(nav) ? "zh_TW" : "zh_CN") : "en_US";
-  for (const v of [q, saved, guess]) if (v && TEXT[v]) return v;
+  for (const v of [q, saved, guess]) if (LANGS.includes(v)) return v;
   return "zh_CN";
 }
 let lang = pickLang();
 const fmt = (s, ...args) => args.reduce((out, a) => out.replace("{}", a), s);
-const t = (key, ...args) => fmt(TEXT[lang][key] ?? TEXT.zh_CN[key] ?? key, ...args);
 let gamedata = null;
 const ui = (key, ...args) => fmt(gamedata?.ui[lang]?.[key] ?? gamedata?.ui.zh_CN[key] ?? key, ...args);
+const t = (key, ...args) => ui("web." + key, ...args);
 
 function nameOf(id) {
   const name = id.replace(/^(entity:)?minecraft:/, "").split("[")[0];
@@ -65,6 +39,7 @@ function nameOf(id) {
 }
 
 function applyLang() {
+  if (!gamedata) return; // 翻译还没加载完，页面上先显示 HTML 里写的中文
   document.documentElement.lang = lang === "en_US" ? "en" : lang === "zh_TW" ? "zh-TW" : "zh-CN";
   document.querySelectorAll("[data-t]").forEach((el) => (el.textContent = t(el.dataset.t)));
   document.querySelectorAll("[data-ui]").forEach((el) => (el.textContent = ui(el.dataset.ui)));
@@ -307,6 +282,16 @@ async function main() {
   [gamedata] = await Promise.all([fetch("data/gamedata.json").then((r) => r.json()), loadResources()]);
   applyLang();
   view = new View($("canvas"));
+
+  // 桌面版「手动3D渲染」：主程序把结构写进 payload.json，用 #desktop 打开本页
+  if (location.hash === "#desktop") {
+    document.body.classList.add("desktop");
+    const payload = await fetch("payload.json?t=" + Date.now(), { cache: "no-store" }).then((r) => r.json());
+    if (LANGS.includes(payload.lang)) { lang = payload.lang; applyLang(); }
+    load(fromPayload(payload), true);
+    return;
+  }
+
   const params = new URLSearchParams(location.search);
   // 从主页拖进来的：取出暂存的文件，再把网址里的 from=home 去掉，刷新时不会再找一遍
   if (params.get("from") === "home") {

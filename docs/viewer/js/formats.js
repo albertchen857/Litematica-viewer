@@ -173,6 +173,30 @@ export function parse(fileName, bytes) {
   return structure;
 }
 
+// 桌面版传过来的 payload.json（script/lv/render.py 的 build_payload）→ 统一模型。
+// 每个区域只带非空气格子的线性下标和调色板下标（base64 二进制），这里铺回整块数组。
+// 实体只带 id（够计数），方块实体不传：容器内容在桌面版主界面里看。
+export const PAYLOAD_FORMAT = 3;
+function decode(b64, bits) {
+  const raw = atob(b64), bytes = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+  return bits === 16 ? new Uint16Array(bytes.buffer) : new Int32Array(bytes.buffer);
+}
+export function fromPayload(p) {
+  if (!p || p.format !== PAYLOAD_FORMAT) throw new Error(`payload format ${p && p.format} ≠ ${PAYLOAD_FORMAT}`);
+  const regions = p.regions.map((r) => {
+    const blocks = new Uint32Array(r.size[0] * r.size[1] * r.size[2]);
+    const idx = decode(r.idx_b64, 32), state = decode(r.state_b64, r.state_bits);
+    for (let i = 0; i < r.count; i++) blocks[idx[i]] = state[i];
+    const entities = (r.entities || []).map((id) => ({ id, nbt: {} }));
+    return normalise({ name: r.name, origin: r.origin, size: r.size, palette: r.palette, blocks, blockEntities: new Map(), entities });
+  });
+  return {
+    name: p.name, author: p.author || "", description: p.description || "", source: p.source || "litematic",
+    version: p.version || "", declared: 0, regions, fileName: p.name,
+  };
+}
+
 // 所有区域的包围盒：最小角和尺寸。多区域的投影渲染、统计体积都用它
 export function bounds(structure) {
   const lo = [0, 1, 2].map((i) => Math.min(...structure.regions.map((r) => r.origin[i])));

@@ -8,10 +8,21 @@ const BUILD_CHUNK = 20000; // 每次最多加这么多方块就让出主线程�
 
 let resources = null;
 let atlasImage = null;
+let iconIndex = {}; // resource/icons.json：名字 → [u, v, 宽, 高, (染色)]，由 script/lv/atlas.py 生成
 
 // ---------------------------------------------------------------- 资源
 
+// 新版模型里贴图可以写成 {"sprite": "...", "force_translucent": true}（玻璃之类），
+// deepslate 0.10 只认字符串，碰到对象就整个方块渲染失败。这里统一摊回字符串。
+function plainTextures(model) {
+  if (!model.textures) return model;
+  const textures = {};
+  for (const [k, v] of Object.entries(model.textures)) textures[k] = typeof v === "string" ? v : v.sprite || v.texture || "";
+  return { ...model, textures };
+}
+
 export async function loadResources() {
+  iconIndex = await fetch("resource/icons.json").then((r) => r.json()).catch(() => ({}));
   atlasImage = await new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
@@ -21,7 +32,7 @@ export async function loadResources() {
 
   const definitions = {}, models = {};
   for (const id in assets.blockstates) definitions["minecraft:" + id] = deepslate.BlockDefinition.fromJson(id, assets.blockstates[id]);
-  for (const id in assets.models) models["minecraft:" + id] = deepslate.BlockModel.fromJson(id, assets.models[id]);
+  for (const id in assets.models) models["minecraft:" + id] = deepslate.BlockModel.fromJson(id, plainTextures(assets.models[id]));
   for (const m of Object.values(models)) m.flatten({ getBlockModel: (id) => models[id] });
 
   // 图集按 2 的幂取正方形读出来，UV 也按这个边长归一
@@ -57,24 +68,31 @@ export async function loadResources() {
 
 // ---------------------------------------------------------------- 表格图标
 
-// 材料表里的小图标直接从图集里裁：block/<名字>，没有就试 _top / _side / _front，
-// 再没有就试 item/<名字>。这样不用另带上千张 png。
+// 材料表里的小图标直接从图集里裁。挑哪一块由 icons.json 决定（桌面版 atlas.py 生成，
+// 两边用同一张表）：有物品贴图的用物品贴图，完整方块顺着模型链挑一张面贴图，
+// 草、树叶、水这些灰度贴图带一个染色值。实体查不到就试它的刷怪蛋。
 const iconCache = new Map();
 export function blockIcon(id, px = 20) {
-  const name = id.split(":").pop();
+  const name = id.replace(/^(entity:)?minecraft:/, "").split("[")[0];
   if (iconCache.has(name)) return iconCache.get(name);
+  const box = iconIndex[name] || iconIndex[name + "_spawn_egg"];
   let url = "";
-  for (const key of [`block/${name}`, `block/${name}_top`, `block/${name}_side`, `block/${name}_front`, `item/${name}`]) {
-    const t = assets.textures[key];
-    if (!t) continue;
-    const [u, v, du] = t;
+  if (box && atlasImage) {
+    const [u, v, w, h, tint] = box;
     const c = document.createElement("canvas");
     c.width = c.height = px;
     const g = c.getContext("2d");
     g.imageSmoothingEnabled = false;
-    g.drawImage(atlasImage, u, v, du, du, 0, 0, px, px); // 动画贴图是竖长条，只取最上面一帧
+    g.drawImage(atlasImage, u, v, w, h, 0, 0, px, px);
+    if (tint !== undefined) {
+      // 先整块乘上群系色，再用原图的透明度把形状抠回来
+      g.globalCompositeOperation = "multiply";
+      g.fillStyle = "#" + tint.toString(16).padStart(6, "0");
+      g.fillRect(0, 0, px, px);
+      g.globalCompositeOperation = "destination-in";
+      g.drawImage(atlasImage, u, v, w, h, 0, 0, px, px);
+    }
     url = c.toDataURL();
-    break;
   }
   iconCache.set(name, url);
   return url;

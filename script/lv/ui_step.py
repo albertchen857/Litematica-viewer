@@ -192,8 +192,7 @@ class StepChecker:
             tile = cache.get(index)
             if tile is None:
                 block = self.region.palette[index]
-                tile = Image.open(tools.texture_path(block.name)).convert("RGBA")
-                tile = tile.resize((side, side), Image.NEAREST)
+                tile = tools.texture_image(block.name).resize((side, side), Image.NEAREST)
                 if dim:  # 下面一层压暗压透，用来对位
                     tile = ImageEnhance.Brightness(tile).enhance(0.6)
                     tile.putalpha(tile.getchannel("A").point(lambda a: min(a, 90)))
@@ -269,8 +268,7 @@ class StepChecker:
             px, py, px + self.block_side, py + self.block_side,
             outline="#FFFFFF", width=2, tags="hover",
         )
-        preview = Image.open(tools.texture_path(block.name)).convert("RGBA")
-        preview = preview.resize((MARGIN - 40, MARGIN - 40), Image.NEAREST)
+        preview = tools.texture_image(block.name).resize((MARGIN - 40, MARGIN - 40), Image.NEAREST)
         photo = ImageTk.PhotoImage(preview)
         self.hover_images.append(photo)
         self.canvas.create_image(20, 20, anchor=tk.NW, image=photo, tags="hover")

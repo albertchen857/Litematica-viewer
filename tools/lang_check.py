@@ -25,13 +25,13 @@ KEY_PATTERN = re.compile(r'"([a-z][\w]*(?:\.[\w]+)+)"')
 # "setting.json"、"log.txt" 这种文件名也长得像键，排掉
 FILE_SUFFIXES = (".json", ".py", ".png", ".mo", ".po", ".ico", ".js", ".html", ".txt", ".csv")
 # 用 f-string 拼出来的键（_(f"cat.{name}")），只能按前缀整片放行
-DYNAMIC_PREFIXES = ("cat.", "ui.stat.type")
+DYNAMIC_PREFIXES = ("cat.", "ui.stat.type", "web.")  # web.* 是网页版用的，不在 Python 代码里
 
 
 def used_keys() -> set:
     keys = set()
     for folder, _dirs, files in os.walk(CODE_DIR):
-        if "__pycache__" in folder or "JSrender" in folder:
+        if "__pycache__" in folder:
             continue
         for name in files:
             if not name.endswith(".py"):

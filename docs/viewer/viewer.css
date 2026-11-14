@@ -175,6 +175,9 @@ code { font-family: var(--mono); }
 }
 .drop-veil[hidden] { display: none; }
 
+/* 桌面版里打开（#desktop）：文件由主程序给，顶栏整条不要 */
+body.desktop .bar { display: none; }
+
 /* ---------------------------------------------------------------- 窄屏：上 3D 下信息 */
 
 @media (max-width: 860px) {

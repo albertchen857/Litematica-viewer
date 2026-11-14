@@ -104,7 +104,10 @@ script/
   LitematicaViewer.py   入口
   webview_host.py       3D 渲染窗口的子进程入口
   lv/                   主体代码，见 docs/ARCHITECTURE.md
-  JSrender/             deepslate 网页渲染器（改自 Ending_Credits 的 litematic-viewer）
+docs/
+  index.html            项目主页（GitHub Pages）
+  viewer/               网页版查看器；桌面版的「手动3D渲染」也直接用它
+  viewer/resource/      贴图图集，桌面版和网页版共用这一份，方块图标也从这里裁
 lang/
   source/*.json         翻译的唯一数据源，改这里
   data.json             主题色和用户设置
