@@ -25,7 +25,10 @@
     js/formats.js   三种格式 → 统一模型（照 script/lv/formats.py）
     js/analysis.js  材料折算、分类、7 项指标、容器物品（照 script/lv/analysis.py）
     js/render.js    deepslate 渲染 + 环绕相机 + 按层显示
-    js/app.js       界面：拖文件、页签、子区域、语言
+    js/writers.js   统一模型 → .litematic / .nbt / .mcstructure / 材料表 txt（照 formats.py 的 _save_*）
+    js/edit.js      批量替换方块（照 script/lv/edit.py）
+    js/blockmap.js  Java ↔ 基岩方块 ID / 状态互转（照 script/lv/blockmap.py）
+    js/app.js       界面：拖文件、页签、子区域、语言、导出、右键替换
 -->
 
 <header class="bar">
@@ -39,6 +42,21 @@
       <input type="file" id="file-input" accept=".litematic,.nbt,.mcstructure" hidden>
       <span data-t="open">打开文件</span>
     </label>
+    <!-- 导出材料表 / 分类导出（同桌面版「数据分析」菜单），转换文件类型：鼠标放上去出下拉框。
+         没打开文件时灰掉 -->
+    <div class="bar-tools is-off" id="bar-tools">
+      <button class="btn btn-plain" id="export-btn" type="button" data-ui="litem.menuAnalysis.2">导出</button>
+      <button class="btn btn-plain" id="export-cat-btn" type="button" data-ui="litem.menuAnalysis.3">分类导出</button>
+      <div class="menu-wrap" id="convert-wrap">
+        <button class="btn btn-plain" id="convert-btn" type="button" aria-haspopup="menu"><span data-t="saveAs">转换文件类型</span><i class="caret" aria-hidden="true"></i></button>
+        <div class="dropdown" id="convert-menu" role="menu">
+          <button type="button" role="menuitem" data-ext=".litematic"><b>.litematic</b><span data-t="fmt.litematic">Litematica 投影</span></button>
+          <button type="button" role="menuitem" data-ext=".nbt"><b>.nbt</b><span data-t="fmt.nbt">结构方块（Java 版）</span></button>
+          <button type="button" role="menuitem" data-ext=".mcstructure"><b>.mcstructure</b><span data-t="fmt.mcstructure">结构（基岩版）</span></button>
+        </div>
+      </div>
+    </div>
+    <button class="btn btn-plain" id="tutorial-btn" type="button" data-t="tutorial">教程</button>
     <!-- 配色：和桌面版设置里的五套主题一样（lang/data.json 的 Color_map） -->
     <select class="lang" id="theme" aria-label="Theme"></select>
     <select class="lang" id="lang" aria-label="Language">
@@ -92,6 +110,9 @@
       <span class="layers-value" id="layer-value"></span>
     </div>
     <p class="hint" id="hint" hidden data-t="controls">左键拖动旋转 · 右键拖动平移 · 滚轮缩放</p>
+
+    <!-- 替换完的提示 + 撤销 -->
+    <div class="toast" id="toast" hidden><span id="toast-text"></span><button class="btn btn-small" id="toast-undo" type="button" data-t="replace.undo">撤销</button></div>
   </section>
 
   <!-- 右：信息 -->
@@ -163,6 +184,53 @@
 </main>
 
 <div class="drop-veil" id="drop-veil" hidden><span data-t="dropNow">松手打开</span></div>
+
+<!-- 右键菜单：材料表的行、3D 里的方块共用 -->
+<div class="ctx" id="ctx" role="menu" hidden></div>
+
+<!-- 快速替换方块（同桌面版右键「快速替换方块」，规则写法同 script/lv/edit.py） -->
+<dialog class="dlg" id="replace-dlg">
+  <form method="dialog" id="replace-form">
+    <h2 data-ui="row.replace">快速替换方块</h2>
+    <p class="dlg-from" id="replace-from"></p>
+    <!-- 3D 里右键点的方块才有：只换这一格 / 换全部同类 -->
+    <div class="dlg-scope" id="replace-scope">
+      <label><input type="radio" name="scope" value="all" checked> <span id="scope-all"></span></label>
+      <label class="dlg-sub"><input type="checkbox" id="replace-same"> <span data-t="replace.sameState">只换状态完全一样的</span></label>
+      <label><input type="radio" name="scope" value="one"> <span id="scope-one"></span></label>
+    </div>
+    <input class="dlg-input" id="replace-target" list="block-list" autocomplete="off" spellcheck="false">
+    <datalist id="block-list"></datalist>
+    <p class="dlg-note" data-t="replace.keep">朝向、半砖上下这些状态会尽量保留</p>
+    <details class="dlg-rules" id="replace-adv">
+      <summary data-t="replace.rules">高级：直接写替换规则</summary>
+      <textarea id="replace-rules" rows="4" spellcheck="false"></textarea>
+      <p class="dlg-note dlg-pre" data-t="replace.rulesHint"></p>
+    </details>
+    <p class="dlg-error" id="replace-error"></p>
+    <div class="dlg-actions">
+      <button class="btn btn-plain" value="cancel" formnovalidate data-t="cancel">取消</button>
+      <button class="btn btn-accent" id="replace-apply" value="apply" data-t="replace.apply">替换</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- 教程 -->
+<dialog class="dlg dlg-wide" id="tutorial-dlg">
+  <form method="dialog">
+    <h2 data-t="tut.title">怎么用</h2>
+    <ol class="tut">
+      <li data-t="tut.open"></li>
+      <li data-t="tut.view"></li>
+      <li data-t="tut.inspect"></li>
+      <li data-t="tut.replace"></li>
+      <li data-t="tut.undo"></li>
+      <li data-t="tut.export"></li>
+      <li data-t="tut.convert"></li>
+    </ol>
+    <div class="dlg-actions"><button class="btn btn-accent" value="ok" data-t="tut.ok">知道了</button></div>
+  </form>
+</dialog>
 
 <script type="module" src="js/app.js"></script>
 </body>

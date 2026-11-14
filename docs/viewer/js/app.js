@@ -1,8 +1,10 @@
 // 网页版查看器的界面层：读文件 → 统计 → 渲染 → 右侧信息栏 + 工具。
 // 算法都在别的模块里，这里只负责把它们接起来、把结果画到页面上。
 
-import { parse, bounds, EXTENSIONS, fromPayload } from "./formats.js";
-import { analyse, totalRows, unitParts } from "./analysis.js";
+import { parse, bounds, EXTENSIONS, fromPayload, isAir } from "./formats.js";
+import { analyse, totalRows, unitParts, materialOf } from "./analysis.js";
+import { SAVE_FORMATS, exportText, download } from "./writers.js";
+import { parseRules, replaceBlocks, RuleError } from "./edit.js";
 import { loadResources, View, blockIcon } from "./render.js";
 import { splitSteps, structureWithSteps } from "./tools/steps.js";
 import { toContour } from "./tools/contour.js";
@@ -87,6 +89,7 @@ function applyLang() {
   document.documentElement.lang = lang === "en_US" ? "en" : lang === "zh_TW" ? "zh-TW" : "zh-CN";
   document.querySelectorAll("[data-t]").forEach((el) => (el.textContent = t(el.dataset.t)));
   document.querySelectorAll("[data-ui]").forEach((el) => (el.textContent = ui(el.dataset.ui)));
+  $("replace-target").placeholder = t("replace.target");
   $("lang").value = lang;
   document.title = t("pageTitle");
   syncUrl();
@@ -98,7 +101,10 @@ function applyLang() {
 // ---------------------------------------------------------------- 状态
 
 const state = {
-  original: null,  // 刚读进来的结构（工具改完可以还原）
+  pristine: null,  // 刚打开时的样子（「还原原始投影」回到这里）
+  original: null,  // 工具（等高图）的起点：刚打开的结构，替换过方块就是替换后的
+  undo: null,      // 上一次替换前的 { structure, original, edited }，「撤销」用
+  edited: false,   // 替换过方块（导出文件名加 _Modified，同桌面版）
   structure: null, // 当前显示的结构（可能是等高图）
   results: null,   // { all: 结果, regions: [[名字, 结果]] }
   region: null,    // 选中的子区域，null = 总体
@@ -116,7 +122,7 @@ async function openFile(file) {
   progress(0, t("reading"));
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
-    load(parse(file.name, bytes), true);
+    load(parse(file.name, bytes), { pristine: true });
     window.LVRecent?.save(file).catch(() => {}); // 记成「上次的文件」，下次进来一键再开
   } catch (err) {
     console.error(err);
@@ -125,8 +131,10 @@ async function openFile(file) {
   }
 }
 
-function load(structure, isOriginal) {
-  if (isOriginal) state.original = structure;
+// pristine：刚打开的文件；original：作为工具的起点；keepCamera：替换 / 撤销时相机不动
+function load(structure, { pristine = false, original = pristine, keepCamera = false } = {}) {
+  if (pristine) { state.pristine = structure; state.edited = false; state.undo = null; $("toast").hidden = true; }
+  if (original) state.original = structure;
   state.structure = structure;
   state.steps = null;
   state.region = null;
@@ -139,13 +147,19 @@ function load(structure, isOriginal) {
   state.results = { all, regions };
 
   $("empty").classList.add("is-hidden");
-  $("bar-file").textContent = structure.fileName || structure.name;
+  $("bar-file").textContent = (structure.fileName || structure.name) + (state.edited ? ` · ${t("edited")}` : "");
+  $("bar-tools").classList.remove("is-off");
   $("tools").hidden = false;
   $("steps").hidden = true;
-  $("restore").hidden = structure === state.original;
+  $("restore").hidden = structure === state.pristine;
   renderInfo();
   setupLayers(structure);
-  draw(structure, true);
+  draw(structure, !keepCamera);
+  // 第一次打开文件时把教程弹出来一次
+  if (pristine && !isDesktop() && !localStorage.getItem("lv-viewer-tutorial")) {
+    localStorage.setItem("lv-viewer-tutorial", "1");
+    $("tutorial-dlg").showModal();
+  }
 }
 
 // ---------------------------------------------------------------- 3D
@@ -257,7 +271,7 @@ function renderInfo() {
   $("tab-count").textContent = ui("tab.count", rows.length, rows.reduce((a, [, n]) => a + n, 0));
   $("table").innerHTML = rows.slice(0, TABLE_LIMIT).map(([id, n]) => {
     const icon = blockIcon(id);
-    return `<div class="row" title="${esc(id)}">${icon ? `<img src="${icon}" alt="">` : "<span></span>"}` +
+    return `<div class="row" title="${esc(id)}" data-id="${esc(id)}">${icon ? `<img src="${icon}" alt="">` : "<span></span>"}` +
       `<span class="name">${esc(nameOf(id))}</span><span class="right"><span class="num">${n}</span>${slotsHTML(n)}</span></div>`;
   }).join("") + (rows.length > TABLE_LIMIT ? `<div class="row-more">${esc(t("more", rows.length - TABLE_LIMIT))}</div>` : "");
 
@@ -470,9 +484,242 @@ function runContour() {
   if (Number.isNaN(baseY)) return;
   const { structure, placed } = toContour(state.original, baseY);
   structure.fileName = state.original.fileName;
-  load(structure, false);
+  load(structure);
   progress(null);
   $("bar-file").textContent = `${state.original.fileName} · ${t("contourDone", placed)}`;
+}
+
+// ---------------------------------------------------------------- 导出 / 转换文件类型
+
+// 导出文件名：原文件名；替换过方块加 _Modified（同桌面版 quick_replace）；等高图用它自己的名字
+function stem() {
+  const file = state.pristine.fileName || state.pristine.name;
+  const base = file.includes(".") ? file.slice(0, file.lastIndexOf(".")) : file;
+  if (state.structure !== state.pristine && !state.edited) return state.structure.name || base;
+  return base + (state.edited ? "_Modified" : "");
+}
+
+// 材料表 txt（同 ui_main.export_text）：按当前选中的子区域
+function exportList(classified) {
+  if (!state.structure) { alert(t("needFile")); return; }
+  const text = exportText(current(), {
+    classified, csv: false, nameOf,
+    unit: (k) => ui("unit." + k), catLabel: (c) => ui("cat." + c), order: gamedata.categoryOrder || [],
+  });
+  download(`${stem()}.txt`, text, "text/plain;charset=utf-8");
+}
+
+// 另存成别的格式（同 ui_main.save_as）：存的是当前显示的结构，含替换后的
+function saveAs(ext) {
+  if (!state.structure) { alert(t("needFile")); return; }
+  try {
+    const { bytes, report } = SAVE_FORMATS[ext](state.structure);
+    download(stem() + ext, bytes);
+    if (report.size) alert(ui("app.save.report", report.size) + "\n\n" + [...report].map(short).join(", "));
+  } catch (err) {
+    console.error(err);
+    alert(ui("app.save.fail", err.message || err));
+  }
+}
+
+// ---------------------------------------------------------------- 右键菜单 + 快速替换方块
+
+function openMenu(x, y, head, items) {
+  const menu = $("ctx");
+  menu.innerHTML = `<div class="ctx-head">${esc(head)}</div>` + items.map((it, i) =>
+    `<button type="button" role="menuitem" data-i="${i}"${it.disabled ? " disabled" : ""}>${esc(it.label)}${it.note ? `<small>${esc(it.note)}</small>` : ""}</button>`).join("");
+  menu.hidden = false;
+  // 贴着鼠标，别超出窗口
+  const w = menu.offsetWidth, h = menu.offsetHeight;
+  menu.style.left = `${Math.max(8, Math.min(x, innerWidth - w - 8))}px`;
+  menu.style.top = `${Math.max(8, Math.min(y, innerHeight - h - 8))}px`;
+  menu.onclick = (e) => {
+    const b = e.target.closest("button[data-i]");
+    if (!b || b.disabled) return;
+    closeMenu();
+    items[+b.dataset.i].action();
+  };
+}
+function closeMenu() { $("ctx").hidden = true; }
+
+const short = (id) => id.replace(/^minecraft:/, "");
+
+// 材料表里的一行 → 调色板里对应的方块 id。行是折算后的材料（红石粉、火把……），
+// 所以「本身就是它」和「折算出来有它」的方块都算上（墙上的火把会和火把一起换）
+function blockSourcesFor(id) {
+  const index = state.results.regions.findIndex(([n]) => n === state.region);
+  const regions = index < 0 ? state.structure.regions : [state.structure.regions[index]];
+  const found = new Set();
+  for (const r of regions) for (const b of r.palette) {
+    if (isAir(b) || found.has(b.id)) continue;
+    if (b.id === id || materialOf(b).some(([m]) => m === id)) found.add(b.id);
+  }
+  return [...found];
+}
+
+// 桌面版里打开的 3D 窗口（#desktop）没有顶栏、存不了文件，替换在桌面版主程序里做
+const isDesktop = () => document.body.classList.contains("desktop");
+
+function rowMenu(e) {
+  const row = e.target.closest(".row[data-id]");
+  if (!row || isDesktop()) return;
+  e.preventDefault();
+  const id = row.dataset.id;
+  // 实体页、容器物品页的不是摆在那里的方块，没法换
+  const sources = state.tab === "entities" || state.tab === "items" ? [] : blockSourcesFor(id);
+  openMenu(e.clientX, e.clientY, nameOf(id), [{
+    label: ui("row.replace"), disabled: !sources.length, note: sources.length ? "" : t("replace.noBlock"),
+    action: () => openReplace({ sources, label: nameOf(id) }),
+  }]);
+}
+
+// 3D 里右键点了一个方块。分步模式下显示的是拆分后的结构，按坐标找回真正的区域和格子
+function locate(pos) {
+  const s = state.structure, box = bounds(s);
+  const world = pos.map((v, i) => v + box.origin[i]);
+  for (let k = s.regions.length - 1; k >= 0; k--) {
+    const r = s.regions[k], local = world.map((v, i) => v - r.origin[i]);
+    if (local.some((v, i) => v < 0 || v >= r.size[i])) continue;
+    const block = r.palette[r.blocks[local[0] * r.size[1] * r.size[2] + local[1] * r.size[2] + local[2]]];
+    if (!isAir(block)) return { region: r, local, block };
+  }
+  return null;
+}
+
+function blockMenu(hit, x, y) {
+  if (hit.kind !== "block") return;
+  const at = locate(hit.pos);
+  if (!at) return;
+  openMenu(x, y, nameOf(at.block.id), [
+    ...(isDesktop() ? [] : [{ label: ui("row.replace"), action: () => openReplace({ sources: [at.block.id], label: nameOf(at.block.id), at }) }]),
+    { label: t("inspectMenu"), action: () => showInspect(hit) },
+  ]);
+}
+
+let replaceJob = null;
+
+// 中文名 → id（同桌面版 tools.translate(n, to_chinese=False)：先当前语言，再简体、繁体）
+function nameToId(name) {
+  for (const l of [lang, "zh_CN", "zh_TW"]) {
+    const table = gamedata.blocks[l];
+    if (!table) continue;
+    for (const [id, n] of Object.entries(table)) if (n === name) return id;
+  }
+  return name.toLowerCase().replace(/\s+/g, "_");
+}
+
+// 目标方块的候选：资源包里有方块状态定义的都算（能摆出来、能渲染）
+function fillBlockList() {
+  const list = $("block-list");
+  if (list.dataset.lang === lang) return;
+  const names = gamedata.blocks[lang] || {};
+  list.innerHTML = Object.keys(assets.blockstates).sort()
+    .map((id) => `<option value="${esc(id)}">${names[id] ? esc(names[id]) : ""}</option>`).join("");
+  list.dataset.lang = lang;
+}
+
+function openReplace(job) {
+  replaceJob = job;
+  fillBlockList();
+  $("replace-from").textContent = ui("row.replace.from", job.label);
+  $("replace-scope").hidden = !job.at;
+  if (job.at) {
+    const pos = job.at.local.map((v, i) => v + job.at.region.origin[i]).join(", ");
+    $("scope-all").textContent = t("replace.scopeAll", job.label);
+    $("scope-one").textContent = t("replace.scopeOne", `(${pos})`);
+    document.querySelector("#replace-form [name=scope][value=all]").checked = true;
+    $("replace-same").checked = false;
+  }
+  $("replace-target").value = "";
+  $("replace-rules").value = job.sources.map((id) => short(id) + "-").join("\n");
+  $("replace-adv").open = false;
+  $("replace-error").textContent = "";
+  $("replace-dlg").showModal();
+  $("replace-target").focus();
+}
+
+// 点「替换」：拼成规则交给 edit.js（规则写法同桌面版），成功就换掉当前结构、重画，相机不动
+function applyReplace() {
+  const job = replaceJob;
+  const one = !!job.at && document.querySelector("#replace-form [name=scope]:checked").value === "one";
+  let text;
+  if ($("replace-adv").open && !one) {
+    text = $("replace-rules").value;
+  } else {
+    const target = $("replace-target").value.trim();
+    if (!target) { $("replace-target").focus(); return false; }
+    // 3D 里点的方块：只换这一格、或勾了「只换状态一样的」，就把它的状态写进规则
+    const props = job.at && (one || $("replace-same").checked) && Object.keys(job.at.block.props).length
+      ? JSON.stringify(job.at.block.props) : "";
+    text = job.sources.map((id) => `${short(id)}${props}-${target}`).join("\n");
+  }
+  let rules;
+  try {
+    rules = parseRules(text, nameToId);
+  } catch (err) {
+    if (!(err instanceof RuleError)) throw err;
+    $("replace-error").textContent = ui("app.replace.badrule", err.message);
+    return false;
+  }
+  // 目标得是认识的方块（资源包里有定义），不然渲染不出来，进游戏也放不了
+  const unknown = [...rules.values()].map(([id]) => id).filter((id) => !assets.blockstates[short(id)]);
+  if (unknown.length) { $("replace-error").textContent = ui("app.replace.badrule", unknown.map(short).join(", ")); return false; }
+
+  // 换成没有任何状态的整方块（金块、泥土……）时，旧方块的朝向 / 半砖类型这些就不带过去了
+  const clean = (id, props) => {
+    const variants = assets.blockstates[short(id)]?.variants;
+    return variants && Object.keys(variants).every((k) => k === "") ? {} : props;
+  };
+  const { structure, replaced } = replaceBlocks(state.structure, rules, one ? { region: job.at.region, local: job.at.local } : null, clean);
+  if (!replaced) { $("replace-error").textContent = ui("app.replace.none"); return false; }
+  state.undo = { structure: state.structure, original: state.original, edited: state.edited };
+  state.edited = true;
+  load(structure, { original: state.structure === state.original, keepCamera: true });
+  toast(ui("app.replace.done", replaced) + " " + t("replace.saveHint"));
+  return true;
+}
+
+let toastTimer = 0;
+function toast(text) {
+  $("toast-text").textContent = text;
+  $("toast").hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => ($("toast").hidden = true), 15000);
+}
+
+function undoReplace() {
+  const prev = state.undo;
+  if (!prev) return;
+  state.undo = null;
+  state.edited = prev.edited;
+  load(prev.structure, { keepCamera: true });
+  state.original = prev.original;
+  $("toast").hidden = true;
+}
+
+function bindEditing() {
+  $("export-btn").addEventListener("click", () => exportList(false));
+  $("export-cat-btn").addEventListener("click", () => exportList(true));
+  $("convert-menu").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-ext]");
+    if (!b) return;
+    document.activeElement?.blur(); // 收起下拉框（键盘打开时靠 focus-within）
+    saveAs(b.dataset.ext);
+  });
+  $("tutorial-btn").addEventListener("click", () => $("tutorial-dlg").showModal());
+
+  $("table").addEventListener("contextmenu", rowMenu);
+  // 点别处 / Esc / 滚动 / 窗口变化：收起右键菜单
+  document.addEventListener("pointerdown", (e) => { if (!e.target.closest("#ctx")) closeMenu(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenu(); });
+  window.addEventListener("resize", closeMenu);
+  $("side").addEventListener("scroll", closeMenu);
+
+  $("replace-form").addEventListener("submit", (e) => {
+    if (e.submitter?.value !== "apply") return; // 取消：直接关
+    if (!applyReplace()) e.preventDefault();    // 有错：留在弹窗里显示
+  });
+  $("toast-undo").addEventListener("click", undoReplace);
 }
 
 // ---------------------------------------------------------------- 事件
@@ -529,7 +776,8 @@ function bind() {
   $("step-prev").addEventListener("click", () => showStep(state.step - 1));
   $("step-next").addEventListener("click", () => showStep(state.step + 1));
   $("contour-run").addEventListener("click", runContour);
-  $("restore").addEventListener("click", () => load(state.original, true));
+  $("restore").addEventListener("click", () => load(state.pristine, { pristine: true }));
+  bindEditing();
 }
 
 // ---------------------------------------------------------------- 启动
@@ -540,7 +788,7 @@ async function main() {
   [gamedata] = await Promise.all([fetch("data/gamedata.json").then((r) => r.json()), loadResources()]);
   $("theme").innerHTML = Object.keys(gamedata.themes || {}).map((n) => `<option value="${n}">${n}</option>`).join("");
   applyLang();
-  view = new View($("canvas"), { overlay: $("markers"), onPick: showInspect });
+  view = new View($("canvas"), { overlay: $("markers"), onPick: showInspect, onContext: blockMenu });
   restorePrefs();
   window.lvViewer = { view, state, showInspect }; // 方便在控制台里调试 / 以后扩展
   applyTheme(themeName);
@@ -551,7 +799,7 @@ async function main() {
     const payload = await fetch("payload.json?t=" + Date.now(), { cache: "no-store" }).then((r) => r.json());
     if (LANGS.includes(payload.lang)) { lang = payload.lang; applyLang(); }
     if (payload.theme) applyTheme(payload.theme);
-    load(fromPayload(payload), true);
+    load(fromPayload(payload), { pristine: true });
     return;
   }
 

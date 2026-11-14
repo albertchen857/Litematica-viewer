@@ -8,6 +8,8 @@
 //
 // NBT 解析用 deepslate 自带的 NbtFile.read（能自动认 gzip；基岩版要传 littleEndian）。
 
+import { bedrockToJava } from "./blockmap.js";
+
 const AIR = { id: "minecraft:air", props: {} };
 const AIR_IDS = new Set(["minecraft:air", "minecraft:cave_air", "minecraft:void_air"]);
 export const isAir = (block) => AIR_IDS.has(block.id);
@@ -17,15 +19,18 @@ export const isAir = (block) => AIR_IDS.has(block.id);
 // deepslate 0.27 的标签是类：getId() 给类型号（和 NBT 规范一致：1 Byte … 12 LongArray），
 // compound 用 forEach((键, 子标签))，列表 / 数组用 getItems()，long 用 getAsPair() 拿 [高32位, 低32位]。
 const LONG = 4, BYTE_ARRAY = 7, STRING = 8, LIST = 9, COMPOUND = 10, INT_ARRAY = 11, LONG_ARRAY = 12;
+// 转出来的对象 / 数组 → 原来的标签。另存时（writers.js）原样写回，Byte / Short / Long 这些类型不会丢
+export const RAW_TAG = new WeakMap();
 function plain(tag) {
   if (!tag) return undefined;
   switch (tag.getId()) {
     case COMPOUND: {
       const out = {};
       tag.forEach((key, value) => { out[key] = plain(value); });
+      RAW_TAG.set(out, tag);
       return out;
     }
-    case LIST: return tag.getItems().map(plain);
+    case LIST: { const out = tag.getItems().map(plain); RAW_TAG.set(out, tag); return out; }
     case LONG: { const [hi, lo] = tag.getAsPair(); return hi * 4294967296 + (lo >>> 0); }
     case LONG_ARRAY: return tag.getItems().map((l) => l.getAsPair());
     case BYTE_ARRAY: case INT_ARRAY: return tag.getItems().map((v) => v.getAsNumber());
@@ -89,7 +94,9 @@ function readLitematic(rootTag) {
   return {
     name: meta.Name || "", author: meta.Author || "", description: meta.Description || "",
     source: "litematic", version: lm <= 3 ? "1.12 / 1.13" : lm <= 6 ? "1.14 ~ 1.20.5" : "1.20.6+",
-    declared: meta.TotalBlocks || 0, regions,
+    declared: meta.TotalBlocks || 0, regions, metadata: meta, // metadata 原样留着（预览图等），另存时只改名字作者简介
+    // 写回 .litematic 时原样带上（同桌面版 structure.meta）
+    meta: { lm_version: lm || 6, sub_version: root.SubVersion || 1, mc_version: root.MinecraftDataVersion || 3953 },
   };
 }
 
@@ -112,6 +119,7 @@ function readJavaNbt(root) {
   const entities = (data.entities || []).map((e) => ({ id: (e.nbt && e.nbt.id) || "minecraft:unknown", pos: e.pos, nbt: e.nbt || {} }));
   return {
     name: "", author: data.author || "", description: "", source: "nbt", version: data.DataVersion || 0, declared: 0,
+    meta: { DataVersion: data.DataVersion || 0 },
     regions: [normalise({ name: "structure", origin: [0, 0, 0], size, palette, blocks, blockEntities, entities })],
   };
 }
@@ -123,12 +131,27 @@ function readMcstructure(root) {
   const [sx, sy, sz] = data.size;
   const body = data.structure;
   const def = body.palette.default;
-  // TODO 基岩 → Java 的方块名 / 状态映射（桌面版 blockmap.py）还没搬过来，先原样用
-  const palette = [AIR, ...def.block_palette.map((b) => ({ id: b.name, props: stringify(b.states || {}) }))];
+  // 读进来就换成 Java 命名（blockmap.js，照 blockmap.py），贴图、中文名、分类表都按 Java id 建的
+  const palette = [AIR, ...def.block_palette.map((b) => bedrockToJava({ id: b.name, props: stringify(b.states || {}) }))];
   const primary = body.block_indices[0];
   // 基岩版也是 x*sy*sz + y*sz + z（ZYX 序），-1 是结构空位
   const blocks = new Uint32Array(sx * sy * sz);
   for (let i = 0; i < primary.length; i++) blocks[i] = primary[i] < 0 ? 0 : primary[i] + 1;
+  // 第二层通常只放水，表示 Java 的 waterlogged：折回方块自身的 waterlogged=true（同 _apply_waterlogged）
+  const second = body.block_indices[1];
+  if (second && second.length === primary.length) {
+    const water = new Set(def.block_palette.map((b, i) => (String(b.name).includes("water") ? i : -1)).filter((i) => i >= 0));
+    const wet = new Map();
+    for (let i = 0; i < second.length; i++) {
+      if (!water.has(second[i]) || !blocks[i]) continue;
+      const old = blocks[i];
+      if (!wet.has(old)) {
+        wet.set(old, palette.length);
+        palette.push({ id: palette[old].id, props: { ...palette[old].props, waterlogged: "true" } });
+      }
+      blocks[i] = wet.get(old);
+    }
+  }
   const blockEntities = new Map();
   for (const [key, value] of Object.entries(def.block_position_data || {})) {
     const flat = Number(key);
@@ -144,6 +167,7 @@ function readMcstructure(root) {
   }));
   return {
     name: "", author: "", description: "", source: "mcstructure", version: data.format_version || 1, declared: 0,
+    meta: { format_version: data.format_version || 1 },
     regions: [normalise({ name: "structure", origin, size: [sx, sy, sz], palette, blocks, blockEntities, entities })],
   };
 }

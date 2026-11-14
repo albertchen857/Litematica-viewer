@@ -27,7 +27,9 @@ from lv.tools import CATEGORY_IDS, OTHER  # noqa: E402  分类 id 只在 Python 
 
 DOCS = os.path.join(ROOT, "docs")
 OUT = os.path.join(DOCS, "viewer")
-UI_PREFIXES = ("ui.stat.", "cat.", "unit.", "ui.chart.", "litem.chart.", "tab.", "web.")
+# 网页版也用到的桌面版文字：导出 / 另存 / 快速替换的提示语，直接复用同一份翻译
+UI_PREFIXES = ("ui.stat.", "cat.", "unit.", "ui.chart.", "litem.chart.", "tab.", "web.",
+               "app.replace.", "app.save.", "row.replace", "litem.menuAnalysis.")
 
 
 def load(name: str) -> dict:
@@ -41,7 +43,8 @@ def load(name: str) -> dict:
 def ui_strings(locale: str) -> dict:
     with open(os.path.join(ROOT, "lang", "source", f"{locale}.json"), encoding="utf-8") as f:
         table = json.load(f)
-    return {k: v for k, v in table.items() if k.startswith(UI_PREFIXES)}
+    # 桌面版的字符串是 Python format 写法，{{ }} 是转义的花括号；网页只认 {} 占位，这里还原
+    return {k: v.replace("{{", "{").replace("}}", "}") for k, v in table.items() if k.startswith(UI_PREFIXES)}
 
 
 def write_gamedata() -> None:

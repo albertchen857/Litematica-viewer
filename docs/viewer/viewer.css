@@ -46,6 +46,34 @@ code { font-family: var(--mono); }
 .bar-actions { display: flex; align-items: center; gap: 8px; }
 .lang { height: 36px; padding: 0 8px; border: 0; border-radius: 8px; background: var(--chip); color: var(--tt); font: 14px var(--sans); }
 
+/* 导出 / 分类导出 / 转换文件类型：没文件时整组灰掉 */
+.bar-tools { display: flex; align-items: center; gap: 8px; }
+.bar-tools.is-off { opacity: 0.45; pointer-events: none; }
+.bar-tools .btn, #tutorial-btn { height: 36px; }
+.caret { display: inline-block; width: 0; height: 0; margin-left: 8px; border: 4px solid transparent; border-top: 5px solid currentColor; border-bottom: 0; }
+/* 鼠标放上去出下拉框（键盘 Tab 进去也能出） */
+.menu-wrap { position: relative; }
+.dropdown {
+  position: absolute; right: 0; top: 100%; z-index: 20; min-width: 240px; padding: 6px;
+  display: grid; gap: 2px; background: var(--card); border-radius: var(--r);
+  box-shadow: 0 0 0 1px var(--line), 0 12px 32px rgba(0, 0, 0, 0.14);
+  opacity: 0; visibility: hidden; transform: translateY(-4px);
+  transition: opacity 120ms var(--ease-settle), transform 160ms var(--ease-settle), visibility 0s 160ms;
+}
+/* 按钮和下拉框之间留一道看不见的桥，鼠标往下移的时候不会断 */
+.dropdown::before { content: ""; position: absolute; left: 0; right: 0; top: -8px; height: 8px; }
+.menu-wrap:hover .dropdown, .menu-wrap:focus-within .dropdown {
+  opacity: 1; visibility: visible; transform: none; transition-delay: 0s;
+}
+.menu-wrap:hover .dropdown { top: calc(100% + 6px); }
+.dropdown button, .ctx button {
+  display: grid; gap: 1px; padding: 8px 10px; border: 0; border-radius: 6px; background: none;
+  color: var(--tt); text-align: left; font: 14px var(--sans); cursor: pointer;
+}
+.dropdown button b { font: 700 14px var(--mono); color: var(--pc); }
+.dropdown button span { color: var(--muted); font-size: 12px; }
+.dropdown button:hover, .ctx button:hover:not(:disabled) { background: var(--chip); }
+
 /* ---------------------------------------------------------------- 布局：左 3D，右信息 */
 
 .layout { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr var(--side); }
@@ -282,6 +310,59 @@ code { font-family: var(--mono); }
 }
 .drop-veil[hidden] { display: none; }
 
+/* 右键菜单 */
+.ctx {
+  position: fixed; z-index: 30; min-width: 200px; max-width: 320px; padding: 6px;
+  display: grid; gap: 2px; background: var(--card); border-radius: var(--r);
+  box-shadow: 0 0 0 1px var(--line), 0 12px 32px rgba(0, 0, 0, 0.16);
+}
+.ctx[hidden] { display: none; }
+.ctx .ctx-head { padding: 4px 10px 6px; color: var(--muted); font-size: 12px; box-shadow: inset 0 -1px 0 var(--line); margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ctx button:disabled { color: var(--muted); cursor: default; }
+.ctx button small { color: var(--muted); font-size: 12px; }
+.row { cursor: context-menu; }
+
+/* 弹窗：替换方块 / 教程 */
+.dlg {
+  width: min(420px, calc(100vw - 32px)); padding: 20px; border: 0; border-radius: 14px;
+  background: var(--card); color: var(--tt); box-shadow: 0 24px 64px rgba(0, 0, 0, 0.24);
+}
+.dlg-wide { width: min(560px, calc(100vw - 32px)); }
+.dlg::backdrop { background: color-mix(in srgb, var(--tt) 40%, transparent); }
+.dlg h2 { margin: 0 0 8px; font-size: 18px; }
+.dlg-from { margin: 0 0 12px; font-weight: 700; color: var(--pc); word-break: break-all; }
+.dlg-scope { display: grid; gap: 6px; margin-bottom: 12px; font-size: 14px; }
+.dlg-scope[hidden] { display: none; }
+.dlg-scope label { display: flex; align-items: center; gap: 6px; }
+.dlg-scope input { accent-color: var(--pc); }
+.dlg-sub { padding-left: 22px; color: var(--muted); font-size: 13px; }
+.dlg-input, .dlg-rules textarea {
+  width: 100%; padding: 8px 10px; border: 0; border-radius: 8px; background: var(--chip); color: var(--tt);
+  font: 14px var(--mono); outline: none;
+}
+.dlg-input { height: 40px; }
+.dlg-input:focus, .dlg-rules textarea:focus { box-shadow: inset 0 0 0 2px var(--pc); }
+.dlg-note { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
+.dlg-pre { white-space: pre-wrap; font-family: var(--mono); }
+.dlg-rules { margin-top: 12px; font-size: 13px; }
+.dlg-rules summary { cursor: pointer; color: var(--muted); }
+.dlg-rules textarea { margin-top: 8px; resize: vertical; font-size: 12px; }
+.dlg-rules[open] ~ .dlg-error { margin-top: 8px; }
+.dlg-error { margin: 8px 0 0; color: #d9480f; font-size: 13px; white-space: pre-wrap; }
+.dlg-error:empty { display: none; }
+.dlg-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.tut { margin: 0; padding-left: 20px; display: grid; gap: 10px; font-size: 14px; }
+.tut li::marker { color: var(--pc); font-weight: 700; }
+
+/* 替换完的提示 */
+.toast {
+  position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 4;
+  display: flex; align-items: center; gap: 12px; max-width: calc(100% - 32px);
+  padding: 8px 8px 8px 14px; background: var(--tt); color: var(--bg); border-radius: var(--r);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16); font-size: 13px;
+}
+.toast[hidden] { display: none; }
+
 /* 桌面版里打开（#desktop）：文件由主程序给，顶栏整条不要 */
 body.desktop .bar { display: none; }
 
@@ -291,6 +372,10 @@ body.desktop .bar { display: none; }
   .layout { grid-template-columns: 1fr; grid-template-rows: 55vh auto; overflow-y: auto; }
   .side { overflow: visible; box-shadow: inset 0 1px 0 var(--line); }
   .bar .brand span, .hint { display: none; }
+  /* 顶栏按钮多了，窄屏换行而不是挤出屏幕（下拉框是绝对定位，不能用横向滚动） */
+  .bar { height: auto; min-height: 56px; flex-wrap: wrap; padding: 8px 16px; }
+  .bar-actions, .bar-tools { flex-wrap: wrap; }
+  .bar-file { flex-basis: 100%; order: 3; }
 }
 
 @media (prefers-reduced-motion: reduce) {

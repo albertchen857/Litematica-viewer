@@ -226,11 +226,13 @@ function hexToRgb(hex) {
 
 export class View {
   // overlay：放实体标记的那层 div；onPick(命中信息 | null)：点了方块 / 实体 / 空白
-  constructor(canvas, { overlay = null, onPick = () => {} } = {}) {
+  // onContext(命中信息, clientX, clientY)：右键点了一下（没拖动），给右键菜单用
+  constructor(canvas, { overlay = null, onPick = () => {}, onContext = () => {} } = {}) {
     this.canvas = canvas;
     this.gl = canvas.getContext("webgl");
     this.overlay = overlay;
     this.onPick = onPick;
+    this.onContext = onContext;
     this.renderer = null;
     this.yaw = 0.8;
     this.pitch = 0.6;
@@ -546,11 +548,16 @@ export class View {
     });
     // 左键按下松开几乎没动 = 点了一下，不是拖：拿去点选方块
     c.addEventListener("pointerup", (e) => {
-      if (drag && drag.button === 0 && !drag.pan &&
-          Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 5 && performance.now() - drag.t0 < 500) {
+      const click = drag && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 5 && performance.now() - drag.t0 < 500;
+      if (click && drag.button === 0 && !drag.pan) {
         const hit = this.pick(e.clientX, e.clientY);
         this.select(hit ? hit.pos : null);
         this.onPick(hit);
+      }
+      // 右键点一下（没拖）= 右键菜单；拖动还是平移
+      if (click && drag.button === 2) {
+        const hit = this.pick(e.clientX, e.clientY);
+        if (hit) { this.select(hit.pos); this.onContext(hit, e.clientX, e.clientY); }
       }
       drag = null;
     });
