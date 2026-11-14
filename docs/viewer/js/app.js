@@ -307,8 +307,16 @@ async function main() {
   [gamedata] = await Promise.all([fetch("data/gamedata.json").then((r) => r.json()), loadResources()]);
   applyLang();
   view = new View($("canvas"));
+  const params = new URLSearchParams(location.search);
+  // 从主页拖进来的：取出暂存的文件，再把网址里的 from=home 去掉，刷新时不会再找一遍
+  if (params.get("from") === "home") {
+    const file = await window.LVHandoff.take().catch(() => null);
+    params.delete("from");
+    history.replaceState(null, "", location.pathname + (params.size ? "?" + params : ""));
+    if (file) openFile(file);
+  }
   // ?file=<网址> 可以直接打开远程投影（同源或允许跨域的地址）
-  const url = new URLSearchParams(location.search).get("file");
+  const url = params.get("file");
   if (url) {
     const res = await fetch(url);
     openFile(new File([await res.arrayBuffer()], decodeURIComponent(url.split("/").pop())));

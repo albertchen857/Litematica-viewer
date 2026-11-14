@@ -70,12 +70,12 @@
 <section class="section" id="drop">
   <div class="section-head" data-reveal>
     <h2 data-en="Drop it in">拖进来试试</h2>
-    <p data-en="Online analysis is on its way. The entry is here already — soon you can drop a file and get the material list.">网页版分析正在路上。先把入口放在这里，到时候直接拖文件就能看材料清单。</p>
+    <p data-en="Drop a schematic and the web viewer opens with its material list, stats and 3D view — right in your browser.">拖一个投影进来，直接打开网页版：材料清单、各项指标和 3D 都在浏览器里看。</p>
   </div>
 
   <!-- data-disable="true"：整块标灰、没有任何动画、写「未开放」，拖文件和点击都不响应。
-       上线时改成 false 就恢复正常 -->
-  <div class="drop-card" id="drop-card" data-disable="true" data-reveal>
+       现在是 false：收到文件就交给网页版查看器（viewer/）打开 -->
+  <div class="drop-card" id="drop-card" data-disable="false" data-reveal>
     <label class="dropzone" id="dropzone" tabindex="0">
       <input type="file" id="file-input" accept=".litematic,.nbt,.mcstructure" multiple hidden>
       <span class="drop-arrow" aria-hidden="true">▼</span>
@@ -190,6 +190,7 @@
   <span data-en="Minecraft is a trademark of Mojang Studios. This project is not affiliated with Mojang.">Minecraft 是 Mojang Studios 的商标，本项目与其无关。</span>
 </footer>
 
+<script src="handoff.js"></script>
 <script src="main.js"></script>
 </body>
 </html>

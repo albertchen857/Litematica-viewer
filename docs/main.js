@@ -303,15 +303,25 @@ function renderDrop() {
     })
   );
   note.textContent = dropped.length
-    ? t("收到了！网页版分析还没上线，现在可以先下载桌面版来看材料清单。",
-        "Got it! Online analysis isn't live yet — grab the desktop app to see the material list.")
+    ? t("这个格式打不开，换一个 .litematic / .nbt / .mcstructure 试试。",
+        "That format can't be opened — try a .litematic / .nbt / .mcstructure.")
     : t("文件只在你的浏览器里，不会上传到任何地方。", "Your file stays in your browser and is never uploaded.");
 }
 
+// 收到能读的文件就交给查看器：先存进浏览器（handoff.js），再跳到 viewer/。
+// 格式不对的照样列出来标成不支持，留在本页
+let opening = false;
 function showFiles(files) {
-  if (!files.length) return;
+  if (!files.length || opening) return;
   dropped = [...files];
   renderDrop();
+  const file = dropped.find((f) => SUPPORTED.test(f.name));
+  if (!file) return;
+  opening = true;
+  $("drop-note").textContent = t("正在打开网页版查看器……", "Opening the web viewer…");
+  window.LVHandoff.put(file)
+    .then(() => { location.href = "viewer/?from=home"; })
+    .catch(() => { opening = false; renderDrop(); });
 }
 
 if (dropDisabled) {
