@@ -22,3 +22,6 @@ testdata/
 # macOS 图标的中间产物，由 macos/make_icns.py 生成
 icon.iconset/
 icon.icns
+
+# 本地测试脚本（自检、生成样例、截图），只在本机用，不进版本库
+local_tests/

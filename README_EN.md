@@ -118,8 +118,7 @@ lang/
 tools/
   lang_build.py         compile po/mo
   lang_check.py         report missing translation keys
-  selftest.py           round-trip every format through every other format
-  make_testdata.py      generate test schematics with containers / entities / odd states
+  build_web_data.py     sync block names / categories / textures to the web viewer
 ```
 
 ## Adding a language

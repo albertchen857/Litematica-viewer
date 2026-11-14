@@ -204,11 +204,10 @@ lang/zh_CN/LC_MESSAGES/litematicaviewer.mo   ← gettext 实际读的
 ## 五、自检
 
 ```bash
-python tools/selftest.py     # 三种格式互相读写，比对方块数
 python tools/lang_check.py   # 翻译键有没有漏
-python tools/shot.py         # 开一次主界面截图，肉眼看布局
-python tools/shot_window.py step|container 文件路径 输出.png
 ```
+
+自检、生成测试投影、界面截图这几个脚本只放在本地（`local_tests/`，不进版本库）。
 
 
 ---

@@ -112,8 +112,7 @@ lang/
 tools/
   lang_build.py         编译 po/mo
   lang_check.py         检查翻译有没有漏
-  selftest.py           三种格式互相读写的自检
-  make_testdata.py      生成带容器 / 实体 / 特殊属性的测试投影
+  build_web_data.py     把方块名 / 分类 / 贴图同步给网页版
 ```
 
 ## 加一门语言

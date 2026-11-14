@@ -75,7 +75,6 @@ lang/
 tools/
   lang_build.py         編譯 po/mo
   lang_check.py         檢查翻譯有沒有遺漏
-  selftest.py           三種格式互相讀寫的自我檢測
 ```
 
 ## 新增一種語言
