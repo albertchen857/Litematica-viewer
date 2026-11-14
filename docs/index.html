@@ -23,7 +23,7 @@
     <small>投影查看器</small>
   </a>
   <nav>
-    <a class="nav-link" href="#drop" data-en="Try it">试一试</a>
+    <a class="nav-link" id="nav-try" href="#drop" data-en="Try it">试一试</a>
     <a class="nav-link" href="#intro" data-en="Features">介绍</a>
     <button class="btn btn-plain lang-switch" id="lang-switch" type="button" data-en="中文">EN</button>
     <a class="btn btn-bilibili" href="https://space.bilibili.com/3494373232741268" target="_blank" rel="noopener">Bilibili</a>
@@ -49,6 +49,7 @@
         <span class="ba-line ba-zh" aria-hidden="true"><span class="ba-blue"><span class="ch">投</span><span class="ch">影</span></span><span class="ba-ink"><svg class="ba-halo" viewBox="0 0 300 150"><ellipse cx="150" cy="75" rx="138" ry="44" transform="rotate(-12 150 75)"/></svg><span class="ch">查</span><span class="ch">看</span><span class="ch">器</span><svg class="ba-cross" viewBox="0 0 300 300"><line class="under" x1="118" y1="300" x2="178" y2="0"/><line class="under" x1="0" y1="128" x2="300" y2="100"/><line x1="118" y1="300" x2="178" y2="0"/><line x1="0" y1="128" x2="300" y2="100"/></svg></span></span>
         <span class="ba-line ba-en" aria-hidden="true"><span class="ba-blue">Litematica</span><span class="ba-ink">Viewer</span></span>
       </h1>
+      <span class="hero-rule" aria-hidden="true"></span>
 
       <div class="hero-actions">
         <a class="btn btn-accent btn-lg hero-download" href="https://github.com/albertchen857/LitematicaViewer/releases/latest" target="_blank" rel="noopener">
@@ -69,7 +70,6 @@
 <section class="section" id="drop">
   <div class="section-head" data-reveal>
     <h2 data-en="Drop it in">拖进来试试</h2>
-    <span class="rule"></span>
     <p data-en="Online analysis is on its way. The entry is here already — soon you can drop a file and get the material list.">网页版分析正在路上。先把入口放在这里，到时候直接拖文件就能看材料清单。</p>
   </div>
 
@@ -93,7 +93,6 @@
 <section class="section" id="intro">
   <div class="section-head" data-reveal>
     <h2 data-en="One schematic, one list">一个投影，一张清单</h2>
-    <span class="rule"></span>
     <p data-en="Import a schematic and every block, entity and item in its containers gets counted and converted into Boxes / Stacks / units — ready to gather.">导入投影，方块、实体、容器里的物品一次数清，按 盒 / 组 / 个 换算好，直接照着备料。</p>
   </div>
 
@@ -102,7 +101,7 @@
     <div class="suspense">
       <p class="suspense-q" data-en="A small mansion needs…">一座小型府邸，一共要……</p>
       <p class="suspense-a"><b class="count" data-to="18640">0</b> <span data-en="blocks">个方块</span></p>
-      <p class="suspense-sub" data-en="92 kinds · the grass alone is 5Box 20St 2u">92 种 · 草方块就要 5盒20组2个</p>
+      <p class="suspense-sub"><span data-en="92 kinds · the grass alone is">92 种 · 草方块就要</span> <span class="slots" data-count="9922"></span></p>
     </div>
 
     <div class="table-demo" aria-label="材料表示例">
@@ -120,76 +119,43 @@
     </div>
   </div>
 
-  <!-- 三种格式 -->
-  <div class="formats" data-reveal>
-    <div class="format" data-stagger>
-      <code>.litematic</code>
-      <p data-en="Litematica mod schematics, with sub-regions you can view one by one">Litematica 模组投影，支持多子区域，可单独查看每个区域</p>
+  <!-- 能做什么（宽）+ 支持的文件（窄）：两张白色清单，宽度不等 -->
+  <div class="capabilities" data-reveal>
+    <div class="panel features">
+      <h3 class="panel-title" data-en="What it does">能做什么</h3>
+      <ul class="feature-list">
+        <li data-stagger><img class="pixel" src="assets/blocks/grass_block.png" alt="" width="32" height="32">
+          <div><b data-en="Material list">材料清单</b><p data-en="Total / Blocks / Entities / Items tabs; right-click a row to ignore or quick-replace it">方块 / 实体 / 物品 / 总数四个页签，右键可忽略或快捷替换某一行</p></div></li>
+        <li data-stagger><img class="pixel" src="assets/blocks/smooth_quartz.png" alt="" width="32" height="32">
+          <div><b data-en="3D preview">3D 预览</b><p data-en="Drag to rotate and scroll to zoom the thumbnail; open the web 3D renderer for a closer look">缩略图可拖拽旋转、滚轮缩放，需要细看就开网页 3D 渲染</p></div></li>
+        <li data-stagger><img class="pixel" src="assets/blocks/chest.png" alt="" width="32" height="32">
+          <div><b data-en="Container analysis">容器分析</b><p data-en="What's inside every chest, shulker box and hopper, slot by slot">箱子、潜影盒、漏斗里装了什么，一格一格摆给你看</p></div></li>
+        <li data-stagger><img class="pixel" src="assets/blocks/bricks.png" alt="" width="32" height="32">
+          <div><b data-en="Step checker">步骤查看器</b><p data-en="Layer by layer, with textures, facing and upper/lower halves">逐层看方块的贴图、朝向和上下半，照着一层层盖</p></div></li>
+        <li data-stagger><img class="pixel" src="assets/blocks/redstone_block.png" alt="" width="32" height="32">
+          <div><b data-en="Redstone ratio">红石偏度</b><p data-en="Seven stats tell a building from a machine">七项指标看出它是建筑还是机器</p></div></li>
+        <li data-stagger><img class="pixel" src="assets/blocks/hopper.png" alt="" width="32" height="32">
+          <div><b data-en="Replace &amp; generate">替换与生成</b><p data-en="Batch-replace blocks with properties, or generate solid / hollow boxes">批量替换方块（可带属性），或生成实心 / 空心长方体</p></div></li>
+      </ul>
     </div>
-    <div class="format" data-stagger>
-      <code>.nbt</code>
-      <p data-en="Java Edition structure block files">Java 版结构方块文件</p>
-    </div>
-    <div class="format" data-stagger>
-      <code>.mcstructure</code>
-      <p data-en="Bedrock structures, block names converted to Java automatically">基岩版结构文件，方块名自动换成 Java 写法</p>
-    </div>
-    <div class="format format-world" data-stagger>
-      <code data-en="→ World">→ 存档</code>
-      <p data-en="Export as a void world — drop it in saves and walk around">导出成虚空世界，放进 saves 就能进游戏看</p>
+
+    <div class="panel formats">
+      <h3 class="panel-title" data-en="Files">支持的文件</h3>
+      <ul class="format-list">
+        <li data-stagger><code>.litematic</code><span data-en="Litematica, with sub-regions">Litematica 投影，支持多子区域</span></li>
+        <li data-stagger><code>.nbt</code><span data-en="Java structure block">Java 版结构方块</span></li>
+        <li data-stagger><code>.mcstructure</code><span data-en="Bedrock, names converted to Java">基岩版，方块名自动转成 Java 写法</span></li>
+        <li data-stagger class="is-export"><code data-en="→ World">→ 存档</code><span data-en="Export a void world, drop it in saves">导出成虚空世界，放进 saves 就能进</span></li>
+      </ul>
+      <p class="panel-note" data-en="The three formats convert into each other">三种格式之间可以互相转换</p>
     </div>
   </div>
 
-  <!-- 功能卡片 -->
-  <div class="features" data-reveal>
-    <article class="feature" data-stagger>
-      <img class="pixel" src="assets/blocks/grass_block.png" alt="" width="36" height="36">
-      <h3 data-en="Material list">材料清单</h3>
-      <p data-en="Total / Blocks / Entities / Items tabs; right-click a row to ignore or quick-replace it.">方块 / 实体 / 物品 / 总数四个页签，右键可忽略或快捷替换某一行。</p>
-    </article>
-    <article class="feature" data-stagger>
-      <img class="pixel" src="assets/blocks/smooth_quartz.png" alt="" width="36" height="36">
-      <h3 data-en="3D preview">3D 预览</h3>
-      <p data-en="Drag to rotate and scroll to zoom the thumbnail; open the web 3D renderer for a closer look.">左上角缩略图可拖拽旋转、滚轮缩放；需要细看就开网页 3D 渲染。</p>
-    </article>
-    <article class="feature" data-stagger>
-      <img class="pixel" src="assets/blocks/chest.png" alt="" width="36" height="36">
-      <h3 data-en="Container analysis">容器分析</h3>
-      <p data-en="See what's inside every chest, shulker box and hopper, slot by slot.">箱子、潜影盒、漏斗里装了什么，一格一格摆给你看。</p>
-    </article>
-    <article class="feature" data-stagger>
-      <img class="pixel" src="assets/blocks/bricks.png" alt="" width="36" height="36">
-      <h3 data-en="Step checker">步骤查看器</h3>
-      <p data-en="Layer by layer, with textures, facing and upper/lower halves — build along.">逐层看方块的贴图、朝向和上下半，照着一层层盖。</p>
-    </article>
-    <article class="feature" data-stagger>
-      <img class="pixel" src="assets/blocks/redstone_block.png" alt="" width="36" height="36">
-      <h3 data-en="Redstone ratio">红石偏度</h3>
-      <p data-en="Seven stats tell a building from a machine: redstone, fluid, density…">七项指标看出它是建筑还是机器：红石偏度、液体、密度……</p>
-    </article>
-    <article class="feature" data-stagger>
-      <img class="pixel" src="assets/blocks/hopper.png" alt="" width="36" height="36">
-      <h3 data-en="Replace &amp; generate">替换与生成</h3>
-      <p data-en="Batch-replace blocks (with properties), or generate solid / hollow boxes.">批量替换方块（可带属性），或者直接生成实心 / 空心的长方体投影。</p>
-    </article>
-  </div>
-
-  <!-- 界面一览：统计行 + 截图 -->
-  <div class="showcase" data-reveal>
-    <div class="stats-panel">
-      <div class="stat" data-stagger><b data-en="Redstone Ab">红石偏度</b><span>0.0%</span></div>
-      <div class="stat" data-stagger><b data-en="Material">材质</b><span data-en="Building">建筑</span></div>
-      <div class="stat" data-stagger><b data-en="Fluid Ab">液体偏度</b><span>27u</span></div>
-      <div class="stat" data-stagger><b data-en="Density">密度</b><span>12.6%</span></div>
-      <div class="stat" data-stagger><b data-en="Author">作者</b><span>Albertchen857</span></div>
-      <div class="stat" data-stagger><b data-en="Version">版本</b><span>litematic / 1.20.6+</span></div>
-      <div class="stat" data-stagger><b data-en="Intro">简介</b><span>-</span></div>
-    </div>
-    <figure class="shot">
-      <img src="assets/app-sidebar-open.jpg" alt="" loading="lazy">
-      <figcaption data-en="Open “Schematic tools”: generate shapes, replace blocks">展开「投影工具」：生成图形投影、替换特定方块</figcaption>
-    </figure>
-  </div>
+  <!-- 界面一览：一张放大的截图 -->
+  <figure class="shot" data-reveal>
+    <img src="assets/app-sidebar-open.jpg" alt="" loading="lazy" width="1600" height="934">
+    <figcaption data-en="The desktop app with “Schematic tools” open">桌面版主界面，右侧展开了「投影工具」</figcaption>
+  </figure>
 
   <!-- 三语言 + 抛一个问题 -->
   <div class="duo" data-reveal>

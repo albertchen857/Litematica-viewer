@@ -32,6 +32,7 @@ function applyLang() {
     el.innerHTML = lang === "en" ? el.dataset.en : el.dataset.zh;
   });
   fillTable(currentView, false);
+  fillSlots();
   renderDrop();
 }
 
@@ -176,6 +177,7 @@ const dropDisabled = dropCard.dataset.disable === "true";
 if (dropDisabled) {
   dropCard.classList.add("is-disabled");
   dropCard.removeAttribute("data-reveal");
+  $("nav-try").hidden = true; // 入口还没开，顶栏就别引人过去扑空
 }
 
 document.querySelectorAll("[data-reveal]").forEach((block) =>
@@ -231,11 +233,17 @@ const SAMPLE = {
 SAMPLE.all = [...SAMPLE.blocks, ...SAMPLE.items, ...SAMPLE.entities].sort((a, b) => b[3] - a[3]);
 const TOTALS = { all: [92, 18859], blocks: [90, 18640], entities: [3, 13], items: [4, 231] };
 
-// 和桌面版一样换算：中文 盒/组/个，英文 Box/St/u（1 盒 = 27 组 = 1728 个）
-function units(n) {
-  const [b, s, u] = lang === "en" ? ["Box", "St", "u"] : ["盒", "组", "个"];
-  const box = Math.floor(n / 1728), stack = Math.floor((n % 1728) / 64), one = n % 64;
-  return (box ? `${box}${b}` : "") + (stack ? `${stack}${s}` : "") + (one || (!box && !stack) ? `${one}${u}` : "");
+// 和桌面版一样换算：中文 盒/组/个，英文 Box/St/u（1 盒 = 27 组 = 1728 个）。
+// 每一级画成一个背包小格子 —— 这是整页的标志细节，只用在和材料数量有关的地方
+function slots(n) {
+  const names = lang === "en" ? ["Box", "St", "u"] : ["盒", "组", "个"];
+  const parts = [Math.floor(n / 1728), Math.floor((n % 1728) / 64), n % 64];
+  return parts
+    .map((value, i) => (value || (i === 2 && n === 0) ? `<span class="slot">${value}<small>${names[i]}</small></span>` : ""))
+    .join("");
+}
+function fillSlots() {
+  document.querySelectorAll(".slots[data-count]").forEach((el) => (el.innerHTML = slots(Number(el.dataset.count))));
 }
 
 let currentView = "all";
@@ -252,7 +260,7 @@ function fillTable(view, animate = true) {
       row.style.setProperty("--i", Math.min(i, STAGGER_CAP));
       row.innerHTML =
         `<img src="assets/blocks/${tex}.png" alt=""><span>${t(zh, en)}</span>` +
-        `<span class="num">${n}</span><span>${units(n)}</span>`;
+        `<span class="num">${n}</span><span class="slots">${slots(n)}</span>`;
       return row;
     })
   );
