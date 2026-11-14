@@ -1,6 +1,6 @@
 [简体中文](./README.md) | [English](./README_EN.md) | **繁體中文**
 
-# LitematicaViewer 投影檢視器 v0.9.4
+# LitematicaViewer 投影檢視器 v0.9.5
 
 ### Minecraft 工具 - 讓投影檢視更加輕量便捷
 
@@ -10,8 +10,9 @@
 [![YoutubeIntro](https://img.shields.io/badge/-Youtube-00A1D6?logo=youtube&logoColor=red)](https://www.youtube.com/watch?v=jgHMK4hmpoM)
 
 GITHUB 連結: https://github.com/albertchen857/LitematicaViewer
+網頁：https://albertchen857.github.io/Litematica-viewer
 穩定版 EXE 在右側 Release 下載，最新預覽版請自行 clone 執行（發現問題歡迎提 ISSUE）
-求求點點星吧 I want Stars~ target 100 stars
+求求點點星吧 I want Stars~ target 1000 stars
 
 ## 支援的檔案格式
 
