@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>投影查看器 · 网页版</title>
+  <link rel="icon" href="../assets/icon.png">
+  <link rel="stylesheet" href="viewer.css">
+  <!-- 渲染引擎：deepslate + gl-matrix（和桌面版「手动3D渲染」同一个版本） -->
+  <script src="https://unpkg.com/deepslate@0.10.1"></script>
+  <script src="https://unpkg.com/gl-matrix@3.4.3/gl-matrix-min.js"></script>
+  <!-- 方块模型 / 贴图索引 / 透明表，由 tools/build_web_data.py 从桌面版复制 -->
+  <script src="resource/assets.js"></script>
+  <script src="resource/opaque.js"></script>
+  <!-- 分步拆解算法（原样取自「投影分步查看器」），挂在 window.Splitter -->
+  <script src="js/tools/splitter.js"></script>
+</head>
+<body>
+<!--
+  网页版第一阶段：读文件 → 统计 → 3D 渲染 → 右侧信息栏。全部在浏览器里完成，文件不上传。
+
+    js/formats.js   三种格式 → 统一模型（照 script/lv/formats.py）
+    js/analysis.js  材料折算、分类、7 项指标、容器物品（照 script/lv/analysis.py）
+    js/render.js    deepslate 渲染 + 环绕相机 + 按层显示
+    js/app.js       界面：拖文件、页签、子区域、语言
+-->
+
+<header class="bar">
+  <a class="brand" href="../">
+    <img src="../assets/icon.png" alt="" width="28" height="28">
+    <span>Litematica Viewer</span>
+  </a>
+  <span class="bar-file" id="bar-file"></span>
+  <div class="bar-actions">
+    <label class="btn btn-accent" id="open-btn">
+      <input type="file" id="file-input" accept=".litematic,.nbt,.mcstructure" hidden>
+      <span data-t="open">打开文件</span>
+    </label>
+    <select class="lang" id="lang" aria-label="Language">
+      <option value="zh_CN">简体中文</option>
+      <option value="zh_TW">繁體中文</option>
+      <option value="en_US">English</option>
+    </select>
+  </div>
+</header>
+
+<main class="layout">
+  <!-- 左：3D -->
+  <section class="stage" id="stage">
+    <canvas id="canvas"></canvas>
+
+    <div class="empty" id="empty">
+      <div class="empty-icon" aria-hidden="true">▼</div>
+      <p class="empty-title" data-t="dropTitle">把投影文件拖到这里</p>
+      <p class="empty-sub"><span data-t="supports">支持</span> <code>.litematic</code> · <code>.nbt</code> · <code>.mcstructure</code></p>
+      <p class="empty-note" data-t="local">文件只在你的浏览器里处理，不会上传</p>
+    </div>
+
+    <div class="progress" id="progress" hidden><div class="progress-bar" id="progress-bar"></div><span id="progress-text"></span></div>
+
+    <div class="layers" id="layers" hidden>
+      <span class="layers-label" data-t="layers">显示层</span>
+      <input type="range" id="layer-min" min="0" value="0" aria-label="min y">
+      <input type="range" id="layer-max" min="0" value="0" aria-label="max y">
+      <span class="layers-value" id="layer-value"></span>
+    </div>
+    <p class="hint" id="hint" hidden data-t="controls">左键拖动旋转 · 右键拖动平移 · 滚轮缩放</p>
+  </section>
+
+  <!-- 右：信息 -->
+  <aside class="side" id="side">
+    <div class="card file-card">
+      <h1 class="file-name" id="file-name" data-t="noFile">还没有打开文件</h1>
+      <p class="file-summary" id="file-summary"></p>
+    </div>
+
+    <div class="card stats" id="stats"></div>
+
+    <div class="card table-card">
+      <div class="regions" id="regions" hidden></div>
+      <div class="tabs" role="tablist" id="tabs"></div>
+      <p class="tab-count" id="tab-count"></p>
+      <div class="table" id="table"></div>
+    </div>
+
+    <!-- 工具：分步拆解 / 等高图。都在当前结构上算，可以随时还原 -->
+    <div class="card tools-card" id="tools" hidden>
+      <h2 class="card-title" data-t="tools">工具</h2>
+
+      <div class="tool">
+        <div class="tool-head"><b data-t="steps">分步拆解</b><button class="btn btn-small" id="steps-run" data-t="split">拆分</button></div>
+        <p class="tool-note" data-t="stepsNote">按层、按材质把投影拆成一步步的建造顺序</p>
+        <div class="steps" id="steps" hidden>
+          <div class="steps-nav">
+            <button class="btn btn-small btn-plain" id="step-prev" aria-label="prev">◀</button>
+            <input type="range" id="step-range" min="0" value="0">
+            <button class="btn btn-small btn-plain" id="step-next" aria-label="next">▶</button>
+          </div>
+          <p class="step-kicker" id="step-kicker"></p>
+          <h3 class="step-title" id="step-title"></h3>
+          <div class="step-mats" id="step-mats"></div>
+          <ul class="step-notes" id="step-notes"></ul>
+        </div>
+      </div>
+
+      <div class="tool">
+        <div class="tool-head"><b data-t="contour">等高图</b></div>
+        <p class="tool-note" data-t="contourNote">去掉树木花草，只留地表，按高度每 5 格换一种陶瓦 / 羊毛</p>
+        <div class="contour-row">
+          <label for="base-y" data-t="baseY">最底层的世界 Y</label>
+          <input type="number" id="base-y" value="63" step="1">
+          <button class="btn btn-small" id="contour-run" data-t="convert">转换</button>
+        </div>
+      </div>
+
+      <button class="btn btn-small btn-plain restore" id="restore" hidden data-t="restore">还原原始投影</button>
+    </div>
+
+    <div class="card cats-card">
+      <h2 class="card-title" data-ui="ui.chart.t2">分类统计</h2>
+      <div class="cats" id="cats"></div>
+    </div>
+  </aside>
+</main>
+
+<div class="drop-veil" id="drop-veil" hidden><span data-t="dropNow">松手打开</span></div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
