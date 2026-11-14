@@ -219,6 +219,7 @@
   "web.note.missing": "{} 塊缺少依附方塊（原投影即如此）",
   "web.note.mixed": "混搭紋理：{}",
   "web.open": "開啟檔案",
+  "web.pageTitle": "投影檢視器 · 網頁版",
   "web.pos": "座標 {}",
   "web.reading": "讀取中",
   "web.recent": "開啟上次的檔案：{}",

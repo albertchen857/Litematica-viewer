@@ -14,30 +14,37 @@ function indexChildren(nodes) {
 
 // ------------------------------------------------------------------ 0. 中英切换
 
-// 规则：网址 ?lang= 优先，其次上次手动选的，最后看浏览器语言（中文系 → 中文，其它 → 英文）
+// 三种语言写在网址上：index.html?lang=cn（简体）/ ?lang=tw（繁体）/ ?lang=en（英文），能直接分享。
+// 网址里没写就是英文。内部用 zh / tw / en。
 const LANG_KEY = "lv-site-lang";
-let lang = (() => {
-  const query = new URLSearchParams(location.search).get("lang");
-  if (query === "en" || query === "zh") return query;
-  const saved = localStorage.getItem(LANG_KEY);
-  if (saved === "en" || saved === "zh") return saved;
-  return (navigator.language || "").toLowerCase().startsWith("zh") ? "zh" : "en";
-})();
-const t = (zh, en) => (lang === "en" ? en : zh);
+const LANGS = ["zh", "tw", "en"];
+const URL_CODE = { zh: "cn", tw: "tw", en: "en" };
+const FROM_URL = { cn: "zh", zh: "zh", tw: "tw", en: "en" };
+let lang = FROM_URL[new URLSearchParams(location.search).get("lang")] || "en";
+const t = (zh, en, tw = zh) => (lang === "en" ? en : lang === "tw" ? tw : zh);
 
 function applyLang() {
-  document.documentElement.lang = lang === "en" ? "en" : "zh-CN";
+  document.documentElement.lang = { zh: "zh-CN", tw: "zh-TW", en: "en" }[lang];
   document.querySelectorAll("[data-en]").forEach((el) => {
-    if (el.dataset.zh === undefined) el.dataset.zh = el.innerHTML; // 第一次切换前把中文原文存起来
-    el.innerHTML = lang === "en" ? el.dataset.en : el.dataset.zh;
+    if (el.dataset.zh === undefined) el.dataset.zh = el.innerHTML; // 第一次切换前把简体原文存起来
+    el.innerHTML = lang === "en" ? el.dataset.en : lang === "tw" ? (el.dataset.tw || el.dataset.zh) : el.dataset.zh;
   });
+  $("lang-switch").value = URL_CODE[lang];
+  // Banner 标题：简体 = 中文 + 英文，繁体 = 繁体中文 + 英文，英文 = 只有英文大标题（背景图固定 app_cn.png）
+  document.querySelectorAll(".ba-zh .ch").forEach((ch) => {
+    if (ch.dataset.zh === undefined) ch.dataset.zh = ch.textContent;
+    ch.textContent = lang === "tw" && ch.dataset.tw ? ch.dataset.tw : ch.dataset.zh;
+  });
+  document.documentElement.dataset.lang = lang;
+  // 网址只留 ?lang=xx（其他查询参数去掉，锚点保留），不刷新页面
+  history.replaceState(null, "", `${location.pathname}?lang=${URL_CODE[lang]}${location.hash}`);
   fillTable(currentView, false);
   fillSlots();
   renderDrop();
 }
 
-$("lang-switch").addEventListener("click", () => {
-  lang = lang === "en" ? "zh" : "en";
+$("lang-switch").addEventListener("change", (e) => {
+  lang = FROM_URL[e.target.value];
   localStorage.setItem(LANG_KEY, lang);
   applyLang();
 });
@@ -223,11 +230,11 @@ const SAMPLE = {
     ["gray_concrete", "灰色混凝土", "Gray Concrete", 497], ["polished_granite", "磨制花岗岩", "Polished Granite", 431],
   ],
   entities: [
-    ["armor_stand", "盔甲架", "Armor Stand", 6], ["painting", "画", "Painting", 4], ["item_frame", "物品展示框", "Item Frame", 3],
+    ["armor_stand", "盔甲架", "Armor Stand", 6, "盔甲座"], ["painting", "画", "Painting", 4, "畫"], ["item_frame", "物品展示框", "Item Frame", 3, "物品展示框"],
   ],
   items: [
-    ["redstone", "红石粉", "Redstone Dust", 128], ["redstone_block", "红石块", "Block of Redstone", 64],
-    ["chest", "箱子", "Chest", 27], ["stone", "石头", "Stone", 12],
+    ["redstone", "红石粉", "Redstone Dust", 128, "紅石粉"], ["redstone_block", "红石块", "Block of Redstone", 64, "紅石方塊"],
+    ["chest", "箱子", "Chest", 27, "儲物箱"], ["stone", "石头", "Stone", 12, "石頭"],
   ],
 };
 SAMPLE.all = [...SAMPLE.blocks, ...SAMPLE.items, ...SAMPLE.entities].sort((a, b) => b[3] - a[3]);
@@ -236,7 +243,7 @@ const TOTALS = { all: [92, 18859], blocks: [90, 18640], entities: [3, 13], items
 // 和桌面版一样换算：中文 盒/组/个，英文 Box/St/u（1 盒 = 27 组 = 1728 个）。
 // 每一级画成一个背包小格子 —— 这是整页的标志细节，只用在和材料数量有关的地方
 function slots(n) {
-  const names = lang === "en" ? ["Box", "St", "u"] : ["盒", "组", "个"];
+  const names = lang === "en" ? ["Box", "St", "u"] : lang === "tw" ? ["盒", "組", "個"] : ["盒", "组", "个"];
   const parts = [Math.floor(n / 1728), Math.floor((n % 1728) / 64), n % 64];
   return parts
     .map((value, i) => (value || (i === 2 && n === 0) ? `<span class="slot">${value}<small>${names[i]}</small></span>` : ""))
@@ -254,18 +261,18 @@ function fillTable(view, animate = true) {
   if (animate) tableShown = true;
   if (!tableShown) return;
   $("mrows").replaceChildren(
-    ...SAMPLE[view].slice(0, 6).map(([tex, zh, en, n], i) => {
+    ...SAMPLE[view].slice(0, 6).map(([tex, zh, en, n, tw], i) => {
       const row = document.createElement("div");
       row.className = animate ? "mrow" : "mrow no-anim";
       row.style.setProperty("--i", Math.min(i, STAGGER_CAP));
       row.innerHTML =
-        `<img src="assets/blocks/${tex}.png" alt=""><span>${t(zh, en)}</span>` +
+        `<img src="assets/blocks/${tex}.png" alt=""><span>${t(zh, en, tw)}</span>` +
         `<span class="num">${n}</span><span class="slots">${slots(n)}</span>`;
       return row;
     })
   );
   const [kinds, total] = TOTALS[view];
-  $("tab-count").textContent = t(`${kinds} 种 · 共 ${total} 个`, `${kinds} kinds · ${total} total`);
+  $("tab-count").textContent = t(`${kinds} 种 · 共 ${total} 个`, `${kinds} kinds · ${total} total`, `${kinds} 種 · 共 ${total} 個`);
 }
 
 document.querySelectorAll(".tab").forEach((tab) =>
@@ -285,7 +292,7 @@ let dropped = []; // 记住拖进来的文件，切语言时按新语言重画
 function renderDrop() {
   const note = $("drop-note");
   if (dropDisabled) {
-    note.textContent = t("网页版分析还在开发中，敬请期待。", "Online analysis is still in development — stay tuned.");
+    note.textContent = t("网页版分析还在开发中，敬请期待。", "Online analysis is still in development — stay tuned.", "網頁版分析還在開發中，敬請期待。");
     return;
   }
   $("drop-files").replaceChildren(
@@ -298,14 +305,14 @@ function renderDrop() {
       item.querySelector("b").textContent = file.name;
       item.querySelector("small").textContent = ok
         ? `${(file.size / 1024).toFixed(1)} KB`
-        : t("不支持的格式", "Unsupported format");
+        : t("不支持的格式", "Unsupported format", "不支援的格式");
       return item;
     })
   );
   note.textContent = dropped.length
     ? t("这个格式打不开，换一个 .litematic / .nbt / .mcstructure 试试。",
-        "That format can't be opened — try a .litematic / .nbt / .mcstructure.")
-    : t("文件只在你的浏览器里，不会上传到任何地方。", "Your file stays in your browser and is never uploaded.");
+        "That format can't be opened — try a .litematic / .nbt / .mcstructure.", "這個格式打不開，換一個 .litematic / .nbt / .mcstructure 試試。")
+    : t("文件只在你的浏览器里，不会上传到任何地方。", "Your file stays in your browser and is never uploaded.", "檔案只在你的瀏覽器裡，不會上傳到任何地方。");
 }
 
 // 收到能读的文件就交给查看器：先存进浏览器（handoff.js），再跳到 viewer/。
@@ -318,9 +325,9 @@ function showFiles(files) {
   const file = dropped.find((f) => SUPPORTED.test(f.name));
   if (!file) return;
   opening = true;
-  $("drop-note").textContent = t("正在打开网页版查看器……", "Opening the web viewer…");
+  $("drop-note").textContent = t("正在打开网页版查看器……", "Opening the web viewer…", "正在開啟網頁版檢視器……");
   window.LVHandoff.put(file)
-    .then(() => { location.href = "viewer/?from=home"; })
+    .then(() => { location.href = `viewer/?from=home&lang=${URL_CODE[lang]}`; })
     .catch(() => { opening = false; renderDrop(); });
 }
 

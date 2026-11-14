@@ -66,6 +66,7 @@ code { font-family: var(--mono); }
 .empty-title { margin: 8px 0 0; font-size: 22px; font-weight: 700; }
 .empty-sub { margin: 0; }
 .empty-sub code { color: var(--pc); font-weight: 700; }
+.empty-open { margin: 8px 0 4px; height: 40px; padding: 0 24px; font-size: 15px; }
 .empty-note { margin: 0; color: var(--muted); font-size: 13px; }
 .recent-btn { margin-top: 12px; max-width: 80%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .recent-btn[hidden] { display: none; }

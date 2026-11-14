@@ -219,6 +219,7 @@
   "web.note.missing": "{} blocks have nothing to attach to (as in the original schematic)",
   "web.note.mixed": "Mixed textures: {}",
   "web.open": "Open file",
+  "web.pageTitle": "Litematica Viewer · Web",
   "web.pos": "Position {}",
   "web.reading": "Reading",
   "web.recent": "Open last file: {}",

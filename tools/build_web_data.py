@@ -74,7 +74,8 @@ def homepage_icons() -> set:
     with open(os.path.join(DOCS, "index.html"), encoding="utf-8") as f:
         names.update(re.findall(r"assets/blocks/([a-z0-9_]+)\.png", f.read()))
     with open(os.path.join(DOCS, "main.js"), encoding="utf-8") as f:
-        names.update(re.findall(r'\["([a-z0-9_]+)", "', f.read()))
+        # 演示数据的行长这样：["grass_block", "草方块", "Grass Block", 9922, ...]
+        names.update(re.findall(r'\["([a-z0-9_]+)", "[^"]+", "[^"]+", \d+', f.read()))
     return names
 
 
@@ -84,10 +85,7 @@ def write_homepage_icons() -> None:
     wanted = homepage_icons()
     for name in sorted(wanted):
         atlas.texture_image(name).save(os.path.join(folder, f"{name}.png"))
-    # 主页不再用的旧图顺手删掉，免得越积越多
-    for file in os.listdir(folder):
-        if file.endswith(".png") and file[:-4] not in wanted:
-            os.remove(os.path.join(folder, file))
+    # 只写、不删：这个文件夹里可能有别人手动放的图，主页不再用的旧图要删请手动删
     print(f"docs/assets/blocks/: {len(wanted)} 张（{', '.join(sorted(wanted))}）")
 
 

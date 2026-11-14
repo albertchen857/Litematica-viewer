@@ -18,18 +18,20 @@ const TABLE_LIMIT = 300; // 表格最多先画这么多行，再多就显示「�
 // tools/build_web_data.py 把它们导出到 data/gamedata.json 的 ui 里。
 const LANGS = ["zh_CN", "zh_TW", "en_US"];
 
+// 和主页一样：语言写在网址上 ?lang=cn / tw / en，没写默认英文；地址栏只留 ?lang=（锚点 #desktop 保留）
+const URL_CODE = { zh_CN: "cn", zh_TW: "tw", en_US: "en" };
+const FROM_URL = { cn: "zh_CN", zh: "zh_CN", tw: "zh_TW", en: "en_US", zh_CN: "zh_CN", zh_TW: "zh_TW", en_US: "en_US" };
+const START_PARAMS = new URLSearchParams(location.search); // 地址栏会被改成只剩 ?lang=，启动参数先留一份
 function pickLang() {
-  const q = new URLSearchParams(location.search).get("lang");
-  const saved = localStorage.getItem("lv-viewer-lang");
-  const nav = (navigator.language || "").toLowerCase();
-  const guess = nav.startsWith("zh") ? (/tw|hk|hant/.test(nav) ? "zh_TW" : "zh_CN") : "en_US";
-  for (const v of [q, saved, guess]) if (LANGS.includes(v)) return v;
-  return "zh_CN";
+  return FROM_URL[new URLSearchParams(location.search).get("lang")] || "en_US";
+}
+function syncUrl() {
+  history.replaceState(null, "", `${location.pathname}?lang=${URL_CODE[lang]}${location.hash}`);
 }
 let lang = pickLang();
 
 // 操作偏好存在 localStorage（这个站点自己的存储，不上传）：材料表页签、分步拆解的几个参数。
-// 语言和主题各有自己的键（lv-viewer-lang / lv-viewer-theme）。
+// 语言写在网址上（?lang=），主题存在 lv-viewer-theme。
 const PREFS_KEY = "lv-viewer-prefs";
 const STEP_INPUTS = { detail: "opt-detail", maxmat: "opt-maxmat", shapes: "opt-shapes", band: "opt-band", cross: "opt-cross" };
 function loadPrefs() {
@@ -86,6 +88,8 @@ function applyLang() {
   document.querySelectorAll("[data-t]").forEach((el) => (el.textContent = t(el.dataset.t)));
   document.querySelectorAll("[data-ui]").forEach((el) => (el.textContent = ui(el.dataset.ui)));
   $("lang").value = lang;
+  document.title = t("pageTitle");
+  syncUrl();
   if ($("layer-mode")) $("layer-mode").textContent = t("layerMode." + layerMode);
   if (state.structure) renderInfo();
   if (state.steps) renderStep();
@@ -475,7 +479,7 @@ function runContour() {
 
 function bind() {
   $("file-input").addEventListener("change", (e) => e.target.files[0] && openFile(e.target.files[0]));
-  $("lang").addEventListener("change", (e) => { lang = e.target.value; localStorage.setItem("lv-viewer-lang", lang); applyLang(); });
+  $("lang").addEventListener("change", (e) => { lang = e.target.value; applyLang(); });
 
   // 整个窗口都能接文件
   let depth = 0;
@@ -551,12 +555,12 @@ async function main() {
     return;
   }
 
-  const params = new URLSearchParams(location.search);
+  const params = START_PARAMS;
   // 从主页拖进来的：取出暂存的文件，再把网址里的 from=home 去掉，刷新时不会再找一遍
   if (params.get("from") === "home") {
     const file = await window.LVHandoff.take().catch(() => null);
     params.delete("from");
-    history.replaceState(null, "", location.pathname + (params.size ? "?" + params : ""));
+    syncUrl();
     if (file) openFile(file);
   }
   // ?file=<网址> 可以直接打开远程投影（同源或允许跨域的地址）

@@ -219,6 +219,7 @@
   "web.note.missing": "{} 块缺少依附方块（原投影即如此）",
   "web.note.mixed": "混搭纹理：{}",
   "web.open": "打开文件",
+  "web.pageTitle": "投影查看器 · 网页版",
   "web.pos": "坐标 {}",
   "web.reading": "读取中",
   "web.recent": "打开上次的文件：{}",

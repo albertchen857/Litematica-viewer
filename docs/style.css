@@ -134,7 +134,10 @@ code, .mono { font-family: var(--mono); }
 .hero::after {
   content: ""; position: absolute; inset: 0; z-index: 1;
   /* 同一个底色只改透明度，左边浓、右边淡：标题那半边安静下来，图标那半边还看得到截图 */
-  background: linear-gradient(90deg,
+  /* 第一层：底部往下渐变到页面底色，浅蓝三角和下面的内容不再一刀切 */
+  background:
+    linear-gradient(to bottom, transparent 62%, var(--bg) 100%),
+    linear-gradient(90deg,
     color-mix(in srgb, var(--bg) 58%, transparent) 0%,
     color-mix(in srgb, var(--bg) 38%, transparent) 45%,
     color-mix(in srgb, var(--bg) 8%, transparent) 80%);
@@ -177,6 +180,23 @@ code, .mono { font-family: var(--mono); }
   letter-spacing: -0.01em;
   -webkit-text-stroke-width: 0.16em;
 }
+/* 英文页：中文行和小英文行都不要，换成英文大标题（同样的斜体白描边，光环 / 十字挂在两词交界） */
+/* 规格照抄中文页的英文副标题（字体 / 字距 / 描边 / 词距全一样），只是整体放大 */
+.ba-en-main {
+  display: none;
+  padding-left: 0.12em;
+  font: 900 0.8em/1.05 "RoGSanSrfStd-Bd", "Arial Black", "Segoe UI Black", Arial, sans-serif;
+  letter-spacing: -0.01em;
+  -webkit-text-stroke-width: 0.16em;
+}
+/* 两行：第一行 Litematica，第二行 Viewer（往右错开一点，像 BA 字标那样的错落） */
+.ba-en-main .ba-blue, .ba-en-main .ba-ink { display: block; }
+.ba-en-main .ba-ink { position: relative; width: max-content; margin-left: 0.9em; }
+/* 两行时光环和十字挪到 Viewer 左边空出来的那块，不再往上压到 Litematica */
+.ba-en-main .ba-halo { left: -0.95em; top: -0.12em; width: 2.2em; height: 0.95em; }
+.ba-en-main .ba-cross { left: -0.8em; top: -0.3em; width: 1.05em; height: 1.05em; }
+html[data-lang="en"] .ba-zh, html[data-lang="en"] .ba-en { display: none; }
+html[data-lang="en"] .ba-en-main { display: block; }
 .ba-blue { color: var(--mc); }
 .ba-ink  { color: var(--tt); }
 .ba-en .ba-ink { margin-left: 0.22em; }
@@ -238,7 +258,7 @@ code, .mono { font-family: var(--mono); }
 .hero-shot { transition: transform 1400ms var(--ease-settle); }
 .hero-sky  { transform: translate(-30%, 30%); }
 .ch        { opacity: 0; transform: translateY(55%) scale(0.5); }
-.ba-en, .hero-actions { opacity: 0; transform: translateY(20px); }
+.ba-en, .ba-en-main, .hero-actions { opacity: 0; transform: translateY(20px); }
 .ba-halo   { opacity: 0; transform: scale(0.4) rotate(-30deg); }
 .ba-cross  { opacity: 0; transform: scale(1.6); }
 
@@ -259,7 +279,7 @@ code, .mono { font-family: var(--mono); }
   transition: opacity var(--beat-1) var(--ease-settle), transform var(--beat-3) var(--ease-bounce);
   transition-delay: 840ms;
 }
-.is-ready .ba-en {
+.is-ready .ba-en, .is-ready .ba-en-main {
   opacity: 1; transform: none;
   transition: opacity var(--beat-2) var(--ease-settle), transform var(--beat-3) var(--ease-bounce);
   transition-delay: 720ms;
@@ -534,7 +554,7 @@ code, .mono { font-family: var(--mono); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
-  .hero-sky, .ch, .ba-en, .ba-halo, .ba-cross, .hero-actions, .hero-rule,
+  .hero-sky, .ch, .ba-en, .ba-en-main, .ba-halo, .ba-cross, .hero-actions, .hero-rule,
   [data-reveal], [data-stagger], .suspense-a, .suspense-sub { opacity: 1 !important; transform: none !important; }
   .hero-shot { transform: translate(-42%, -50%) !important; }
 }
