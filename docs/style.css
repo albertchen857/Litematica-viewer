@@ -108,15 +108,19 @@ code, .mono { font-family: var(--mono); }
   position: relative;
   min-height: clamp(560px, 86vh, 860px);
   display: flex; align-items: center;
-  overflow: hidden;
+  /* 不整体裁切：下载下拉框要能伸出 Banner 下边。会超出去的背景截图由 .hero-bg 自己裁；
+     横向的溢出（右边图标动画）用 overflow-x: clip 挡住，不会出横向滚动条 */
+  overflow-x: clip;
   background: var(--mc);
   isolation: isolate;
+  z-index: 10;   /* 比后面的内容高，下拉框盖在下面一节上；导航栏是 20，仍在最上 */
 }
 
 /* 背景整体虚化：截图放大铺满，浅天蓝三角照 COVER2 从左上切到右下 */
 .hero-bg {
   position: absolute; inset: -40px; z-index: 0;   /* 往外多铺一圈，模糊后边缘不露底 */
   filter: blur(5px);
+  clip-path: inset(40px);                         /* 模糊之后再裁回 Banner 的大小 */
 }
 .hero-shot {
   position: absolute; left: 50%; top: 50%;
@@ -245,6 +249,31 @@ html[data-lang="en"] .ba-en-main { display: block; }
 .hero-download { gap: var(--s2); font-size: 19px; padding: 14px 32px; }
 .hero-download .arrow { font-size: 0.7em; }
 .hero-meta { color: var(--tt); font-size: 14px; font-weight: 700; }
+
+/* 下载下拉框：鼠标放上去 / 键盘 Tab 进去 / 手机点按钮（按钮拿到焦点）都会展开 */
+.dl { position: relative; }
+.dl-menu {
+  position: absolute; left: 0; top: calc(100% + 8px); z-index: 30; min-width: 300px;
+  display: grid; gap: 2px; padding: 8px;
+  background: var(--bg); border-radius: var(--r); box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
+  opacity: 0; visibility: hidden; transform: translateY(-6px);
+  transition: opacity 140ms var(--ease-settle), transform 180ms var(--ease-settle), visibility 0s 180ms;
+}
+.dl-menu::before { content: ""; position: absolute; left: 0; right: 0; top: -10px; height: 10px; } /* 按钮和菜单之间的桥 */
+.dl:hover .dl-menu, .dl:focus-within .dl-menu { opacity: 1; visibility: visible; transform: none; transition-delay: 0s; }
+.dl-group { margin: 6px 10px 2px; color: var(--muted, #6b7280); font-size: 12px; font-weight: 700; }
+.dl-item {
+  position: relative; display: grid; gap: 1px; padding: 8px 10px; border-radius: 8px;
+  color: var(--tt); text-decoration: none;
+}
+.dl-item b { font-size: 15px; }
+.dl-item small { color: var(--muted, #6b7280); font-size: 12px; }
+.dl-item:hover, .dl-item:focus-visible { background: color-mix(in srgb, var(--mc) 12%, var(--bg)); outline: none; }
+/* 访问者自己的系统（main.js 判断），右边标个「推荐」 */
+.dl-item.is-mine::after {
+  content: attr(data-pick); position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+  padding: 2px 8px; border-radius: 999px; background: var(--pc); color: var(--bg); font-size: 12px; font-weight: 700;
+}
 
 /* ---- 右边：图标（矢量重绘，开场按零件画出来） */
 
@@ -523,10 +552,11 @@ html[data-lang="en"] .ba-en-main { display: block; }
 .download-title { margin: 0; font-size: clamp(40px, 6vw, 72px); font-weight: 700; line-height: 1.1; }
 .download-sub { margin: var(--s2) 0 var(--s5); color: var(--pr); }
 .download-actions { display: flex; flex-wrap: wrap; gap: var(--s3); }
-/* 按钮下面一行小字：历史版本去 GitHub */
-.download-alt { margin: var(--s4) 0 0; font-size: 14px; }
-.download-alt a { color: inherit; text-underline-offset: 3px; }
-.download-alt a:hover { color: var(--bg); }
+/* 下载带：四个平台直接下载（白底），下面一排 GitHub 下载 / Nova */
+.dl-btn { display: inline-grid; justify-items: start; gap: 2px; background: var(--bg); color: var(--tt); }
+.dl-btn small { font: 500 12px var(--mono, monospace); opacity: 0.6; }
+.dl-btn.is-mine { box-shadow: inset 0 0 0 3px var(--mc); }
+.download-more { margin-top: var(--s3); }
 
 .footer {
   display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--s2);

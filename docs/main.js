@@ -41,6 +41,28 @@ function applyLang() {
   fillTable(currentView, false);
   fillSlots();
   renderDrop();
+  markMyDownload();
+}
+
+// 下载：猜访问者的系统，给对应的安装包标「推荐」（下拉框里的那项 + 下载带里的按钮）。
+// Mac 分不清 Intel / Apple 芯片时（Safari 不给），默认推荐 Apple 芯片 —— 近几年的 Mac 基本都是
+function myOS() {
+  const ua = navigator.userAgent, platform = navigator.userAgentData?.platform || navigator.platform || "";
+  if (/Win/i.test(platform) || /Windows/i.test(ua)) return "windows";
+  if (/Mac/i.test(platform) || /Mac OS X/i.test(ua)) {
+    if (/Intel/i.test(navigator.userAgentData?.architecture || "")) return "mac-intel";
+    return "mac-arm";
+  }
+  if (/Android|iPhone|iPad/i.test(ua)) return null; // 手机装不了桌面版，不推荐
+  if (/Linux/i.test(platform) || /Linux/i.test(ua)) return "linux";
+  return null;
+}
+function markMyDownload() {
+  const mine = myOS();
+  document.querySelectorAll(".dl-item[data-os], .dl-btn[data-os]").forEach((el) => {
+    el.classList.toggle("is-mine", el.dataset.os === mine);
+    el.dataset.pick = t("推荐", "Recommended", "推薦");
+  });
 }
 
 $("lang-switch").addEventListener("change", (e) => {

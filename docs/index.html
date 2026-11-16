@@ -61,10 +61,23 @@
       <span class="hero-rule" aria-hidden="true"></span>
 
       <div class="hero-actions">
-        <!-- 安装包放在 Cloudflare R2（download.lite-viewer.com），学校网络打不开 GitHub 也能下 -->
-        <a class="btn btn-accent btn-lg hero-download" href="https://download.lite-viewer.com/LitematicaViewer-latest.zip">
-          <span class="arrow" aria-hidden="true">▼</span> <span data-en="Download latest" data-tw="下載最新版">下载最新版</span>
-        </a>
+        <!-- 下载：鼠标放上去（手机点一下）出下拉框。
+             直接下载 = Cloudflare R2（download.lite-viewer.com，学校网络打不开 GitHub 也能下）；
+             GitHub 下载 = Releases 页。main.js 按访问者的系统给对应那项标「推荐」 -->
+        <div class="dl" id="hero-dl">
+          <button class="btn btn-accent btn-lg hero-download" type="button" aria-haspopup="menu">
+            <span class="arrow" aria-hidden="true">▼</span> <span data-en="Download latest" data-tw="下載最新版">下载最新版</span>
+          </button>
+          <div class="dl-menu" role="menu">
+            <p class="dl-group" data-en="Direct download" data-tw="直接下載">直接下载</p>
+            <a class="dl-item" role="menuitem" href="https://download.lite-viewer.com/LitematicaViewer-latest-windows-x64.zip" data-os="windows"><b data-en="Windows" data-tw="Windows">Windows</b><small>.zip · x64</small></a>
+            <a class="dl-item" role="menuitem" href="https://download.lite-viewer.com/LitematicaViewer-latest-macos-arm64.dmg" data-os="mac-arm"><b data-en="macOS (Apple silicon)" data-tw="macOS（Apple 晶片）">macOS（Apple 芯片）</b><small>.dmg · M1 / M2 / M3 / M4</small></a>
+            <a class="dl-item" role="menuitem" href="https://download.lite-viewer.com/LitematicaViewer-latest-macos-x64.dmg" data-os="mac-intel"><b data-en="macOS (Intel)" data-tw="macOS（Intel）">macOS（Intel）</b><small>.dmg · x64</small></a>
+            <a class="dl-item" role="menuitem" href="https://download.lite-viewer.com/LitematicaViewer-latest-linux-x64.tar.gz" data-os="linux"><b data-en="Linux" data-tw="Linux">Linux</b><small>.tar.gz · x64</small></a>
+            <p class="dl-group" data-en="Or from GitHub" data-tw="或從 GitHub">或从 GitHub</p>
+            <a class="dl-item" role="menuitem" href="https://github.com/albertchen857/Litematica-viewer/releases/latest" target="_blank" rel="noopener"><b data-en="GitHub Releases" data-tw="GitHub Releases">GitHub Releases</b><small data-en="All platforms · older versions" data-tw="全部平台 · 歷史版本">全部平台 · 历史版本</small></a>
+          </div>
+        </div>
         <span class="hero-meta" data-en="Windows · macOS · Linux · Free &amp; open source" data-tw="Windows · macOS · Linux · 免費開源">Windows · macOS · Linux · 免费开源</span>
       </div>
     </div>
@@ -187,10 +200,15 @@
     <p class="mono download-title" data-en="Download" data-tw="下載">下载</p>
     <p class="download-sub" data-en="Free and open source · installers for Windows / macOS / Linux" data-tw="免費開源 · Windows / macOS / Linux 都有安裝包">免费开源 · Windows / macOS / Linux 都有安装包</p>
     <div class="download-actions">
-      <a class="btn btn-accent btn-lg" href="https://download.lite-viewer.com/LitematicaViewer-latest.zip" data-en="Download latest" data-tw="下載最新版">下载最新版</a>
+      <a class="btn btn-lg dl-btn" href="https://download.lite-viewer.com/LitematicaViewer-latest-windows-x64.zip" data-os="windows"><span data-en="Windows" data-tw="Windows">Windows</span><small>.zip · x64</small></a>
+      <a class="btn btn-lg dl-btn" href="https://download.lite-viewer.com/LitematicaViewer-latest-macos-arm64.dmg" data-os="mac-arm"><span data-en="macOS (Apple silicon)" data-tw="macOS（Apple 晶片）">macOS（Apple 芯片）</span><small>.dmg · M1 / M2 / M3 / M4</small></a>
+      <a class="btn btn-lg dl-btn" href="https://download.lite-viewer.com/LitematicaViewer-latest-macos-x64.dmg" data-os="mac-intel"><span data-en="macOS (Intel)" data-tw="macOS（Intel）">macOS（Intel）</span><small>.dmg · x64</small></a>
+      <a class="btn btn-lg dl-btn" href="https://download.lite-viewer.com/LitematicaViewer-latest-linux-x64.tar.gz" data-os="linux"><span data-en="Linux" data-tw="Linux">Linux</span><small>.tar.gz · x64</small></a>
+    </div>
+    <div class="download-actions download-more">
+      <a class="btn btn-ink btn-lg" href="https://github.com/albertchen857/Litematica-viewer/releases/latest" target="_blank" rel="noopener" data-en="GitHub download" data-tw="GitHub 下載">GitHub 下载</a>
       <a class="btn btn-plain btn-lg" href="https://github.com/LitematicaViewer/Litematica-Nova" target="_blank" rel="noopener" data-en="Litematica Nova (Pro)" data-tw="Litematica Nova（Pro 版）">Litematica Nova（Pro 版）</a>
     </div>
-    <p class="download-sub download-alt"><a href="https://github.com/albertchen857/LitematicaViewer/releases" target="_blank" rel="noopener" data-en="Older versions on GitHub Releases" data-tw="歷史版本：GitHub Releases">历史版本：GitHub Releases</a></p>
   </div>
 </section>
 
