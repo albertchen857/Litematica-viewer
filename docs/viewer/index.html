@@ -8,8 +8,9 @@
   <link rel="stylesheet" href="viewer.css">
   <!-- 渲染引擎：deepslate 0.27（带透明网格和选中框）+ gl-matrix（相机矩阵）。
        桌面版「手动3D渲染」打开的也是这个页面 -->
-  <script src="https://unpkg.com/deepslate@0.27.2/dist/deepslate.umd.cjs"></script>
-  <script src="https://unpkg.com/gl-matrix@3.4.3/gl-matrix-min.js"></script>
+  <!-- 放在自己站点上（vendor/），不走 unpkg：学校等网络可能拦 CDN，查看器就打不开了 -->
+  <script src="vendor/deepslate-0.27.2.umd.js"></script>
+  <script src="vendor/gl-matrix-3.4.3.min.js"></script>
   <!-- 方块模型 / 贴图索引 / 透明表，由 tools/build_web_data.py 从桌面版复制 -->
   <script src="resource/assets.js"></script>
   <script src="resource/opaque.js"></script>

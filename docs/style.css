@@ -521,6 +521,10 @@ html[data-lang="en"] .ba-en-main { display: block; }
 .download-title { margin: 0; font-size: clamp(40px, 6vw, 72px); font-weight: 700; line-height: 1.1; }
 .download-sub { margin: var(--s2) 0 var(--s5); color: var(--pr); }
 .download-actions { display: flex; flex-wrap: wrap; gap: var(--s3); }
+/* 按钮下面一行小字：历史版本去 GitHub */
+.download-alt { margin: var(--s4) 0 0; font-size: 14px; }
+.download-alt a { color: inherit; text-underline-offset: 3px; }
+.download-alt a:hover { color: var(--bg); }
 
 .footer {
   display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--s2);
