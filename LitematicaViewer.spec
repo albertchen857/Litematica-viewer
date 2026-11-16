@@ -24,12 +24,13 @@ datas = [
     ("tm_icon.ico", "."),
     ("requirements.txt", "."),
     # 网页版查看器：「手动3D渲染」直接用它；方块图标也从它的贴图图集里裁
-    ("docs/viewer/index.html", "docs/viewer"),
-    ("docs/viewer/viewer.css", "docs/viewer"),
-    ("docs/viewer/js/*.js", "docs/viewer/js"),
-    ("docs/viewer/js/tools/*.js", "docs/viewer/js/tools"),
-    ("docs/viewer/data/*.json", "docs/viewer/data"),
-    ("docs/viewer/resource/*", "docs/viewer/resource"),
+    ("viewer/index.html", "viewer"),
+    ("viewer/viewer.css", "viewer"),
+    ("viewer/js/*.js", "viewer/js"),
+    ("viewer/js/tools/*.js", "viewer/js/tools"),
+    ("viewer/vendor/*.js", "viewer/vendor"),  # deepslate / gl-matrix，离线也能渲染
+    ("viewer/data/*.json", "viewer/data"),
+    ("viewer/resource/*", "viewer/resource"),
 ]
 
 # 预编译好的 .mo 一起带上，避免打包后还得现场编译（有些系统临时目录是只读的）。

@@ -156,7 +156,7 @@
 - 多处 `threading.Thread(target=f())`，括号一加当场在主线程执行。
 
 ### 架构重构
-- 1396 行单文件 + 全局变量，拆为 `script/lv/` 包：`config` `i18n` `model` `formats` `blockmap` `analysis` `edit` `render` `tools` `ui_*`，一个文件一件事（详见 `docs/ARCHITECTURE.md`，含旧函数搬迁对照表）。
+- 1396 行单文件 + 全局变量，拆为 `script/lv/` 包：`config` `i18n` `model` `formats` `blockmap` `analysis` `edit` `render` `tools` `ui_*`，一个文件一件事（详见 `ARCHITECTURE.md`，含旧函数搬迁对照表）。
 - **统一结构模型**：调色板 + numpy 索引数组。统计改用 `np.bincount` 对调色板折算，32×81×170 投影从几十秒降到约 0.1 秒。
 - 修正旧版材料折算错误：双层台阶算 3 个（应为 2）、海龟蛋/海泡菜算 n+1、`water_cauldron` 被误折成水、空心立方体 `hollow` 参数被覆盖失效。
 - 替换规则解析从 `eval()` 改为 `json.loads`（原写法等于让输入框可执行任意代码）。

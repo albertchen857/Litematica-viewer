@@ -109,11 +109,9 @@ python tools/lang_build.py && pyinstaller --noconfirm LitematicaViewer.spec
 script/
   LitematicaViewer.py   entry point
   webview_host.py       subprocess entry for the 3D window
-  lv/                   the actual code, see docs/ARCHITECTURE.md
-docs/
-  index.html            project homepage (GitHub Pages)
-  viewer/               web viewer; the desktop "Manual 3D Rendering" uses it too
-  viewer/resource/      texture atlas shared by desktop and web; block icons are cropped from it
+  lv/                   the actual code, see ARCHITECTURE.md
+viewer/                 3D viewer used by "Manual 3D Rendering"; synced to the website's docs/viewer on the web branch
+  resource/             texture atlas; block icons are cropped from it
 lang/
   source/*.json         the single source of truth for translations
   data.json             theme colours and user settings
@@ -121,7 +119,8 @@ lang/
 tools/
   lang_build.py         compile po/mo
   lang_check.py         report missing translation keys
-  build_web_data.py     sync block names / categories / textures to the web viewer
+  build_web_data.py     build the viewer's block names / categories / icon data (viewer/data, viewer/resource)
+  sync_site.py          copy viewer/ into the website's docs/viewer (web branch) and crop homepage block icons
 ```
 
 ## Adding a language

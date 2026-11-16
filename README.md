@@ -103,11 +103,9 @@ python tools/lang_build.py && pyinstaller --noconfirm LitematicaViewer.spec
 script/
   LitematicaViewer.py   入口
   webview_host.py       3D 渲染窗口的子进程入口
-  lv/                   主体代码，见 docs/ARCHITECTURE.md
-docs/
-  index.html            项目主页（GitHub Pages）
-  viewer/               网页版查看器；桌面版的「手动3D渲染」也直接用它
-  viewer/resource/      贴图图集，桌面版和网页版共用这一份，方块图标也从这里裁
+  lv/                   主体代码，见 ARCHITECTURE.md
+viewer/                 3D 查看器（「手动3D渲染」用它）；网站 web 分支的 docs/viewer 由它同步过去
+  resource/             贴图图集，方块图标也从这里裁
 lang/
   source/*.json         翻译的唯一数据源，改这里
   data.json             主题色和用户设置
@@ -115,7 +113,8 @@ lang/
 tools/
   lang_build.py         编译 po/mo
   lang_check.py         检查翻译有没有漏
-  build_web_data.py     把方块名 / 分类 / 贴图同步给网页版
+  build_web_data.py     生成查看器用的方块名 / 分类 / 图标数据（viewer/data、viewer/resource）
+  sync_site.py          把 viewer/ 同步到网站（web 分支）的 docs/viewer，顺带裁主页用的方块小图
 ```
 
 ## 加一门语言

@@ -129,7 +129,7 @@ Structure
 ### 旧 `script/Tk/LitRender.py`
 
 整个删掉。`OpenGLView` / `draw_cube` / `CCrgb`（取贴图主色画彩色方块）
-被 `render.py` + 网页版查看器（`docs/viewer/`）的 deepslate 渲染取代 —— 后者是真的贴图渲染，
+被 `render.py` + 网页版查看器（`viewer/`）的 deepslate 渲染取代 —— 后者是真的贴图渲染，
 而且顺带解决了 `pyopengltk` 在 macOS 上导入失败的问题。
 
 ### 旧 `script/JSrender/`（已整个删除）
@@ -139,8 +139,8 @@ Structure
 | `webview.py` | `script/webview_host.py`（改成独立子进程 + `http_server=True`） |
 | `http_server.py` | 删了，pywebview 自带 http 服务 |
 | `assets_update.py` | `tools/update_jsassets.py` |
-| `viewer.html` / `src/*.js` | 删了。桌面版的 3D 窗口直接打开网页版查看器 `docs/viewer/index.html#desktop` |
-| `resource/`（贴图图集） | 挪到 `docs/viewer/resource/`，桌面版和网页版共用一份 |
+| `viewer.html` / `src/*.js` | 删了。桌面版的 3D 窗口直接打开网页版查看器 `viewer/index.html#desktop` |
+| `resource/`（贴图图集） | 挪到 `viewer/resource/`，桌面版和网页版共用一份 |
 | 仓库根目录的 `block/`、`item/`（上千张 png） | 删了。图标运行时从图集裁（`lv/atlas.py`），索引在 `resource/icons.json` |
 
 ---
@@ -150,20 +150,20 @@ Structure
 旧版试过两条路，都会和 Tk 打架：在 Tk 里塞 `pyopengltk` 画布（macOS 直接导入失败），
 以及在线程里起 http 服务 + 开窗（pywebview 和 tkinter 都要独占主线程）。
 
-现在的做法：桌面版和网页版用**同一个查看器**（`docs/viewer/`），渲染、相机、按层显示、
+现在的做法：桌面版和网页版用**同一个查看器**（`viewer/`），渲染、相机、按层显示、
 分步拆解、等高图都只有一份代码。
 
 ```
 主进程 (tkinter)                          子进程 (pywebview)
      │                                         │
      ├─ render.write_payload()                 │
-     │    写 docs/viewer/payload.json          │
+     │    写 viewer/payload.json          │
      │    {format:3, lang, name, regions:[     │
      │      {origin, size, palette,            │
      │       idx_b64, state_b64}]}             │
      │                                         │
      └─ subprocess.Popen(webview_host.py) ────►│
-                                               ├─ 打开 docs/viewer/index.html#desktop
+                                               ├─ 打开 viewer/index.html#desktop
                                                ├─ webview.start(http_server=True)
                                                └─ app.js 见到 #desktop → fetch payload.json
                                                   → formats.fromPayload → 和网页版同一套渲染

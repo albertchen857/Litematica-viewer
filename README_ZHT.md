@@ -66,11 +66,9 @@ python tools/lang_build.py && pyinstaller --noconfirm LitematicaViewer.spec
 script/
   LitematicaViewer.py   入口
   webview_host.py       3D 渲染視窗的子行程入口
-  lv/                   主體程式碼，見 docs/ARCHITECTURE.md
-docs/
-  index.html            專案首頁（GitHub Pages）
-  viewer/               網頁版檢視器；桌面版的「手動3D渲染」也直接用它
-  viewer/resource/      貼圖圖集，桌面版和網頁版共用這一份，方塊圖示也從這裡裁
+  lv/                   主體程式碼，見 ARCHITECTURE.md
+viewer/                 3D 檢視器（「手動3D渲染」用它）；網站 web 分支的 docs/viewer 由它同步過去
+  resource/             貼圖圖集，方塊圖示也從這裡裁
 lang/
   source/*.json         翻譯的唯一資料來源，改這裡
   data.json             主題色和使用者設定

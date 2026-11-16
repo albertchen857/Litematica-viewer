@@ -9,7 +9,7 @@
     blockmap.py     Java <-> Bedrock 方块 ID 与状态的互相映射
     analysis.py     方块统计、分类、容器解析
     edit.py         生成图形投影、批量替换方块、跨版本转换
-    render.py       3D 渲染桥：把结构写成 payload.json，用独立子进程开网页版查看器（docs/viewer）
+    render.py       3D 渲染桥：把结构写成 payload.json，用独立子进程开网页版查看器（viewer）
     atlas.py        方块 / 物品图标：从共用的贴图图集里裁，不再存上千张 png
     ui_widgets.py   通用控件（可收纳面板等）
     ui_main.py      主窗口

@@ -2,7 +2,7 @@
 
 由 script/lv/render.py 启动，命令行是::
 
-    python script/webview_host.py <docs/viewer/index.html 路径> <窗口标题>
+    python script/webview_host.py <viewer/index.html 路径> <窗口标题>
 
 单独跑一个进程是有意为之：pywebview 要独占主线程，和 tkinter 的 mainloop
 放一起必然打架。这里 http_server=True 让 pywebview 自己起一个本地 http 服务，

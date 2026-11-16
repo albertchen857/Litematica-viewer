@@ -1,6 +1,6 @@
 """方块 / 物品图标：一律从贴图图集 atlas.png 里裁，不再单独存上千张 png。
 
-图集和模型数据只有一份，放在 ``docs/viewer/resource/``（网页版查看器和桌面版共用，
+图集和模型数据只有一份，放在 ``viewer/resource/``（网页版查看器和桌面版共用，
 GitHub Pages 也直接用这一份）::
 
     assets.js   blockstates / models / textures（textures 是「贴图路径 → 图集里的 [u, v, 宽, 高]」）
@@ -19,7 +19,7 @@ import re
 
 from .config import res
 
-RESOURCE = res("docs", "viewer", "resource")
+RESOURCE = res("viewer", "resource")
 ASSETS_JS = os.path.join(RESOURCE, "assets.js")
 ATLAS_PNG = os.path.join(RESOURCE, "atlas.png")
 ICONS_JSON = os.path.join(RESOURCE, "icons.json")

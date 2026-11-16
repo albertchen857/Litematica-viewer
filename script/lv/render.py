@@ -1,9 +1,9 @@
-"""3D 渲染桥：桌面版的「手动3D渲染」直接用网页版查看器（docs/viewer/），两边一套代码。
+"""3D 渲染桥：桌面版的「手动3D渲染」直接用网页版查看器（viewer/），两边一套代码。
 
 在独立子进程里用 pywebview 开窗（webview_host.py）。为什么要独立子进程：pywebview 和
 tkinter 都要占着主线程跑各自的事件循环，放在同一个进程里必冲突（macOS 上更是直接崩）。
 
-数据怎么过去：写 ``docs/viewer/payload.json``，页面用 ``#desktop`` 打开，看到这个标记
+数据怎么过去：写 ``viewer/payload.json``，页面用 ``#desktop`` 打开，看到这个标记
 就不等用户拖文件，而是 fetch(cache:"no-store") 读这份结构。走 pywebview 自带的 http 服务
 而不是 file://，canvas 读贴图图集才不会被安全限制挡住。
 渲染、相机、按层显示、分步拆解、等高图这些全是网页版的功能，桌面版不再自己维护一份。
@@ -19,10 +19,10 @@ import numpy as np
 
 from .config import UI, language, res
 
-VIEWER_HTML = res("docs", "viewer", "index.html")
-PAYLOAD_JSON = res("docs", "viewer", "payload.json")
+VIEWER_HTML = res("viewer", "index.html")
+PAYLOAD_JSON = res("viewer", "payload.json")
 
-# payload 结构变了就把这个加一，和 docs/viewer/js/formats.js 的 fromPayload 对应。
+# payload 结构变了就把这个加一，和 viewer/js/formats.js 的 fromPayload 对应。
 # 3：按区域分开传（多子区域的投影在网页里也能分区域看），带作者 / 简介 / 版本
 PAYLOAD_FORMAT = 3
 

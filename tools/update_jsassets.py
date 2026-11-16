@@ -1,4 +1,4 @@
-"""更新方块资源（docs/viewer/resource/ 的 assets.js + atlas.png + icons.json）和方块/物品名对照表。
+"""更新方块资源（viewer/resource/ 的 assets.js + atlas.png + icons.json）和方块/物品名对照表。
 
 桌面版和网页版共用这一份资源，图标也是从 atlas 现场裁，所以更新完不用再补图标。
 
@@ -23,7 +23,7 @@ import os
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-RESOURCE = os.path.join(ROOT, "docs", "viewer", "resource")
+RESOURCE = os.path.join(ROOT, "viewer", "resource")
 sys.path.insert(0, os.path.join(ROOT, "script"))
 SETTING_JSON = os.path.join(ROOT, "lang", "setting.json")
 

@@ -1,6 +1,6 @@
 """开机检查方块资源版本，和最新版对不上就自动拉一份。
 
-资源指 ``docs/viewer/resource/`` 下的 atlas.png + assets.js（桌面版和网页版共用这一份），
+资源指 ``viewer/resource/`` 下的 atlas.png + assets.js（桌面版和网页版共用这一份），
 本地版本记在同目录的 version.json 里。换完资源会顺手重建 icons.json（方块图标索引）。
 
 两条必须守住的规矩：
