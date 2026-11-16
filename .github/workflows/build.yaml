@@ -3,7 +3,9 @@ name: Build Executable
 on:
   push:
     branches: ["*"]
-    tags: ["v*"]          # 推 v0.9.6 这样的标签：构建完自动建一个 GitHub Release 草稿
+    # 推版本标签（沿用以前的 litematica0_9_6，或 v0.9.6）：构建完自动建一个 GitHub Release 草稿。
+    # 程序里「检查更新」拿最新 Release 的标签和 APP_VERSION 比，两种写法都认
+    tags: ["litematica*", "v*"]
   pull_request:
     branches: ["*"]
   workflow_dispatch:
@@ -116,11 +118,11 @@ jobs:
             dist/*.tar.gz
             dist/*.dmg
 
-  # 只有推标签（v*）时才跑：把四个平台的包挂到 GitHub Release 上。
+  # 只有推版本标签时才跑：把四个平台的包挂到 GitHub Release 上。
   # 建的是草稿，在 GitHub 上看过没问题再手动点发布。
   release:
     needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     permissions:
       contents: write
