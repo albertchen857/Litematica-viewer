@@ -1,27 +1,25 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-    <url>
-        <loc>https://lite-viewer.com/</loc>
-    </url>
-    <url>
-        <loc>https://www.lite-viewer.com/</loc>
-    </url>
-    <url>
-        <loc>https://lite-viewer.com/?lang=cn</loc>
-    </url>
-    <url>
-        <loc>https://www.lite-viewer.com/?lang=cn</loc>
-    </url>
-    <url>
-        <loc>https://lite-viewer.com/?lang=en</loc>
-    </url>
-    <url>
-        <loc>https://www.lite-viewer.com/?lang=en</loc>
-    </url>
-    <url>
-        <loc>https://lite-viewer.com/?lang=tw</loc>
-    </url>
-    <url>
-        <loc>https://www.lite-viewer.com/?lang=tw</loc>
-    </url>
+<!-- 三种语言同一个页面，用 ?lang= 区分；英文就是首页。只列不带 www 的（www 在 Cloudflare 里跳到这里） -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <url>
+    <loc>https://lite-viewer.com/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lite-viewer.com/"/>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://lite-viewer.com/?lang=cn"/>
+    <xhtml:link rel="alternate" hreflang="zh-TW" href="https://lite-viewer.com/?lang=tw"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lite-viewer.com/"/>
+  </url>
+  <url>
+    <loc>https://lite-viewer.com/?lang=cn</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lite-viewer.com/"/>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://lite-viewer.com/?lang=cn"/>
+    <xhtml:link rel="alternate" hreflang="zh-TW" href="https://lite-viewer.com/?lang=tw"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lite-viewer.com/"/>
+  </url>
+  <url>
+    <loc>https://lite-viewer.com/?lang=tw</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://lite-viewer.com/"/>
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://lite-viewer.com/?lang=cn"/>
+    <xhtml:link rel="alternate" hreflang="zh-TW" href="https://lite-viewer.com/?lang=tw"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://lite-viewer.com/"/>
+  </url>
 </urlset>

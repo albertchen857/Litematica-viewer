@@ -5,7 +5,52 @@
   <meta name="google-site-verification" content="2cmQSoXVwzemYs6FgWtH8hGrdn1rXPj__GW0ERavhqQ" />
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title data-en="Litematica Viewer · Count your schematic's materials in a second" data-tw="投影檢視器 Litematica Viewer · 一秒算完投影材料">投影查看器 Litematica Viewer · 一秒算完投影材料</title>
-  <meta name="description" content="Litematica Viewer（投影查看器）：查看 Minecraft 投影文件的桌面工具，支持 .litematic / .nbt / .mcstructure，材料清单、3D 渲染、容器分析、导出虚空世界。">
+  <!-- 搜索结果里的简介：写死的是英文（默认语言），main.js 按 ?lang= 换成对应语言（DESCRIPTIONS） -->
+  <meta name="description" content="Free, open-source Minecraft schematic viewer for .litematic / .nbt / .mcstructure: material lists in boxes and stacks, textured 3D view, container contents and format conversion. Windows, macOS, Linux and web.">
+  <!-- 三种语言的网址互相标明：英文 = 首页，简体 / 繁体 = ?lang=cn / ?lang=tw。
+       canonical（以哪个网址为准）由 main.js 按当前语言写，?lang=en 会归到首页 -->
+  <link rel="alternate" hreflang="en" href="https://lite-viewer.com/">
+  <link rel="alternate" hreflang="zh-CN" href="https://lite-viewer.com/?lang=cn">
+  <link rel="alternate" hreflang="zh-TW" href="https://lite-viewer.com/?lang=tw">
+  <link rel="alternate" hreflang="x-default" href="https://lite-viewer.com/">
+  <link rel="canonical" id="canonical" href="https://lite-viewer.com/">
+  <!-- 分享卡片（QQ / Discord / X 等不跑 JS，所以写死英文） -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Litematica Viewer">
+  <meta property="og:title" content="Litematica Viewer · Count your schematic's materials in a second">
+  <meta property="og:description" content="Free, open-source Minecraft schematic viewer for .litematic / .nbt / .mcstructure: material lists in boxes and stacks, textured 3D view, container contents and format conversion. Windows, macOS, Linux and web.">
+  <meta property="og:url" content="https://lite-viewer.com/">
+  <meta property="og:image" content="https://lite-viewer.com/assets/app_cn.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="theme-color" content="#0066cc">
+  <!-- 结构化数据：告诉搜索引擎这是个免费软件、支持哪些系统 -->
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Litematica Viewer",
+  "alternateName": [
+    "投影查看器",
+    "投影檢視器"
+  ],
+  "url": "https://lite-viewer.com/",
+  "applicationCategory": "UtilitiesApplication",
+  "operatingSystem": "Windows, macOS, Linux, Web",
+  "description": "Free, open-source Minecraft schematic viewer for .litematic / .nbt / .mcstructure: material lists in boxes and stacks, textured 3D view, container contents and format conversion. Windows, macOS, Linux and web.",
+  "image": "https://lite-viewer.com/assets/app_cn.png",
+  "downloadUrl": "https://github.com/albertchen857/Litematica-viewer/releases/latest",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  },
+  "author": {
+    "@type": "Person",
+    "name": "Albertchen857",
+    "url": "https://github.com/albertchen857"
+  }
+}
+  </script>
   <link rel="icon" href="assets/icon.png">
   <link rel="stylesheet" href="style.css">
 </head>
@@ -53,10 +98,11 @@
       <!-- 蔚蓝档案式标题：蓝 + 黑两段，光环和十字线挂在两段的交界处。
            光环、十字的位置和大小全用 em，跟着字号一起缩放，任何分辨率都对得上 -->
       <h1 class="ba-logo" aria-label="投影查看器 Litematica Viewer">
-        <span class="ba-line ba-zh" aria-hidden="true"><span class="ba-blue"><span class="ch">投</span><span class="ch">影</span></span><span class="ba-ink"><svg class="ba-halo" viewBox="0 0 300 150"><ellipse cx="150" cy="75" rx="138" ry="44" transform="rotate(-12 150 75)"/></svg><span class="ch" data-tw="檢">查</span><span class="ch" data-tw="視">看</span><span class="ch">器</span><svg class="ba-cross" viewBox="0 0 300 300"><line class="under" x1="118" y1="300" x2="178" y2="0"/><line class="under" x1="0" y1="128" x2="300" y2="100"/><line x1="118" y1="300" x2="178" y2="0"/><line x1="0" y1="128" x2="300" y2="100"/></svg></span></span>
-        <span class="ba-line ba-en" aria-hidden="true"><span class="ba-blue">Litematica</span><span class="ba-ink">Viewer</span></span>
+        <span class="sr-only" data-en="Litematica Viewer" data-tw="Litematica Viewer 投影檢視器">Litematica Viewer 投影查看器</span>
+        <span data-nosnippet class="ba-line ba-zh" aria-hidden="true"><span class="ba-blue"><span class="ch">投</span><span class="ch">影</span></span><span class="ba-ink"><svg class="ba-halo" viewBox="0 0 300 150"><ellipse cx="150" cy="75" rx="138" ry="44" transform="rotate(-12 150 75)"/></svg><span class="ch" data-tw="檢">查</span><span class="ch" data-tw="視">看</span><span class="ch">器</span><svg class="ba-cross" viewBox="0 0 300 300"><line class="under" x1="118" y1="300" x2="178" y2="0"/><line class="under" x1="0" y1="128" x2="300" y2="100"/><line x1="118" y1="300" x2="178" y2="0"/><line x1="0" y1="128" x2="300" y2="100"/></svg></span></span>
+        <span data-nosnippet class="ba-line ba-en" aria-hidden="true"><span class="ba-blue">Litematica</span><span class="ba-ink">Viewer</span></span>
         <!-- 英文页只用这一行：英文标题当主标题，同样的蔚蓝档案字效 + 光环 / 十字挂在 Litematica|Viewer 交界 -->
-        <span class="ba-line ba-en-main" aria-hidden="true"><span class="ba-blue">Litematica</span><span class="ba-ink"><svg class="ba-halo" viewBox="0 0 300 150"><ellipse cx="150" cy="75" rx="138" ry="44" transform="rotate(-12 150 75)"/></svg>Viewer<svg class="ba-cross" viewBox="0 0 300 300"><line class="under" x1="118" y1="300" x2="178" y2="0"/><line class="under" x1="0" y1="128" x2="300" y2="100"/><line x1="118" y1="300" x2="178" y2="0"/><line x1="0" y1="128" x2="300" y2="100"/></svg></span></span>
+        <span data-nosnippet class="ba-line ba-en-main" aria-hidden="true"><span class="ba-blue">Litematica</span><span class="ba-ink"><svg class="ba-halo" viewBox="0 0 300 150"><ellipse cx="150" cy="75" rx="138" ry="44" transform="rotate(-12 150 75)"/></svg>Viewer<svg class="ba-cross" viewBox="0 0 300 300"><line class="under" x1="118" y1="300" x2="178" y2="0"/><line class="under" x1="0" y1="128" x2="300" y2="100"/><line x1="118" y1="300" x2="178" y2="0"/><line x1="0" y1="128" x2="300" y2="100"/></svg></span></span>
       </h1>
       <span class="hero-rule" aria-hidden="true"></span>
 
@@ -68,7 +114,7 @@
           <button class="btn btn-accent btn-lg hero-download" type="button" aria-haspopup="menu">
             <span class="arrow" aria-hidden="true">▼</span> <span data-en="Download latest" data-tw="下載最新版">下载最新版</span>
           </button>
-          <div class="dl-menu" role="menu">
+          <div class="dl-menu" role="menu" data-nosnippet>
             <p class="dl-group" data-en="Direct download" data-tw="直接下載">直接下载</p>
             <a class="dl-item" role="menuitem" href="https://download.lite-viewer.com/LitematicaViewer-latest-windows-x64.zip" data-os="windows"><b data-en="Windows" data-tw="Windows">Windows</b><small>.zip · x64</small></a>
             <a class="dl-item" role="menuitem" href="https://download.lite-viewer.com/LitematicaViewer-latest-macos-arm64.dmg" data-os="mac-arm"><b data-en="macOS (Apple silicon)" data-tw="macOS（Apple 晶片）">macOS（Apple 芯片）</b><small>.dmg · M1 / M2 / M3 / M4</small></a>
@@ -105,7 +151,7 @@
       <span class="drop-title" data-en="Drop your schematic here" data-tw="把投影檔案拖到這裡">把投影文件拖到这里</span>
       <span class="drop-sub" data-en="Supports &lt;code&gt;.litematic&lt;/code&gt; · &lt;code&gt;.nbt&lt;/code&gt; · &lt;code&gt;.mcstructure&lt;/code&gt;" data-tw="支援 &lt;code&gt;.litematic&lt;/code&gt; · &lt;code&gt;.nbt&lt;/code&gt; · &lt;code&gt;.mcstructure&lt;/code&gt;">支持 <code>.litematic</code> · <code>.nbt</code> · <code>.mcstructure</code></span>
       <span class="btn btn-accent drop-btn" data-en="Choose file" data-tw="選擇檔案">选择文件</span>
-      <span class="drop-closed" data-en="Not available yet" data-tw="未開放">未开放</span>
+      <span data-nosnippet class="drop-closed" data-en="Not available yet" data-tw="未開放">未开放</span>
     </label>
     <ul class="drop-files" id="drop-files" aria-live="polite"></ul>
     <p class="drop-note" id="drop-note"></p>
@@ -121,7 +167,7 @@
 
   <!-- 悬念 → 答案：话说一半，下一拍给数字 -->
   <div class="reveal-split" data-reveal>
-    <div class="suspense">
+    <div data-nosnippet class="suspense">
       <p class="suspense-q" data-en="A small mansion needs…" data-tw="一座小型府邸，一共要……">一座小型府邸，一共要……</p>
       <p class="suspense-a"><b class="count" data-to="18640">0</b> <span data-en="blocks" data-tw="個方塊">个方块</span></p>
       <p class="suspense-sub"><span data-en="92 kinds · the grass alone is" data-tw="92 種 · 草方塊就要">92 种 · 草方块就要</span> <span class="slots" data-count="9922"></span></p>
@@ -135,7 +181,7 @@
         <button role="tab" class="tab" data-view="items" data-en="Items" data-tw="物品">物品</button>
         <span class="tab-count" id="tab-count"></span>
       </div>
-      <div class="mtable">
+      <div data-nosnippet class="mtable">
         <div class="mrow mhead"><span></span><span data-en="Name" data-tw="名字">名字</span><span class="num" data-en="Count" data-tw="數量">数量</span><span data-en="Units" data-tw="單位">单位</span></div>
         <div id="mrows"></div>
       </div>
@@ -199,7 +245,7 @@
   <div class="download-inner">
     <p class="mono download-title" data-en="Download" data-tw="下載">下载</p>
     <p class="download-sub" data-en="Free and open source · installers for Windows / macOS / Linux" data-tw="免費開源 · Windows / macOS / Linux 都有安裝包">免费开源 · Windows / macOS / Linux 都有安装包</p>
-    <div class="download-actions">
+    <div class="download-actions" data-nosnippet>
       <a class="btn btn-lg dl-btn" href="https://download.lite-viewer.com/LitematicaViewer-latest-windows-x64.zip" data-os="windows"><span data-en="Windows" data-tw="Windows">Windows</span><small>.zip · x64</small></a>
       <a class="btn btn-lg dl-btn" href="https://download.lite-viewer.com/LitematicaViewer-latest-macos-arm64.dmg" data-os="mac-arm"><span data-en="macOS (Apple silicon)" data-tw="macOS（Apple 晶片）">macOS（Apple 芯片）</span><small>.dmg · M1 / M2 / M3 / M4</small></a>
       <a class="btn btn-lg dl-btn" href="https://download.lite-viewer.com/LitematicaViewer-latest-macos-x64.dmg" data-os="mac-intel"><span data-en="macOS (Intel)" data-tw="macOS（Intel）">macOS（Intel）</span><small>.dmg · x64</small></a>

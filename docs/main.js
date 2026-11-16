@@ -22,6 +22,12 @@ const URL_CODE = { zh: "cn", tw: "tw", en: "en" };
 const FROM_URL = { cn: "zh", zh: "zh", tw: "tw", en: "en" };
 let lang = FROM_URL[new URLSearchParams(location.search).get("lang")] || "en";
 const t = (zh, en, tw = zh) => (lang === "en" ? en : lang === "tw" ? tw : zh);
+const SITE = "https://lite-viewer.com/";
+const DESCRIPTIONS = {
+  "en": "Free, open-source Minecraft schematic viewer for .litematic / .nbt / .mcstructure: material lists in boxes and stacks, textured 3D view, container contents and format conversion. Windows, macOS, Linux and web.",
+  "zh": "投影查看器 Litematica Viewer：免费开源的 Minecraft 投影查看工具，支持 .litematic / .nbt / .mcstructure。一秒算出材料清单（盒 / 组 / 个），贴图 3D 渲染、容器物品、格式互转。Windows / macOS / Linux 和网页版。",
+  "tw": "投影檢視器 Litematica Viewer：免費開源的 Minecraft 投影檢視工具，支援 .litematic / .nbt / .mcstructure。一秒算出材料清單（盒 / 組 / 個），貼圖 3D 渲染、容器物品、格式互轉。Windows / macOS / Linux 與網頁版。"
+};
 
 function applyLang() {
   document.documentElement.lang = { zh: "zh-CN", tw: "zh-TW", en: "en" }[lang];
@@ -36,6 +42,9 @@ function applyLang() {
     ch.textContent = lang === "tw" && ch.dataset.tw ? ch.dataset.tw : ch.dataset.zh;
   });
   document.documentElement.dataset.lang = lang;
+  // 搜索结果简介 + 以哪个网址为准（英文归到首页，和 <head> 里的 hreflang 对应）
+  document.querySelector('meta[name="description"]').content = DESCRIPTIONS[lang];
+  $("canonical").href = lang === "en" ? SITE : `${SITE}?lang=${URL_CODE[lang]}`;
   // 网址只留 ?lang=xx（其他查询参数去掉，锚点保留），不刷新页面
   history.replaceState(null, "", `${location.pathname}?lang=${URL_CODE[lang]}${location.hash}`);
   fillTable(currentView, false);

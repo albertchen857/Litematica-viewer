@@ -156,6 +156,9 @@ code, .mono { font-family: var(--mono); }
   align-items: center;
 }
 
+/* 只给搜索引擎和读屏看的文字 */
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
 /* ---- 蔚蓝档案式标题 */
 
 .ba-logo {
