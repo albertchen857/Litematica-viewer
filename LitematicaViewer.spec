@@ -16,6 +16,11 @@ IS_MAC = sys.platform == "darwin"
 # 没生成也能打包，只是图标会是 PyInstaller 的默认图标。
 ICON = "icon.icns" if IS_MAC and os.path.exists("icon.icns") else "icon.ico"
 
+# 版本号只在 script/lv/config.py 写一处，这里读出来给 macOS 的 Info.plist 用
+import re as _re
+with open("script/lv/config.py", encoding="utf-8") as _f:
+    APP_VERSION = _re.search(r'APP_VERSION = "([^"]+)"', _f.read()).group(1)
+
 # 资源要按运行时 res() 期望的相对路径放，路径变了程序就找不到贴图和语言文件
 datas = [
     ("lang/*.json", "lang"),
@@ -109,7 +114,7 @@ if IS_MAC:
         icon=ICON,
         bundle_identifier="com.albertchen857.litematicaviewer",
         info_plist={
-            "CFBundleShortVersionString": "0.9.4",
+            "CFBundleShortVersionString": APP_VERSION,
             "NSHighResolutionCapable": True,
             "LSMinimumSystemVersion": "11.0",
             "CFBundleDocumentTypes": [

@@ -1,6 +1,22 @@
 # LitematicaViewer 更新日志
 ---
 
+## 0.9.6 — 2026-11-14 ~ 2026-11-16
+
+### 新增
+- **手动3D渲染换成 deepslate 贴图渲染**（和网站共用 `viewer/`）：透明 / 半透明方块、告示牌、床、箱子等特殊模型；点选方块看属性、容器物品格子；实体图标 + 碰撞箱；全部 / 范围 / 单层的层滑块；分步拆解；五套主题配色。
+- 渲染引擎（deepslate、gl-matrix）随程序打包到 `viewer/vendor/`，3D 窗口离线可用。
+- 首次启动选择语言；更新日志按版本只弹一次。
+- 网站 lite-viewer.com（`web` 分支）：浏览器里查看、导出、转换格式、右键替换方块。
+
+### 修改
+- 仓库拆分：`main` 只放桌面版，网站放 `web` 分支；`docs/viewer` → `viewer/`，`docs/ARCHITECTURE.md` → `ARCHITECTURE.md`。
+- 新增 `tools/sync_site.py`（把 `viewer/` 同步到网站）；`build_web_data.py` 只生成查看器数据。
+- spec 的 macOS 版本号改为从 `config.py` 读取。
+- CI：macOS 构建改用现役的 `macos-15-intel` / `macos-15`（`macos-13` 已下线，任务会一直排队）；三个平台产物打成带版本号的压缩包。
+
+---
+
 ## 0.9.4 — 2026-11-01 ~ 2026-11-02
 
 | 提交 | 时间 | 说明 |

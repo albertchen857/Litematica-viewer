@@ -3,6 +3,7 @@ name: Build Executable
 on:
   push:
     branches: ["*"]
+    tags: ["v*"]          # 推 v0.9.6 这样的标签：构建完自动建一个 GitHub Release 草稿
   pull_request:
     branches: ["*"]
   workflow_dispatch:
@@ -16,10 +17,11 @@ jobs:
           - os: windows-latest
             platform: windows
             arch: x64
-          - os: macos-13          # Intel
+          # macos-13 已下线（任务会一直排队），换成现役镜像
+          - os: macos-15-intel    # Intel
             platform: macos
             arch: x64
-          - os: macos-14          # Apple Silicon
+          - os: macos-15          # Apple Silicon
             platform: macos
             arch: arm64
           - os: ubuntu-latest
@@ -82,17 +84,52 @@ jobs:
       - name: Build
         run: pyinstaller --noconfirm LitematicaViewer.spec
 
+      # 版本号只在 script/lv/config.py 写一处
+      - name: Read version
+        shell: bash
+        run: python tools/print_version.py >> "$GITHUB_ENV"
+
+      # 产物统一叫 LitematicaViewer-<版本>-<平台>-<架构>.<后缀>
+      - name: Package Windows
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: Compress-Archive -Path dist/LitematicaViewer -DestinationPath "dist/LitematicaViewer-$env:APP_VERSION-windows-x64.zip"
+
+      # tar 保留可执行权限（zip / artifact 会丢，解压后打不开）
+      - name: Package Linux
+        if: matrix.platform == 'linux'
+        run: tar -czf "dist/LitematicaViewer-${APP_VERSION}-linux-x64.tar.gz" -C dist LitematicaViewer
+
       - name: Package macOS app
         if: matrix.platform == 'macos'
         run: |
           cd dist
           hdiutil create -volname LitematicaViewer -srcfolder LitematicaViewer.app \
-            -ov -format UDZO LitematicaViewer-${{ matrix.arch }}.dmg
+            -ov -format UDZO "LitematicaViewer-${APP_VERSION}-macos-${{ matrix.arch }}.dmg"
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: LitematicaViewer-${{ matrix.platform }}-${{ matrix.arch }}
+          name: LitematicaViewer-${{ env.APP_VERSION }}-${{ matrix.platform }}-${{ matrix.arch }}
           path: |
+            dist/*.zip
+            dist/*.tar.gz
             dist/*.dmg
-            dist/LitematicaViewer
+
+  # 只有推标签（v*）时才跑：把四个平台的包挂到 GitHub Release 上。
+  # 建的是草稿，在 GitHub 上看过没问题再手动点发布。
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: artifacts/*
