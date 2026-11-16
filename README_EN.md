@@ -16,7 +16,7 @@
 > Want more? **[Litematica Nova](https://github.com/LitematicaViewer/Litematica-Nova)** is the Pro edition of LitematicaViewer.
 
 GITHUB Link: https://github.com/albertchen857/LitematicaViewer
-Website: https://albertchen857.github.io/Litematica-viewer
+Website: https://lite-viewer.com
 Stable builds are under Releases; clone the repo for the latest preview.
 Please give a star! Target 1000 stars.
 
