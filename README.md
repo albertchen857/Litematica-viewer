@@ -1,6 +1,6 @@
 **简体中文** | [English](./README_EN.md) | [繁體中文](./README_ZHT.md)
 
-# LitematicaViewer 投影查看器 v0.9.4
+# LitematicaViewer 投影查看器 v0.9.5
 
 ### Minecraft tool - 让我的世界投影查看更加的轻量便捷
 
@@ -16,8 +16,9 @@
 > 想要更强的版本？**[Litematica Nova](https://github.com/LitematicaViewer/Litematica-Nova)** 是投影查看器的 Pro 版。
 
 GITHUB链接: https://github.com/albertchen857/LitematicaViewer
+网页版：https://albertchen857.github.io/Litematica-viewer
 稳定版 EXE 在右侧 Release 下载，最新预览版自行克隆运行（发现问题欢迎提 ISSUE）
-求求点点星吧 I want Stars~ target 100 stars
+求求点点星吧 I want Stars~ target 1000 stars
 
 ## 支持的文件格式
 
