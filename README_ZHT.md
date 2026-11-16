@@ -10,7 +10,7 @@
 [![YoutubeIntro](https://img.shields.io/badge/-Youtube-00A1D6?logo=youtube&logoColor=red)](https://www.youtube.com/watch?v=jgHMK4hmpoM)
 
 GITHUB 連結: https://github.com/albertchen857/LitematicaViewer
-網頁：https://albertchen857.github.io/Litematica-viewer
+網頁：https://lite-viewer.com
 穩定版 EXE 在右側 Release 下載，最新預覽版請自行 clone 執行（發現問題歡迎提 ISSUE）
 求求點點星吧 I want Stars~ target 1000 stars
 
