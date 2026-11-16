@@ -136,7 +136,8 @@ tools/
 
 | Branch | Contents |
 |---|---|
-| `main` | mainline |
+| `main` | mainline: the desktop app |
+| `web` | the website [lite-viewer.com](https://lite-viewer.com) (`docs/`, Cloudflare Pages) |
 | `macos` | macOS packaging script, icon, release workflow |
 | `original` | the pre-rewrite 0.8.0c build (with only the minimal fixes needed to launch), kept for comparison |
 

@@ -130,7 +130,8 @@ tools/
 
 | 分支 | 内容 |
 |---|---|
-| `main` | 主线 |
+| `main` | 主线：桌面版 |
+| `web` | 网站 [lite-viewer.com](https://lite-viewer.com)（`docs/`，Cloudflare Pages） |
 | `macos` | macOS 打包脚本、图标、Release 工作流 |
 | `original` | 改版之前的 0.8.0c 原版（只做了能启动的最小修复），留着对比用 |
 
