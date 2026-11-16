@@ -16,7 +16,7 @@
 > 想要更强的版本？**[Litematica Nova](https://github.com/LitematicaViewer/Litematica-Nova)** 是投影查看器的 Pro 版。
 
 GITHUB链接: https://github.com/albertchen857/LitematicaViewer
-网页版：https://albertchen857.github.io/Litematica-viewer
+网页版：https://lite-viewer.com
 稳定版 EXE 在右侧 Release 下载，最新预览版自行克隆运行（发现问题欢迎提 ISSUE）
 求求点点星吧 I want Stars~ target 1000 stars
 
