@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>投影查看器 · 网页版</title>
+  <link rel="icon" href="../assets/icon.png">
+  <link rel="stylesheet" href="viewer.css">
+  <!-- 渲染引擎：deepslate 0.27（带透明网格和选中框）+ gl-matrix（相机矩阵）。
+       桌面版「手动3D渲染」打开的也是这个页面 -->
+  <!-- 放在自己站点上（vendor/），不走 unpkg：学校等网络可能拦 CDN，查看器就打不开了 -->
+  <script src="vendor/deepslate-0.27.2.umd.js"></script>
+  <script src="vendor/gl-matrix-3.4.3.min.js"></script>
+  <!-- 方块模型 / 贴图索引 / 透明表，由 tools/build_web_data.py 从桌面版复制 -->
+  <script src="resource/assets.js"></script>
+  <script src="resource/opaque.js"></script>
+  <!-- 分步拆解算法（原样取自「投影分步查看器」），挂在 window.Splitter -->
+  <script src="js/tools/splitter.js"></script>
+  <!-- 主页拖进来的文件经由浏览器暂存交过来（?from=home） -->
+  <script src="../handoff.js"></script>
+</head>
+<body>
+<!--
+  网页版第一阶段：读文件 → 统计 → 3D 渲染 → 右侧信息栏。全部在浏览器里完成，文件不上传。
+
+    js/formats.js   三种格式 → 统一模型（照 script/lv/formats.py）
+    js/analysis.js  材料折算、分类、7 项指标、容器物品（照 script/lv/analysis.py）
+    js/render.js    deepslate 渲染 + 环绕相机 + 按层显示
+    js/writers.js   统一模型 → .litematic / .nbt / .mcstructure / 材料表 txt（照 formats.py 的 _save_*）
+    js/edit.js      批量替换方块（照 script/lv/edit.py）
+    js/blockmap.js  Java ↔ 基岩方块 ID / 状态互转（照 script/lv/blockmap.py）
+    js/app.js       界面：拖文件、页签、子区域、语言、导出、右键替换
+-->
+
+<header class="bar">
+  <a class="brand" href="../">
+    <img src="../assets/icon.png" alt="" width="28" height="28">
+    <span>Litematica Viewer</span>
+  </a>
+  <span class="bar-file" id="bar-file"></span>
+  <div class="bar-actions">
+    <label class="btn btn-accent" id="open-btn">
+      <input type="file" id="file-input" accept=".litematic,.nbt,.mcstructure" hidden>
+      <span data-t="open">打开文件</span>
+    </label>
+    <!-- 导出材料表 / 分类导出（同桌面版「数据分析」菜单），转换文件类型：鼠标放上去出下拉框。
+         没打开文件时灰掉 -->
+    <div class="bar-tools is-off" id="bar-tools">
+      <button class="btn btn-plain" id="export-btn" type="button" data-ui="litem.menuAnalysis.2">导出</button>
+      <button class="btn btn-plain" id="export-cat-btn" type="button" data-ui="litem.menuAnalysis.3">分类导出</button>
+      <div class="menu-wrap" id="convert-wrap">
+        <button class="btn btn-plain" id="convert-btn" type="button" aria-haspopup="menu"><span data-t="saveAs">转换文件类型</span><i class="caret" aria-hidden="true"></i></button>
+        <div class="dropdown" id="convert-menu" role="menu">
+          <button type="button" role="menuitem" data-ext=".litematic"><b>.litematic</b><span data-t="fmt.litematic">Litematica 投影</span></button>
+          <button type="button" role="menuitem" data-ext=".nbt"><b>.nbt</b><span data-t="fmt.nbt">结构方块（Java 版）</span></button>
+          <button type="button" role="menuitem" data-ext=".mcstructure"><b>.mcstructure</b><span data-t="fmt.mcstructure">结构（基岩版）</span></button>
+        </div>
+      </div>
+    </div>
+    <button class="btn btn-plain" id="tutorial-btn" type="button" data-t="tutorial">教程</button>
+    <!-- 配色：和桌面版设置里的五套主题一样（lang/data.json 的 Color_map） -->
+    <select class="lang" id="theme" aria-label="Theme"></select>
+    <select class="lang" id="lang" aria-label="Language">
+      <option value="zh_CN">简体中文</option>
+      <option value="zh_TW">繁體中文</option>
+      <option value="en_US">English</option>
+    </select>
+  </div>
+</header>
+
+<main class="layout">
+  <!-- 左：3D -->
+  <section class="stage" id="stage">
+    <canvas id="canvas"></canvas>
+    <!-- 实体标记（deepslate 不画实体，用图标贴在实体位置上，可以点） -->
+    <div class="markers" id="markers"></div>
+
+    <!-- 点了方块 / 实体之后，左上角显示：译名、ID、属性；容器再列出里面的物品 -->
+    <div class="inspect" id="inspect" hidden>
+      <button class="inspect-close" id="inspect-close" aria-label="close">×</button>
+      <div class="inspect-head"><img id="inspect-icon" alt=""><div><b id="inspect-name"></b><code id="inspect-id"></code></div></div>
+      <p class="inspect-pos" id="inspect-pos"></p>
+      <table class="inspect-props" id="inspect-props"></table>
+      <div class="inspect-items" id="inspect-items"></div>
+      <p class="inspect-extra" id="inspect-extra"></p>
+    </div>
+    <div class="slot-tip" id="slot-tip" hidden></div>
+
+    <div class="empty" id="empty">
+      <div class="empty-icon" aria-hidden="true">▼</div>
+      <p class="empty-title" data-t="dropTitle">把投影文件拖到这里</p>
+      <p class="empty-sub"><span data-t="supports">支持</span> <code>.litematic</code> · <code>.nbt</code> · <code>.mcstructure</code></p>
+      <!-- 中间这块也放一个打开按钮（和顶栏那个是同一个文件框） -->
+      <label class="btn btn-accent empty-open" for="file-input"><span data-t="open">打开文件</span></label>
+      <p class="empty-note" data-t="local">文件只在你的浏览器里处理，不会上传</p>
+      <!-- 浏览器里存着上次打开的文件时出现（handoff.js 的 LVRecent） -->
+      <button class="btn btn-plain recent-btn" id="recent-btn" type="button" hidden></button>
+    </div>
+
+    <div class="progress" id="progress" hidden><div class="progress-bar" id="progress-bar"></div><span id="progress-text"></span></div>
+
+    <!-- 显示层：一条双头滑块，左头调下限、右头调上限。按钮切换模式：
+           全部 = 两头拉满、灰掉；范围 = 两头都能拖；单层 = 只剩一个头（默认第 0 层） -->
+    <div class="layers" id="layers" data-mode="all" hidden>
+      <span class="layers-label" data-t="layers">显示层</span>
+      <button class="btn btn-small btn-plain layer-mode" id="layer-mode" type="button"></button>
+      <div class="dual" id="dual">
+        <input type="range" id="layer-min" min="0" value="0" aria-label="min y">
+        <input type="range" id="layer-max" min="0" value="0" aria-label="max y">
+      </div>
+      <span class="layers-value" id="layer-value"></span>
+    </div>
+    <p class="hint" id="hint" hidden data-t="controls">左键拖动旋转 · 右键拖动平移 · 滚轮缩放</p>
+
+    <!-- 替换完的提示 + 撤销 -->
+    <div class="toast" id="toast" hidden><span id="toast-text"></span><button class="btn btn-small" id="toast-undo" type="button" data-t="replace.undo">撤销</button></div>
+  </section>
+
+  <!-- 右：信息 -->
+  <aside class="side" id="side">
+    <div class="card file-card">
+      <h1 class="file-name" id="file-name" data-t="noFile">还没有打开文件</h1>
+      <p class="file-summary" id="file-summary"></p>
+    </div>
+
+    <div class="card stats" id="stats"></div>
+
+    <div class="card table-card">
+      <div class="regions" id="regions" hidden></div>
+      <div class="tabs" role="tablist" id="tabs"></div>
+      <p class="tab-count" id="tab-count"></p>
+      <div class="table" id="table"></div>
+    </div>
+
+    <!-- 工具：分步拆解 / 等高图。都在当前结构上算，可以随时还原 -->
+    <div class="card tools-card" id="tools" hidden>
+      <h2 class="card-title" data-t="tools">工具</h2>
+
+      <div class="tool">
+        <div class="tool-head"><b data-t="steps">分步拆解</b>
+          <span><button class="btn btn-small" id="steps-run" data-t="split">拆分</button>
+          <button class="btn btn-small btn-plain" id="steps-exit" hidden data-t="stepsExit">退出分步</button></span></div>
+        <p class="tool-note" data-t="stepsNote">按层、按材质把投影拆成一步步的建造顺序</p>
+        <!-- 拆分参数：细分程度一个滑块管两个数（颜色合并阈值、小组并入阈值），其余是开关。
+             跨层上限固定 64（每层最多 64 块、最多跨 64 层），不放出来 -->
+        <div class="step-opts">
+          <label class="opt-row"><span data-t="detail">细分程度</span>
+            <span class="opt-range"><small data-t="coarse">粗</small><input type="range" id="opt-detail" min="1" max="9" value="5"><small data-t="fine">细</small></span></label>
+          <label class="opt-row"><span data-t="maxMaterials">每步最多材料</span><input type="number" id="opt-maxmat" min="1" max="64" value="9"></label>
+          <label class="opt-check"><input type="checkbox" id="opt-shapes"> <span data-t="mergeShapes">楼梯 / 台阶并入同材质的方块</span></label>
+          <label class="opt-check"><input type="checkbox" id="opt-band" checked> <span data-t="bandMerge">连续几层一样就合成一步</span></label>
+          <label class="opt-check"><input type="checkbox" id="opt-cross" checked> <span data-t="crossLayer">允许跨层（柱子、墙一口气做完）</span></label>
+        </div>
+        <div class="steps" id="steps" hidden>
+          <div class="steps-nav">
+            <button class="btn btn-small btn-plain" id="step-prev" aria-label="prev">◀</button>
+            <input type="range" id="step-range" min="0" value="0">
+            <button class="btn btn-small btn-plain" id="step-next" aria-label="next">▶</button>
+          </div>
+          <p class="step-kicker" id="step-kicker"></p>
+          <h3 class="step-title" id="step-title"></h3>
+          <div class="step-mats" id="step-mats"></div>
+          <ul class="step-notes" id="step-notes"></ul>
+        </div>
+      </div>
+
+      <div class="tool">
+        <div class="tool-head"><b data-t="contour">等高图</b></div>
+        <p class="tool-note" data-t="contourNote">去掉树木花草，只留地表，按高度每 5 格换一种陶瓦 / 羊毛</p>
+        <div class="contour-row">
+          <label for="base-y" data-t="baseY">最底层的世界 Y</label>
+          <input type="number" id="base-y" value="63" step="1">
+          <button class="btn btn-small" id="contour-run" data-t="convert">转换</button>
+        </div>
+      </div>
+
+      <button class="btn btn-small btn-plain restore" id="restore" hidden data-t="restore">还原原始投影</button>
+    </div>
+
+    <div class="card cats-card">
+      <h2 class="card-title" data-ui="ui.chart.t2">分类统计</h2>
+      <div class="cats" id="cats"></div>
+    </div>
+  </aside>
+</main>
+
+<div class="drop-veil" id="drop-veil" hidden><span data-t="dropNow">松手打开</span></div>
+
+<!-- 右键菜单：材料表的行、3D 里的方块共用 -->
+<div class="ctx" id="ctx" role="menu" hidden></div>
+
+<!-- 快速替换方块（同桌面版右键「快速替换方块」，规则写法同 script/lv/edit.py） -->
+<dialog class="dlg" id="replace-dlg">
+  <form method="dialog" id="replace-form">
+    <h2 data-ui="row.replace">快速替换方块</h2>
+    <p class="dlg-from" id="replace-from"></p>
+    <!-- 3D 里右键点的方块才有：只换这一格 / 换全部同类 -->
+    <div class="dlg-scope" id="replace-scope">
+      <label><input type="radio" name="scope" value="all" checked> <span id="scope-all"></span></label>
+      <label class="dlg-sub"><input type="checkbox" id="replace-same"> <span data-t="replace.sameState">只换状态完全一样的</span></label>
+      <label><input type="radio" name="scope" value="one"> <span id="scope-one"></span></label>
+    </div>
+    <input class="dlg-input" id="replace-target" list="block-list" autocomplete="off" spellcheck="false">
+    <datalist id="block-list"></datalist>
+    <p class="dlg-note" data-t="replace.keep">朝向、半砖上下这些状态会尽量保留</p>
+    <details class="dlg-rules" id="replace-adv">
+      <summary data-t="replace.rules">高级：直接写替换规则</summary>
+      <textarea id="replace-rules" rows="4" spellcheck="false"></textarea>
+      <p class="dlg-note dlg-pre" data-t="replace.rulesHint"></p>
+    </details>
+    <p class="dlg-error" id="replace-error"></p>
+    <div class="dlg-actions">
+      <button class="btn btn-plain" value="cancel" formnovalidate data-t="cancel">取消</button>
+      <button class="btn btn-accent" id="replace-apply" value="apply" data-t="replace.apply">替换</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- 教程 -->
+<dialog class="dlg dlg-wide" id="tutorial-dlg">
+  <form method="dialog">
+    <h2 data-t="tut.title">怎么用</h2>
+    <ol class="tut">
+      <li data-t="tut.open"></li>
+      <li data-t="tut.view"></li>
+      <li data-t="tut.inspect"></li>
+      <li data-t="tut.replace"></li>
+      <li data-t="tut.undo"></li>
+      <li data-t="tut.export"></li>
+      <li data-t="tut.convert"></li>
+    </ol>
+    <div class="dlg-actions"><button class="btn btn-accent" value="ok" data-t="tut.ok">知道了</button></div>
+  </form>
+</dialog>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

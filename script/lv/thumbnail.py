@@ -21,11 +21,10 @@ import sys
 import tkinter as tk
 
 import numpy as np
-from PIL import Image
 
 from .config import colors, font
 from .i18n import _
-from .tools import texture_path
+from .tools import texture_image
 
 # 可见面超过这个数就抽稀，再多显卡也画得动但建数组会慢
 MAX_FACES = 120_000
@@ -62,7 +61,7 @@ def block_color(block_id: str) -> tuple:
     if block_id not in _color_cache:
         try:
             pixels = np.asarray(
-                Image.open(texture_path(block_id.split(":")[-1])).convert("RGBA"),
+                texture_image(block_id.split(":")[-1]),
                 dtype=np.float32,
             )
             visible = pixels[pixels[:, :, 3] > 24][:, :3]

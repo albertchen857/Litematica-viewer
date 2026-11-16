@@ -1,4 +1,6 @@
-"""更新 JSrender 的方块资源（assets.js + atlas.png）和方块/物品名对照表。
+"""更新方块资源（docs/viewer/resource/ 的 assets.js + atlas.png + icons.json）和方块/物品名对照表。
+
+桌面版和网页版共用这一份资源，图标也是从 atlas 现场裁，所以更新完不用再补图标。
 
     python tools/update_jsassets.py            # 拉默认版本（见 DEFAULT_VERSION）
     python tools/update_jsassets.py latest     # 拉 mcmeta 最新（可能是快照版）
@@ -21,7 +23,8 @@ import os
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-RESOURCE = os.path.join(ROOT, "script", "JSrender", "resource")
+RESOURCE = os.path.join(ROOT, "docs", "viewer", "resource")
+sys.path.insert(0, os.path.join(ROOT, "script"))
 SETTING_JSON = os.path.join(ROOT, "lang", "setting.json")
 
 DEFAULT_VERSION = "26.3"
@@ -134,6 +137,9 @@ def main(argv: list) -> int:
 
     added, updated = update_name_tables(names)
 
+    from lv.atlas import write_icon_index  # 图标索引跟着新图集重建
+    icons = write_icon_index(RESOURCE)
+
     # 记下版本，开机自动检查（script/lv/assets.py）靠它判断要不要更新
     with open(os.path.join(RESOURCE, "version.json"), "w", encoding="utf-8") as f:
         json.dump({"version": version}, f, ensure_ascii=False, indent=2)
@@ -143,6 +149,7 @@ def main(argv: list) -> int:
           f"blockstates {len(assets['blockstates'])} / models {len(assets['models'])} / "
           f"textures {len(assets['textures'])}")
     print(f"  atlas.png  {os.path.getsize(atlas_path):>9,} bytes")
+    print(f"  icons.json {icons} 个图标")
     print(f"  名称对照表 新增 {added} 条，更新 {updated} 条")
     return 0
 

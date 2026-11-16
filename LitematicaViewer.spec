@@ -18,17 +18,18 @@ ICON = "icon.icns" if IS_MAC and os.path.exists("icon.icns") else "icon.ico"
 
 # 资源要按运行时 res() 期望的相对路径放，路径变了程序就找不到贴图和语言文件
 datas = [
-    ("block/*.png", "block"),
-    ("item/*.png", "item"),
     ("lang/*.json", "lang"),
     ("lang/source/*.json", "lang/source"),
     ("icon.ico", "."),
     ("tm_icon.ico", "."),
     ("requirements.txt", "."),
-    # 3D 渲染用的网页（deepslate + 贴图图集），少一个都渲染不出来
-    ("script/JSrender/viewer.html", "script/JSrender"),
-    ("script/JSrender/src/*.js", "script/JSrender/src"),
-    ("script/JSrender/resource/*", "script/JSrender/resource"),
+    # 网页版查看器：「手动3D渲染」直接用它；方块图标也从它的贴图图集里裁
+    ("docs/viewer/index.html", "docs/viewer"),
+    ("docs/viewer/viewer.css", "docs/viewer"),
+    ("docs/viewer/js/*.js", "docs/viewer/js"),
+    ("docs/viewer/js/tools/*.js", "docs/viewer/js/tools"),
+    ("docs/viewer/data/*.json", "docs/viewer/data"),
+    ("docs/viewer/resource/*", "docs/viewer/resource"),
 ]
 
 # 预编译好的 .mo 一起带上，避免打包后还得现场编译（有些系统临时目录是只读的）。

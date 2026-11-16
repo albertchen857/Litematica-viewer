@@ -124,13 +124,11 @@ def convert_units(number: int) -> str:
 _image_cache = {}
 
 
-def texture_path(block_name: str) -> str:
-    """先找 block/ 再找 item/，都没有就用占位图。"""
-    for folder in ("block", "item"):
-        path = res(folder, f"{block_name}.png")
-        if os.path.exists(path):
-            return path
-    return res("block", "info_update.png")
+def texture_image(block_name: str):
+    """方块 / 物品的 16×16 贴图（PIL RGBA）。从贴图图集里裁，见 atlas.py。"""
+    from .atlas import texture_image as crop
+
+    return crop(block_name)
 
 
 def block_image(block_name: str, size: int = 20):
@@ -143,8 +141,7 @@ def block_image(block_name: str, size: int = 20):
     if key not in _image_cache:
         from PIL import Image, ImageTk
 
-        image = Image.open(texture_path(block_name)).convert("RGBA")
-        image = image.resize((size, size), Image.NEAREST)
+        image = texture_image(block_name).resize((size, size), Image.NEAREST)
         _image_cache[key] = ImageTk.PhotoImage(image)
     return _image_cache[key]
 
@@ -157,16 +154,13 @@ def clear_image_cache() -> None:
 def block_choices(chinese: bool) -> tuple:
     """下拉选择用的方块清单 ``((方块名, 显示文字), ...)``。
 
-    以 block/ 目录下真有贴图的为准（下拉里每行都要显示图标），
-    中文名取自 setting.json；没收录中文名的（banner、各种 _lit 变体等）就用原名。
+    以贴图图集里有图标的方块为准（下拉里每行都要显示图标），
+    中文名取自 setting.json；没收录中文名的（banner 等）就用原名。
     注意这只是「推荐项」，不是白名单 —— 选择框允许直接手输没收录的方块。
     """
-    folder = res("block")
-    if not os.path.isdir(folder):
-        return ()
-    names = sorted(
-        os.path.splitext(f)[0] for f in os.listdir(folder) if f.endswith(".png")
-    )
+    from .atlas import block_names
+
+    names = block_names()
     table = game_data()["Blocks"]
     if not chinese:
         return tuple((n, n) for n in names)

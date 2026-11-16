@@ -110,7 +110,10 @@ script/
   LitematicaViewer.py   entry point
   webview_host.py       subprocess entry for the 3D window
   lv/                   the actual code, see docs/ARCHITECTURE.md
-  JSrender/             deepslate web renderer (adapted from Ending_Credits' litematic-viewer)
+docs/
+  index.html            project homepage (GitHub Pages)
+  viewer/               web viewer; the desktop "Manual 3D Rendering" uses it too
+  viewer/resource/      texture atlas shared by desktop and web; block icons are cropped from it
 lang/
   source/*.json         the single source of truth for translations
   data.json             theme colours and user settings
@@ -118,8 +121,7 @@ lang/
 tools/
   lang_build.py         compile po/mo
   lang_check.py         report missing translation keys
-  selftest.py           round-trip every format through every other format
-  make_testdata.py      generate test schematics with containers / entities / odd states
+  build_web_data.py     sync block names / categories / textures to the web viewer
 ```
 
 ## Adding a language

@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="google-site-verification" content="2cmQSoXVwzemYs6FgWtH8hGrdn1rXPj__GW0ERavhqQ" />
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title data-en="Litematica Viewer · Count your schematic's materials in a second" data-tw="投影檢視器 Litematica Viewer · 一秒算完投影材料">投影查看器 Litematica Viewer · 一秒算完投影材料</title>
+  <meta name="description" content="Litematica Viewer（投影查看器）：查看 Minecraft 投影文件的桌面工具，支持 .litematic / .nbt / .mcstructure，材料清单、3D 渲染、容器分析、导出虚空世界。">
+  <link rel="icon" href="assets/icon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<!--
+  中英双语：每个要翻译的元素上写 data-en="英文"，元素里的内容就是中文。
+  切换语言时 main.js 把两者互换。默认跟随浏览器语言，右上角按钮可以切，选择会记住；
+  也可以直接用 ?lang=en / ?lang=zh 打开。
+-->
+
+<!-- ============================================================ 顶栏 -->
+<header class="topbar">
+  <a class="brand" href="#top">
+    <img class="pixel" src="assets/icon.png" alt="" width="32" height="32">
+    <span>Litematica Viewer</span>
+    <small>投影查看器</small>
+  </a>
+  <nav>
+    <a class="nav-link" id="nav-try" href="#drop" data-en="Try it" data-tw="試一試">试一试</a>
+    <a class="nav-link" href="#intro" data-en="Features" data-tw="介紹">介绍</a>
+    <!-- 语言写在网址上：?lang=cn / ?lang=tw / ?lang=en -->
+    <select class="btn btn-plain lang-switch" id="lang-switch" aria-label="Language">
+      <option value="cn">简体中文</option>
+      <option value="tw">繁體中文</option>
+      <option value="en">English</option>
+    </select>
+    <a class="btn btn-bilibili" href="https://space.bilibili.com/3494373232741268" target="_blank" rel="noopener">Bilibili</a>
+    <a class="btn btn-github" href="https://github.com/albertchen857/LitematicaViewer" target="_blank" rel="noopener">GitHub</a>
+  </nav>
+</header>
+
+<main id="top">
+
+<!-- ============================================================ Banner -->
+<section class="hero" aria-label="投影查看器 Litematica Viewer">
+  <!-- 背景：放大的软件截图 + COVER2 的浅天蓝斜三角，整体虚化 -->
+  <div class="hero-bg" aria-hidden="true">
+    <!-- 背景截图固定用简体界面那张 -->
+    <img class="hero-shot" id="hero-shot" src="assets/app_cn.png" alt="">
+    <div class="hero-sky"></div>
+  </div>
+
+  <div class="hero-inner">
+    <div class="hero-copy">
+      <!-- 蔚蓝档案式标题：蓝 + 黑两段，光环和十字线挂在两段的交界处。
+           光环、十字的位置和大小全用 em，跟着字号一起缩放，任何分辨率都对得上 -->
+      <h1 class="ba-logo" aria-label="投影查看器 Litematica Viewer">
+        <span class="ba-line ba-zh" aria-hidden="true"><span class="ba-blue"><span class="ch">投</span><span class="ch">影</span></span><span class="ba-ink"><svg class="ba-halo" viewBox="0 0 300 150"><ellipse cx="150" cy="75" rx="138" ry="44" transform="rotate(-12 150 75)"/></svg><span class="ch" data-tw="檢">查</span><span class="ch" data-tw="視">看</span><span class="ch">器</span><svg class="ba-cross" viewBox="0 0 300 300"><line class="under" x1="118" y1="300" x2="178" y2="0"/><line class="under" x1="0" y1="128" x2="300" y2="100"/><line x1="118" y1="300" x2="178" y2="0"/><line x1="0" y1="128" x2="300" y2="100"/></svg></span></span>
+        <span class="ba-line ba-en" aria-hidden="true"><span class="ba-blue">Litematica</span><span class="ba-ink">Viewer</span></span>
+        <!-- 英文页只用这一行：英文标题当主标题，同样的蔚蓝档案字效 + 光环 / 十字挂在 Litematica|Viewer 交界 -->
+        <span class="ba-line ba-en-main" aria-hidden="true"><span class="ba-blue">Litematica</span><span class="ba-ink"><svg class="ba-halo" viewBox="0 0 300 150"><ellipse cx="150" cy="75" rx="138" ry="44" transform="rotate(-12 150 75)"/></svg>Viewer<svg class="ba-cross" viewBox="0 0 300 300"><line class="under" x1="118" y1="300" x2="178" y2="0"/><line class="under" x1="0" y1="128" x2="300" y2="100"/><line x1="118" y1="300" x2="178" y2="0"/><line x1="0" y1="128" x2="300" y2="100"/></svg></span></span>
+      </h1>
+      <span class="hero-rule" aria-hidden="true"></span>
+
+      <div class="hero-actions">
+        <!-- 安装包放在 Cloudflare R2（download.lite-viewer.com），学校网络打不开 GitHub 也能下 -->
+        <a class="btn btn-accent btn-lg hero-download" href="https://download.lite-viewer.com/LitematicaViewer-latest.zip">
+          <span class="arrow" aria-hidden="true">▼</span> <span data-en="Download latest" data-tw="下載最新版">下载最新版</span>
+        </a>
+        <span class="hero-meta" data-en="Windows · macOS · Linux · Free &amp; open source" data-tw="Windows · macOS · Linux · 免費開源">Windows · macOS · Linux · 免费开源</span>
+      </div>
+    </div>
+
+    <!-- 图标开场：照介绍动画里的做法，图标按零件一件件画出来（矢量重绘） -->
+    <div class="hero-art">
+      <svg id="hero-icon" class="hero-icon" viewBox="0 0 64 64" role="img" aria-label="Litematica Viewer icon"></svg>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 拖拽上传入口（占位） -->
+<section class="section" id="drop">
+  <div class="section-head" data-reveal>
+    <h2 data-en="Drop it in" data-tw="拖進來試試">拖进来试试</h2>
+    <p data-en="Drop a schematic and the web viewer opens with its material list, stats and 3D view — right in your browser." data-tw="拖一個投影進來，直接開啟網頁版：材料清單、各項指標和 3D 都在瀏覽器裡看。">拖一个投影进来，直接打开网页版：材料清单、各项指标和 3D 都在浏览器里看。</p>
+  </div>
+
+  <!-- data-disable="true"：整块标灰、没有任何动画、写「未开放」，拖文件和点击都不响应。
+       现在是 false：收到文件就交给网页版查看器（viewer/）打开 -->
+  <div class="drop-card" id="drop-card" data-disable="false" data-reveal>
+    <label class="dropzone" id="dropzone" tabindex="0">
+      <input type="file" id="file-input" accept=".litematic,.nbt,.mcstructure" multiple hidden>
+      <span class="drop-arrow" aria-hidden="true">▼</span>
+      <span class="drop-title" data-en="Drop your schematic here" data-tw="把投影檔案拖到這裡">把投影文件拖到这里</span>
+      <span class="drop-sub" data-en="Supports &lt;code&gt;.litematic&lt;/code&gt; · &lt;code&gt;.nbt&lt;/code&gt; · &lt;code&gt;.mcstructure&lt;/code&gt;" data-tw="支援 &lt;code&gt;.litematic&lt;/code&gt; · &lt;code&gt;.nbt&lt;/code&gt; · &lt;code&gt;.mcstructure&lt;/code&gt;">支持 <code>.litematic</code> · <code>.nbt</code> · <code>.mcstructure</code></span>
+      <span class="btn btn-accent drop-btn" data-en="Choose file" data-tw="選擇檔案">选择文件</span>
+      <span class="drop-closed" data-en="Not available yet" data-tw="未開放">未开放</span>
+    </label>
+    <ul class="drop-files" id="drop-files" aria-live="polite"></ul>
+    <p class="drop-note" id="drop-note"></p>
+  </div>
+</section>
+
+<!-- ============================================================ 软件介绍 -->
+<section class="section" id="intro">
+  <div class="section-head" data-reveal>
+    <h2 data-en="One schematic, one list" data-tw="一個投影，一張清單">一个投影，一张清单</h2>
+    <p data-en="Import a schematic and every block, entity and item in its containers gets counted and converted into Boxes / Stacks / units — ready to gather." data-tw="匯入投影，方塊、實體、容器裡的物品一次數清，按 盒 / 組 / 個 換算好，直接照著備料。">导入投影，方块、实体、容器里的物品一次数清，按 盒 / 组 / 个 换算好，直接照着备料。</p>
+  </div>
+
+  <!-- 悬念 → 答案：话说一半，下一拍给数字 -->
+  <div class="reveal-split" data-reveal>
+    <div class="suspense">
+      <p class="suspense-q" data-en="A small mansion needs…" data-tw="一座小型府邸，一共要……">一座小型府邸，一共要……</p>
+      <p class="suspense-a"><b class="count" data-to="18640">0</b> <span data-en="blocks" data-tw="個方塊">个方块</span></p>
+      <p class="suspense-sub"><span data-en="92 kinds · the grass alone is" data-tw="92 種 · 草方塊就要">92 种 · 草方块就要</span> <span class="slots" data-count="9922"></span></p>
+    </div>
+
+    <div class="table-demo" aria-label="材料表示例">
+      <div class="tabstrip" role="tablist">
+        <button role="tab" class="tab is-active" data-view="all" data-en="Total" data-tw="總數">总数</button>
+        <button role="tab" class="tab" data-view="blocks" data-en="Blocks" data-tw="方塊">方块</button>
+        <button role="tab" class="tab" data-view="entities" data-en="Entities" data-tw="實體">实体</button>
+        <button role="tab" class="tab" data-view="items" data-en="Items" data-tw="物品">物品</button>
+        <span class="tab-count" id="tab-count"></span>
+      </div>
+      <div class="mtable">
+        <div class="mrow mhead"><span></span><span data-en="Name" data-tw="名字">名字</span><span class="num" data-en="Count" data-tw="數量">数量</span><span data-en="Units" data-tw="單位">单位</span></div>
+        <div id="mrows"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 能做什么（宽）+ 支持的文件（窄）：两张白色清单，宽度不等 -->
+  <div class="capabilities" data-reveal>
+    <div class="panel features">
+      <h3 class="panel-title" data-en="What it does" data-tw="能做什麼">能做什么</h3>
+      <ul class="feature-list">
+        <li data-stagger><img class="pixel" src="assets/blocks/grass_block.png" alt="" width="32" height="32">
+          <div><b data-en="Material list" data-tw="材料清單">材料清单</b><p data-en="Total / Blocks / Entities / Items tabs; right-click a row to ignore or quick-replace it" data-tw="方塊 / 實體 / 物品 / 總數四個頁籤，右鍵可忽略或快捷替換某一行">方块 / 实体 / 物品 / 总数四个页签，右键可忽略或快捷替换某一行</p></div></li>
+        <li data-stagger><img class="pixel" src="assets/blocks/smooth_quartz.png" alt="" width="32" height="32">
+          <div><b data-en="3D preview" data-tw="3D 預覽">3D 预览</b><p data-en="Drag to rotate and scroll to zoom the thumbnail; open the web 3D renderer for a closer look" data-tw="縮圖可拖曳旋轉、滾輪縮放，需要細看就開網頁 3D 渲染">缩略图可拖拽旋转、滚轮缩放，需要细看就开网页 3D 渲染</p></div></li>
+        <li data-stagger><img class="pixel" src="assets/blocks/chest.png" alt="" width="32" height="32">
+          <div><b data-en="Container analysis" data-tw="容器分析">容器分析</b><p data-en="What's inside every chest, shulker box and hopper, slot by slot" data-tw="箱子、界伏盒、漏斗裡裝了什麼，一格一格擺給你看">箱子、潜影盒、漏斗里装了什么，一格一格摆给你看</p></div></li>
+        <li data-stagger><img class="pixel" src="assets/blocks/bricks.png" alt="" width="32" height="32">
+          <div><b data-en="Step checker" data-tw="步驟檢視器">步骤查看器</b><p data-en="Layer by layer, with textures, facing and upper/lower halves" data-tw="逐層看方塊的貼圖、朝向和上下半，照著一層層蓋">逐层看方块的贴图、朝向和上下半，照着一层层盖</p></div></li>
+        <li data-stagger><img class="pixel" src="assets/blocks/redstone_block.png" alt="" width="32" height="32">
+          <div><b data-en="Redstone ratio" data-tw="紅石偏度">红石偏度</b><p data-en="Seven stats tell a building from a machine" data-tw="七項指標看出它是建築還是機器">七项指标看出它是建筑还是机器</p></div></li>
+        <li data-stagger><img class="pixel" src="assets/blocks/hopper.png" alt="" width="32" height="32">
+          <div><b data-en="Replace &amp; generate" data-tw="替換與生成">替换与生成</b><p data-en="Batch-replace blocks with properties, or generate solid / hollow boxes" data-tw="批次替換方塊（可帶屬性），或生成實心 / 空心長方體">批量替换方块（可带属性），或生成实心 / 空心长方体</p></div></li>
+      </ul>
+    </div>
+
+    <div class="panel formats">
+      <h3 class="panel-title" data-en="Files" data-tw="支援的檔案">支持的文件</h3>
+      <ul class="format-list">
+        <li data-stagger><code>.litematic</code><span data-en="Litematica, with sub-regions" data-tw="Litematica 投影，支援多子區域">Litematica 投影，支持多子区域</span></li>
+        <li data-stagger><code>.nbt</code><span data-en="Java structure block" data-tw="Java 版結構方塊">Java 版结构方块</span></li>
+        <li data-stagger><code>.mcstructure</code><span data-en="Bedrock, names converted to Java" data-tw="基岩版，方塊名自動轉成 Java 寫法">基岩版，方块名自动转成 Java 写法</span></li>
+        <li data-stagger class="is-export"><code data-en="→ World" data-tw="→ 存檔">→ 存档</code><span data-en="Export a void world, drop it in saves" data-tw="匯出成虛空世界，放進 saves 就能進">导出成虚空世界，放进 saves 就能进</span></li>
+      </ul>
+      <p class="panel-note" data-en="The three formats convert into each other" data-tw="三種格式之間可以互相轉換">三种格式之间可以互相转换</p>
+    </div>
+  </div>
+
+  <!-- 界面一览：一张放大的截图 -->
+  <figure class="shot" data-reveal>
+    <img src="assets/app_cn.png" alt="" loading="lazy" width="1600" height="934">
+    <figcaption data-en="The desktop app with “Schematic tools” open" data-tw="桌面版主介面，右側展開了「投影工具」">桌面版主界面，右侧展开了「投影工具」</figcaption>
+  </figure>
+
+  <!-- 三语言 + 抛一个问题 -->
+  <div class="duo" data-reveal>
+    <div class="lang-card" data-stagger>
+      <h3>简体中文 · 繁體中文 · English</h3>
+      <p data-en="Pick a language the first time you open it; switch anytime under Help → Language." data-tw="第一次開啟先選語言，之後在「幫助 → 語言」隨時切換。">第一次打开先选语言，之后在「帮助 → 语言」随时切换。</p>
+    </div>
+    <div class="question-card" data-stagger>
+      <h3 data-en="How many blocks is your biggest schematic?" data-tw="你做過最大的投影有多少方塊？">你做过最大的投影有多少方块？</h3>
+      <p data-en="Tell us in the Bilibili comments — and what you want in the next version." data-tw="來 B 站留言區報個數，下個版本做什麼也可以在那裡說。">来 B 站评论区报个数，下个版本做什么也可以在那里说。</p>
+      <a class="btn btn-ink" href="https://space.bilibili.com/3494373232741268" target="_blank" rel="noopener" data-en="Comment on Bilibili" data-tw="去 Bilibili 留言">去 Bilibili 留言</a>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ 下载 -->
+<section class="download" data-reveal>
+  <div class="download-inner">
+    <p class="mono download-title" data-en="Download" data-tw="下載">下载</p>
+    <p class="download-sub" data-en="Free and open source · installers for Windows / macOS / Linux" data-tw="免費開源 · Windows / macOS / Linux 都有安裝包">免费开源 · Windows / macOS / Linux 都有安装包</p>
+    <div class="download-actions">
+      <a class="btn btn-accent btn-lg" href="https://download.lite-viewer.com/LitematicaViewer-latest.zip" data-en="Download latest" data-tw="下載最新版">下载最新版</a>
+      <a class="btn btn-plain btn-lg" href="https://github.com/LitematicaViewer/Litematica-Nova" target="_blank" rel="noopener" data-en="Litematica Nova (Pro)" data-tw="Litematica Nova（Pro 版）">Litematica Nova（Pro 版）</a>
+    </div>
+    <p class="download-sub download-alt"><a href="https://github.com/albertchen857/LitematicaViewer/releases" target="_blank" rel="noopener" data-en="Older versions on GitHub Releases" data-tw="歷史版本：GitHub Releases">历史版本：GitHub Releases</a></p>
+  </div>
+</section>
+
+</main>
+
+<footer class="footer">
+  <span>Litematica Viewer · 投影查看器 · by Albertchen857</span>
+  <span data-en="Minecraft is a trademark of Mojang Studios. This project is not affiliated with Mojang." data-tw="Minecraft 是 Mojang Studios 的商標，本專案與其無關。">Minecraft 是 Mojang Studios 的商标，本项目与其无关。</span>
+</footer>
+
+<script src="handoff.js"></script>
+<script src="main.js"></script>
+</body>
+</html>
