@@ -189,9 +189,11 @@ code, .mono { font-family: var(--mono); }
   letter-spacing: -0.01em;
   -webkit-text-stroke-width: 0.16em;
 }
-/* 两行：第一行 Litematica，第二行 Viewer（往右错开一点，像 BA 字标那样的错落） */
+/* 两行：第一行 Litematica 缩小，第二行 Viewer 放大做主角（往右错开一点，像 BA 字标那样的错落）。
+   光环 / 十字在 Viewer 里面、按 em 定位，跟着一起放大 */
 .ba-en-main .ba-blue, .ba-en-main .ba-ink { display: block; }
-.ba-en-main .ba-ink { position: relative; width: max-content; margin-left: 0.9em; }
+.ba-en-main .ba-blue { font-size: 0.7em; }
+.ba-en-main .ba-ink { position: relative; width: max-content; margin-left: 0.6em; font-size: 1.35em; line-height: 0.95; }
 /* 两行时光环和十字挪到 Viewer 左边空出来的那块，不再往上压到 Litematica */
 .ba-en-main .ba-halo { left: -0.95em; top: -0.12em; width: 2.2em; height: 0.95em; }
 .ba-en-main .ba-cross { left: -0.8em; top: -0.3em; width: 1.05em; height: 1.05em; }
