@@ -239,6 +239,8 @@ code { font-family: var(--mono); }
 }
 .card { background: var(--card); border-radius: 14px; box-shadow: inset 0 0 0 1px var(--line); padding: 16px; }
 .card-title { margin: 0 0 12px; font-size: 16px; }
+.card.table-card { min-height: 320px; }
+
 
 .file-name { margin: 0; font-size: 20px; line-height: 1.25; word-break: break-all; }
 .file-summary { margin: 8px 0 0; color: var(--pc); font: 700 13px/1.5 var(--sans); font-variant-numeric: tabular-nums; }
@@ -265,7 +267,7 @@ code { font-family: var(--mono); }
 .tab-count { margin: 8px 0; color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
 
 .table { border-radius: 8px; overflow: hidden; background: var(--pc); }
-.table:empty { display: none; }
+.table:empty { min-height: 100px; }
 .row {
   display: grid; grid-template-columns: 24px 1fr auto; gap: 8px; align-items: center;
   min-height: 36px; padding: 4px 10px; color: var(--bg); font-size: 14px;
