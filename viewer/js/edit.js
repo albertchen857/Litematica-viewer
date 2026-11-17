@@ -45,10 +45,12 @@ const sameBlock = (a, b) => a.id === b.id && JSON.stringify(Object.entries(a.pro
 
 // 按规则替换，返回 { structure: 新结构, replaced: 替换了多少格 }。原结构不动。
 // only：可选，只替换这一格 { region, local:[x,y,z] }（3D 里右键某一个方块时用）
-// clean：可选，(新 id, 合并后的状态) → 实际写入的状态（比如换成没有状态的整方块时把旧状态清掉）
-export function replaceBlocks(structure, rules, only = null, clean = (_id, props) => props) {
+// clean：可选，(新 id, 合并后的状态, 原方块) → 实际写入的状态（比如换成没有状态的整方块时把旧状态清掉）
+// inRegion：可选，只换这一个子区域（多子区域的投影选中了某个区域时）
+export function replaceBlocks(structure, rules, only = null, clean = (_id, props) => props, inRegion = null) {
   let replaced = 0;
   const regions = structure.regions.map((region) => {
+    if (inRegion && region !== inRegion) return region;
     // 先算调色板映射：哪些调色板条目要变成什么
     const palette = region.palette.slice();
     const remap = palette.map((_, i) => i);
@@ -57,7 +59,7 @@ export function replaceBlocks(structure, rules, only = null, clean = (_id, props
       if (!rule) return;
       const [targetId, needProps, setProps] = rule;
       if (!Object.entries(needProps).every(([k, v]) => block.props[k] === v)) return;
-      const next = { id: targetId, props: clean(targetId, { ...block.props, ...setProps }) };
+      const next = { id: targetId, props: clean(targetId, { ...block.props, ...setProps }, block) };
       const found = palette.findIndex((b) => sameBlock(b, next));
       remap[index] = found >= 0 ? found : palette.push(next) - 1;
     });

@@ -91,7 +91,10 @@ function readLitematic(rootTag) {
     const entities = (r.Entities || []).map((e) => ({
       id: e.id, nbt: e, pos: Array.isArray(e.Pos) ? e.Pos.map((v, i) => v - shift[i]) : null,
     }));
-    regions.push(normalise({ name, origin, size: [ax, ay, az], palette, blocks, blockEntities, entities }));
+    // raw：读进来时的原始条目，属性面板的「原始 NBT」用（调色板下标差 offset：补了空气就是 1）
+    const region = normalise({ name, origin, size: [ax, ay, az], palette, blocks, blockEntities, entities });
+    region.raw = { kind: "litematic", palette: r.BlockStatePalette, offset: region.palette.length - r.BlockStatePalette.length };
+    regions.push(region);
   }
   // 和桌面版一样按 Litematica 自己的格式版本给出游戏版本范围
   const lm = root.Version || 0;
@@ -124,7 +127,8 @@ function readJavaNbt(root) {
   return {
     name: "", author: data.author || "", description: "", source: "nbt", version: data.DataVersion || 0, declared: 0,
     meta: { DataVersion: data.DataVersion || 0 },
-    regions: [normalise({ name: "structure", origin: [0, 0, 0], size, palette, blocks, blockEntities, entities })],
+    regions: [{ ...normalise({ name: "structure", origin: [0, 0, 0], size, palette, blocks, blockEntities, entities }),
+      raw: { kind: "nbt", palette: raw, offset: 1, blocks: data.blocks || [] } }],
   };
 }
 
@@ -172,7 +176,8 @@ function readMcstructure(root) {
   return {
     name: "", author: "", description: "", source: "mcstructure", version: data.format_version || 1, declared: 0,
     meta: { format_version: data.format_version || 1 },
-    regions: [normalise({ name: "structure", origin, size: [sx, sy, sz], palette, blocks, blockEntities, entities })],
+    regions: [{ ...normalise({ name: "structure", origin, size: [sx, sy, sz], palette, blocks, blockEntities, entities }),
+      raw: { kind: "mcstructure", palette: def.block_palette, offset: 1, positionData: def.block_position_data || {} } }],
   };
 }
 
