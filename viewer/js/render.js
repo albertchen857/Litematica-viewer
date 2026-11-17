@@ -122,10 +122,39 @@ export async function loadResources() {
   const atlas = new deepslate.TextureAtlas(imageData, uv);
   const flags = computeFlags(imageData, size);
 
+  // 贴图缺失的处理：
+  //   新版（26.x）告示牌、床已经是普通方块模型，贴图都在图集里；但 deepslate 0.27 还会用「特殊渲染器」
+  //   按旧版实体贴图（entity/signs/oak、entity/bed/white）再画一遍，图集里没有就画成黑块盖在上面。
+  //   所以特殊渲染器只要用到图集里没有的贴图，这一块就不画它，只留方块模型（箱子这类贴图还在的照常画）。
+  //   玩家头的 steve 皮肤新版也没了，换成同目录里有的皮肤。
+  const aliases = new Map();
+  let missingTexture = false;
+  const textureUV = (id) => {
+    let key = String(id);
+    if (!(key in uv)) {
+      if (!aliases.has(key)) {
+        const folder = key.slice(0, key.lastIndexOf("/") + 1);
+        aliases.set(key, folder.includes("entity/player/") ? Object.keys(uv).find((k) => k.startsWith(folder)) || null : null);
+      }
+      if (aliases.get(key)) key = aliases.get(key);
+      else missingTexture = true;
+    }
+    return atlas.getTextureUV(key);
+  };
+  if (!deepslate.SpecialRenderers.__lvPatched) {
+    const special = deepslate.SpecialRenderers.getBlockMesh;
+    deepslate.SpecialRenderers.getBlockMesh = (state, nbt, res, cull) => {
+      missingTexture = false;
+      const mesh = special(state, nbt, res, cull);
+      return missingTexture ? new deepslate.Mesh() : mesh;
+    };
+    deepslate.SpecialRenderers.__lvPatched = true;
+  }
+
   resources = {
     getBlockDefinition: (id) => definitions[String(id)],
     getBlockModel: (id) => models[String(id)],
-    getTextureUV: (id) => atlas.getTextureUV(id),
+    getTextureUV: textureUV,
     getTextureAtlas: () => atlas.getTextureAtlas(),
     getBlockFlags: (id) => flags[String(id)] || { opaque: false, semi_transparent: false, self_culling: true },
     getBlockProperties: () => null,
@@ -172,10 +201,11 @@ const AIR_RE = /:(cave_|void_)?air$/;
 const RENDER_AS = { "minecraft:shulker_box": "minecraft:purple_shulker_box" };
 const CHUNK = 8; // deepslate 的区块边长（StructureRenderer 的 chunkSize）
 const stateOf = (b) => (b.id && !AIR_RE.test(b.id) ? new deepslate.BlockState(RENDER_AS[b.id] || b.id, b.props) : null);
-// WASD 移动：按世界的正方向走（不跟着视角转）。W/S 北南（-Z/+Z），A/D 西东（-X/+X），空格 / Shift 上下
+// WASD 移动：跟着视角走。W/S 沿视线前后（往上看就往上飞），A/D 左右平移，空格 / Shift 竖直上下。
+// 值是 [前后, 左右, 上下]
 const MOVE_KEYS = {
-  KeyW: [0, 0, -1], KeyS: [0, 0, 1], KeyA: [-1, 0, 0], KeyD: [1, 0, 0],
-  Space: [0, 1, 0], ShiftLeft: [0, -1, 0], ShiftRight: [0, -1, 0],
+  KeyW: [1, 0, 0], KeyS: [-1, 0, 0], KeyA: [0, -1, 0], KeyD: [0, 1, 0],
+  Space: [0, 0, 1], ShiftLeft: [0, 0, -1], ShiftRight: [0, 0, -1],
 };
 
 // 给 deepslate 用的「活」结构：可以随时加减方块。deepslate 自己的 Structure 只能加不能删，
@@ -456,7 +486,9 @@ export class View {
     if (filtered) this.setFilter(before);
     this.frame && cancelAnimationFrame(this.frame);
     this.frame = 0;
-    this.draw();
+    // 同一帧里马上画回正常画面：等到下一帧再画的话，等轴图会在左下角露出一帧
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    this.renderNow();
     return out;
   }
 
@@ -518,18 +550,23 @@ export class View {
     if (!this.renderer || this.frame) return;
     this.frame = requestAnimationFrame(() => {
       this.frame = 0;
-      const view = this.viewMatrix();
-      this.renderer.drawStructure(view);
-      this.renderer.drawGrid(view);
-      if (this.hitboxMesh) {
-        // 借 deepslate 画网格线的着色器画碰撞箱（和 drawOutline 同一套调用）
-        this.renderer.setShader(this.renderer.gridShaderProgram);
-        this.renderer.prepareDraw(view);
-        this.renderer.drawMesh(this.hitboxMesh, { pos: true, color: true });
-      }
-      if (this.selected) this.renderer.drawOutline(view, this.selected);
-      this.placeMarkers(view);
+      this.renderNow();
     });
+  }
+
+  renderNow() {
+    if (!this.renderer) return;
+    const view = this.viewMatrix();
+    this.renderer.drawStructure(view);
+    this.renderer.drawGrid(view);
+    if (this.hitboxMesh) {
+      // 借 deepslate 画网格线的着色器画碰撞箱（和 drawOutline 同一套调用）
+      this.renderer.setShader(this.renderer.gridShaderProgram);
+      this.renderer.prepareDraw(view);
+      this.renderer.drawMesh(this.hitboxMesh, { pos: true, color: true });
+    }
+    if (this.selected) this.renderer.drawOutline(view, this.selected);
+    this.placeMarkers(view);
   }
 
   // ---- 实体：deepslate 不画实体。画一个按种类上色的碰撞箱，再在头顶贴一个图标，点图标看信息
@@ -668,8 +705,16 @@ export class View {
     if (!this.held.size) return;
     const now = performance.now(), dt = Math.min(0.25, (now - this.lastMove) / 1000); // 掉帧时也按真实时间走，最多补 0.25 秒
     this.lastMove = now;
-    const dir = [0, 0, 0];
-    for (const code of this.held) MOVE_KEYS[code].forEach((v, i) => (dir[i] += v));
+    let [fwd, side, up] = [0, 0, 0];
+    for (const code of this.held) { const [f, s, u] = MOVE_KEYS[code]; fwd += f; side += s; up += u; }
+    // 视线方向 / 右手方向：把相机坐标系的 -Z、+X 转回世界坐标（只取旋转部分）
+    const rot = mat4.create();
+    mat4.rotateX(rot, rot, this.pitch);
+    mat4.rotateY(rot, rot, this.yaw);
+    mat4.invert(rot, rot);
+    const forward = vec3.transformMat4(vec3.create(), [0, 0, -1], rot);
+    const right = vec3.transformMat4(vec3.create(), [1, 0, 0], rot);
+    const dir = [0, 1, 2].map((i) => forward[i] * fwd + right[i] * side + (i === 1 ? up : 0));
     const len = Math.hypot(...dir) || 1;
     for (let i = 0; i < 3; i++) this.target[i] += (dir[i] / len) * this.moveSpeed * dt;
     this.draw();

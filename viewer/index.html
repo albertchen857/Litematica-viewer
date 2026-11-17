@@ -94,6 +94,20 @@
       <!-- 点开是方块选择框：同类方块排前面，后面按字母排（js/app.js 的 openPicker） -->
       <div class="inspect-replace edit-only" id="inspect-replace" hidden>
         <button class="btn btn-small" id="inspect-replace-btn" type="button"><span data-t="replaceBtn">替换方块</span><i class="caret" aria-hidden="true"></i></button>
+        <!-- 高级：改属性。属性选物 = 勾「只选」的属性只换这个值的方块；属性替换 = 「改成」里选新值 -->
+        <details class="inspect-adv" id="inspect-adv">
+          <summary data-t="adv.title">高级：改属性</summary>
+          <table class="adv-table">
+            <thead><tr><th data-t="adv.filter">只选</th><th data-t="adv.prop">属性</th><th data-t="adv.now">现在</th><th data-t="adv.set">改成</th></tr></thead>
+            <tbody id="adv-rows"></tbody>
+          </table>
+          <div class="adv-scope">
+            <label><input type="radio" name="adv-scope" value="all" checked> <span id="adv-scope-all"></span></label>
+            <label><input type="radio" name="adv-scope" value="one"> <span data-t="picker.scopeOne">只换这一格</span></label>
+          </div>
+          <button class="btn btn-small" id="adv-apply" type="button" data-t="adv.apply">应用</button>
+          <p class="tool-msg" id="adv-msg"></p>
+        </details>
       </div>
       <div class="inspect-items" id="inspect-items"></div>
       <p class="inspect-extra" id="inspect-extra"></p>

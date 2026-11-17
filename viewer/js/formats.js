@@ -85,8 +85,12 @@ function readLitematic(rootTag) {
 
     const blockEntities = new Map();
     for (const te of r.TileEntities || []) blockEntities.set(`${te.x},${te.y},${te.z}`, te);
-    // Litematica 的实体坐标是相对区域原点的
-    const entities = (r.Entities || []).map((e) => ({ id: e.id, pos: e.Pos, nbt: e }));
+    // Litematica 的实体坐标是相对区域 Position（起点角）的，不是最小角：某个轴尺寸为负时，
+    // 实体坐标在那个轴上是负的（-|尺寸|+1 ~ 0）。换算成相对最小角，和方块、方块实体对齐
+    const shift = size.map((v) => (v < 0 ? v + 1 : 0));
+    const entities = (r.Entities || []).map((e) => ({
+      id: e.id, nbt: e, pos: Array.isArray(e.Pos) ? e.Pos.map((v, i) => v - shift[i]) : null,
+    }));
     regions.push(normalise({ name, origin, size: [ax, ay, az], palette, blocks, blockEntities, entities }));
   }
   // 和桌面版一样按 Litematica 自己的格式版本给出游戏版本范围

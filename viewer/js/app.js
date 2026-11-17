@@ -95,7 +95,7 @@ function applyLang() {
   document.querySelectorAll("[data-ui]").forEach((el) => (el.textContent = ui(el.dataset.ui)));
   $("replace-target").placeholder = t("replace.target");
   $("picker-search").placeholder = t("picker.search");
-  if (state.structure) renderBatch();
+  renderBatch(); // 全面替换那几行的「原方块 / 换成」提示字
   $("lang").value = lang;
   document.title = t("pageTitle");
   syncUrl();
@@ -373,6 +373,7 @@ function showInspect(hit) {
   inspectHit = hit;
   if (!hit) { box.hidden = true; closePicker(); return; }
   $("inspect-replace").hidden = hit.kind !== "block" || isDesktop();
+  if (hit.kind === "block" && !isDesktop()) renderAdv(hit);
   const id = hit.kind === "entity" ? hit.entity.id : hit.block.id;
   const icon = blockIcon(id, 32);
   $("inspect-icon").src = icon || "";
@@ -913,6 +914,68 @@ function inspectReplace(e) {
   });
 }
 
+// ---------------------------------------------------------------- 高级：改属性
+
+// 方块每个属性能取哪些值：从方块状态定义里收集（variants 的键、multipart 的 when 条件）
+function propValues(id) {
+  const def = assets.blockstates[short(id)] || {};
+  const values = {};
+  const add = (k, v) => String(v).split("|").forEach((x) => (values[k] ||= new Set()).add(x));
+  for (const key of Object.keys(def.variants || {})) {
+    for (const pair of key.split(",")) { const [k, v] = pair.split("="); if (v !== undefined) add(k, v); }
+  }
+  const walk = (when) => {
+    if (!when) return;
+    for (const [k, v] of Object.entries(when)) (k === "OR" || k === "AND" ? v.forEach(walk) : add(k, v));
+  };
+  for (const part of def.multipart || []) walk(part.when);
+  return values;
+}
+const natural = (a, b) => (isNaN(a) || isNaN(b) ? a.localeCompare(b) : a - b);
+
+// 点选的方块的属性表：只选（属性选物）+ 改成（属性替换）
+let advAt = null;
+function renderAdv(hit) {
+  const at = locate(hit.pos);
+  advAt = at;
+  if (!at) return;
+  const known = propValues(at.block.id), props = Object.entries(at.block.props);
+  $("adv-scope-all").textContent = t("adv.scopeAll", nameOf(at.block.id));
+  $("adv-msg").textContent = "";
+  $("adv-rows").innerHTML = props.length ? props.map(([k, v]) => {
+    let options = [...(known[k] || [])];
+    if (v === "true" || v === "false") options.push("true", "false");
+    options = [...new Set([v, ...options])].sort(natural);
+    // 模型里看不出这个属性能取哪些值（比如红石线的 power）：给个输入框直接写
+    const control = options.length > 1
+      ? `<select data-set="${esc(k)}">${options.map((o) => `<option${o === v ? " selected" : ""}>${esc(o)}</option>`).join("")}</select>`
+      : `<input type="text" data-set="${esc(k)}" value="${esc(v)}" spellcheck="false">`;
+    return `<tr><td><input type="checkbox" data-filter="${esc(k)}" title="${esc(t("adv.filterTip"))}"></td>` +
+      `<td>${esc(k)}</td><td>${esc(v)}</td><td>${control}</td></tr>`;
+  }).join("") : `<tr><td colspan="4">${esc(t("adv.noProps"))}</td></tr>`;
+  $("adv-apply").disabled = !props.length;
+}
+
+// 应用：勾了「只选」的属性作为筛选条件，「改成」里变了的作为新值；规则写法同桌面版，例如
+//   hopper{"facing":"west"}-hopper{"facing":"down"}
+function applyAdv() {
+  const at = advAt;
+  if (!at) return;
+  const filter = {}, set = {};
+  for (const box of $("adv-rows").querySelectorAll("[data-filter]:checked")) filter[box.dataset.filter] = at.block.props[box.dataset.filter];
+  for (const el of $("adv-rows").querySelectorAll("[data-set]")) {
+    const k = el.dataset.set, v = el.value.trim();
+    if (v && v !== at.block.props[k]) set[k] = v;
+  }
+  if (!Object.keys(set).length) { $("adv-msg").textContent = t("adv.none"); return; }
+  const one = document.querySelector('[name="adv-scope"]:checked').value === "one";
+  const json = (o) => (Object.keys(o).length ? JSON.stringify(o) : "");
+  const id = short(at.block.id);
+  // 只换这一格：用它自己的全部属性做条件，保证换的就是这格
+  const result = runRules(`${id}${json(one ? at.block.props : filter)}-${id}${json(set)}`, one ? { region: at.region, local: at.local } : null);
+  $("adv-msg").textContent = result.error || ui("app.replace.done", result.replaced);
+}
+
 // ---------------------------------------------------------------- 工具：全面替换方块
 
 // 同桌面版「替换特定方块」：一行一组 输入 → 输出，＋/− 增删，一次全换
@@ -985,6 +1048,12 @@ function setMoveSpeed(v) {
 
 function bindTools() {
   $("inspect-replace-btn").addEventListener("click", inspectReplace);
+  $("adv-apply").addEventListener("click", applyAdv);
+  // 改过的值描个边，一眼看出改了哪几个
+  $("adv-rows").addEventListener("change", (e) => {
+    const el = e.target.closest("[data-set]");
+    if (el && advAt) el.classList.toggle("is-changed", el.value !== advAt.block.props[el.dataset.set]);
+  });
   $("picker-search").addEventListener("input", () => { picker.limit = PICKER_PAGE; renderPicker(); $("picker-list").scrollTop = 0; });
   $("picker-search").addEventListener("keydown", (e) => {
     if (e.key === "Enter") { const first = $("picker-list").querySelector("[data-id]"); if (first) choosePicked(first.dataset.id); }

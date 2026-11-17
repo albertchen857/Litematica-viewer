@@ -327,6 +327,20 @@ code { font-family: var(--mono); }
 .inspect-replace { margin-top: 10px; }
 .inspect-replace[hidden] { display: none; }
 .inspect-replace .caret { margin-left: 8px; }
+/* 高级：改属性 */
+.inspect-adv { margin-top: 8px; font-size: 12px; }
+.inspect-adv summary { cursor: pointer; color: var(--muted); }
+.inspect-adv summary:hover { color: var(--pc); }
+.adv-table { width: 100%; margin-top: 6px; border-collapse: collapse; font: 12px var(--mono); }
+.adv-table th { padding: 2px 4px; color: var(--muted); font: 600 11px var(--sans); text-align: left; }
+.adv-table td { padding: 3px 4px; box-shadow: inset 0 -1px 0 var(--line); }
+.adv-table td:first-child, .adv-table th:first-child { width: 28px; text-align: center; }
+.adv-table input[type=checkbox] { accent-color: var(--pc); }
+.adv-table select, .adv-table input[type=text] { width: 100%; height: 24px; padding: 0 4px; border: 0; border-radius: 4px; background: var(--chip); color: var(--tt); font: 12px var(--mono); }
+.adv-table select.is-changed, .adv-table input.is-changed { box-shadow: inset 0 0 0 2px var(--pc); }
+.adv-scope { display: grid; gap: 2px; margin: 8px 0; }
+.adv-scope label { display: flex; align-items: center; gap: 6px; }
+.adv-scope input { accent-color: var(--pc); }
 
 /* 方块选择框：搜索 + 同类方块 + 全部方块（A–Z），每项图标 + 译名 + ID */
 .picker {
