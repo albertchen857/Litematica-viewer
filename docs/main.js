@@ -36,7 +36,7 @@ function applyLang() {
     el.innerHTML = lang === "en" ? el.dataset.en : lang === "tw" ? (el.dataset.tw || el.dataset.zh) : el.dataset.zh;
   });
   $("lang-switch").value = URL_CODE[lang];
-  // Banner 标题：简体 = 中文 + 英文，繁体 = 繁体中文 + 英文，英文 = 只有英文大标题（背景图固定 app_cn.png）
+  // Banner 标题：简体 = 中文 + 英文，繁体 = 繁体中文 + 英文，英文 = 只有英文大标题（背景图固定 app_en.png）
   document.querySelectorAll(".ba-zh .ch").forEach((ch) => {
     if (ch.dataset.zh === undefined) ch.dataset.zh = ch.textContent;
     ch.textContent = lang === "tw" && ch.dataset.tw ? ch.dataset.tw : ch.dataset.zh;
