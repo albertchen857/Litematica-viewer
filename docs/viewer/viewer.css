@@ -221,7 +221,11 @@ code { font-family: var(--mono); }
   background: color-mix(in srgb, var(--bg) 85%, transparent); color: var(--muted); font-size: 12px;
 }
 /* WASD 移动速度 */
-.move-speed { display: flex; align-items: center; gap: 6px; color: var(--tt); }
+.move-speed, .env-pick { display: flex; align-items: center; gap: 6px; color: var(--tt); }
+.env-pick select { height: 22px; border: 0; border-radius: 4px; background: var(--chip); color: var(--tt); font: 12px var(--sans); }
+/* 背景：天空（地板在 3D 里画） */
+.stage[data-env="ocean"], .stage[data-env="grass"] { background: linear-gradient(#78a7ff 0%, #b9d7ff 55%, #e3efff 100%); }
+.stage[data-env="end"] { background: radial-gradient(circle at 50% 30%, #2b1a3d 0%, #120a1c 60%, #07040b 100%); }
 .move-speed input { width: 90px; accent-color: var(--pc); }
 .move-speed b { min-width: 2ch; font: 700 12px var(--mono); text-align: right; }
 .hint[hidden] { display: none; }
@@ -306,7 +310,10 @@ code { font-family: var(--mono); }
 
 /* 全面替换方块：一行 = [输入方块] → [输出方块] − */
 .batch-rows { display: grid; gap: 6px; margin-top: 10px; }
-.batch-row { display: grid; grid-template-columns: 1fr auto 1fr auto; gap: 6px; align-items: center; }
+.batch-row { display: grid; grid-template-columns: 1fr auto 1fr auto auto; gap: 6px; align-items: center; }
+.batch-props-btn { width: 28px; height: 28px; padding: 0; }
+.batch-props-btn.is-on { background: var(--pc); color: var(--bg); }
+.batch-props { grid-column: 1 / -1; margin: 0 0 6px; }
 .batch-arrow { color: var(--muted); }
 .batch-del { width: 28px; height: 28px; padding: 0; }
 /* 选方块的按钮：图标 + 译名，没选时显示提示字 */
@@ -322,6 +329,25 @@ code { font-family: var(--mono); }
 /* 缩略图 */
 .thumb-img { display: block; width: 100%; max-width: 280px; margin: 10px auto 0; border-radius: 8px; background: var(--chip); image-rendering: auto; }
 .thumb-img[hidden] { display: none; }
+
+/* 点选信息：原始 NBT 按钮、替换方块 / 改属性、容器格子 */
+.inspect-nbt { position: absolute; right: 30px; top: 8px; height: 22px; padding: 0 8px; border: 0; border-radius: 6px; background: var(--chip); color: var(--muted); font: 600 11px var(--sans); cursor: pointer; }
+.inspect-nbt:hover { color: var(--pc); }
+.inspect-head { padding-right: 96px; }
+.inspect-edit { margin-top: 10px; font-size: 12px; }
+.inspect-edit[hidden] { display: none; }
+.inspect-edit summary { cursor: pointer; font-weight: 700; color: var(--tt); }
+.inspect-edit summary:hover { color: var(--pc); }
+.edit-target-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+.edit-target-row .pick { flex: 1; }
+.edit-target-row .caret { margin-left: auto; }
+.slot-cell.is-editable { cursor: pointer; }
+.slot-cell.is-editable:hover { box-shadow: inset 0 0 0 2px var(--pc); }
+.inspect-tip { margin: 4px 0 0; color: var(--muted); font-size: 11px; }
+.inspect-tip[hidden] { display: none; }
+/* 右键改标题 / 简介 */
+.is-editing { outline: 2px solid var(--pc); outline-offset: 2px; border-radius: 4px; background: var(--bg); color: var(--tt); white-space: pre-wrap; cursor: text; }
+.stat span.is-editing { min-width: 60%; text-align: left; }
 
 /* 点选信息里的「替换方块」 */
 .inspect-replace { margin-top: 10px; }
@@ -339,6 +365,8 @@ code { font-family: var(--mono); }
 .adv-table select, .adv-table input[type=text] { width: 100%; height: 24px; padding: 0 4px; border: 0; border-radius: 4px; background: var(--chip); color: var(--tt); font: 12px var(--mono); }
 .adv-table select.is-changed, .adv-table input.is-changed { box-shadow: inset 0 0 0 2px var(--pc); }
 .adv-scope { display: grid; gap: 2px; margin: 8px 0; }
+.adv-table td small { display: block; color: var(--muted); font-size: 10px; }
+.adv-none { color: var(--muted); }
 .adv-scope label { display: flex; align-items: center; gap: 6px; }
 .adv-scope input { accent-color: var(--pc); }
 
@@ -351,6 +379,10 @@ code { font-family: var(--mono); }
 .picker[hidden] { display: none; }
 .picker-scope { display: flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--chip); }
 .picker-scope[hidden] { display: none; }
+.picker-extra { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.picker-extra[hidden] { display: none; }
+.picker-count { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.picker-count input { width: 64px; height: 28px; padding: 0 6px; border: 0; border-radius: 6px; background: var(--chip); color: var(--tt); font: 13px var(--mono); }
 .picker-scope button { flex: 1; min-width: 0; height: 28px; padding: 0 6px; border: 0; border-radius: 6px; background: none; color: var(--tt); font: 12px var(--sans); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .picker-scope button.is-active { background: var(--pc); color: var(--bg); }
 .picker-search { height: 34px; padding: 0 10px; border: 0; border-radius: 8px; background: var(--chip); color: var(--tt); font: 13px var(--sans); outline: none; }
@@ -433,6 +465,8 @@ code { font-family: var(--mono); }
 .dlg-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 .tut { margin: 0; padding-left: 20px; display: grid; gap: 10px; font-size: 14px; }
 .tut li::marker { color: var(--pc); font-weight: 700; }
+/* 原始 NBT */
+.nbt-text { max-height: 60vh; overflow: auto; margin: 0; padding: 12px; border-radius: 8px; background: var(--chip); font: 12px/1.5 var(--mono); white-space: pre-wrap; word-break: break-all; }
 
 /* 替换完的提示 */
 .toast {

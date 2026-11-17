@@ -92,6 +92,62 @@ function computeFlags(imageData, size) {
   return flags;
 }
 
+// ---- 大箱子：deepslate 的箱子渲染器不管 type=left/right，两半各画一个单箱子（左右各缩 1 像素、各带锁扣），
+// 看起来是两个小箱子。这里给两半换成合在一起的模型：往另一半那边一直延伸到格子边上，锁扣只画一个、跨在中缝上。
+// 另一半在哪边：type=left 在朝向的顺时针方向（模型空间里是 +x），type=right 在逆时针方向（-x）。
+// 几何和贴图 UV 照抄 deepslate 的单箱子模型，旋转方式也一样（按 facing 绕竖轴转）
+const CHEST_TEXTURE = {
+  chest: "normal", trapped_chest: "trapped",
+  copper_chest: "copper", exposed_copper_chest: "copper_exposed", weathered_copper_chest: "copper_weathered", oxidized_copper_chest: "copper_oxidized",
+  waxed_copper_chest: "copper", waxed_exposed_copper_chest: "copper_exposed", waxed_weathered_copper_chest: "copper_weathered", waxed_oxidized_copper_chest: "copper_oxidized",
+};
+const CHEST_FACES = {
+  body: {
+    north: { uv: [10.5, 8.25, 14, 10.75], rotation: 180, texture: "#0" }, east: { uv: [7, 8.25, 10.5, 10.75], rotation: 180, texture: "#0" },
+    south: { uv: [3.5, 8.25, 7, 10.75], rotation: 180, texture: "#0" }, west: { uv: [0, 8.25, 3.5, 10.75], rotation: 180, texture: "#0" },
+    up: { uv: [7, 4.75, 10.5, 8.25], texture: "#0" }, down: { uv: [3.5, 4.75, 7, 8.25], texture: "#0" },
+  },
+  lid: {
+    north: { uv: [10.5, 3.75, 14, 4.75], rotation: 180, texture: "#0" }, east: { uv: [7, 3.75, 10.5, 4.75], rotation: 180, texture: "#0" },
+    south: { uv: [3.5, 3.75, 7, 4.75], rotation: 180, texture: "#0" }, west: { uv: [0, 3.75, 3.5, 4.75], rotation: 180, texture: "#0" },
+    up: { uv: [7, 0, 10.5, 3.5], texture: "#0" }, down: { uv: [3.5, 0, 7, 3.5], texture: "#0" },
+  },
+  latch: {
+    north: { uv: [0.25, 0.25, 0.75, 1.25], rotation: 180, texture: "#0" }, east: { uv: [0, 0.25, 0.25, 1.25], rotation: 180, texture: "#0" },
+    south: { uv: [1, 0.25, 1.5, 1.25], rotation: 180, texture: "#0" }, west: { uv: [0.75, 0.25, 1, 1.25], rotation: 180, texture: "#0" },
+    up: { uv: [0.25, 0, 0.75, 0.25], rotation: 180, texture: "#0" }, down: { uv: [0.75, 0, 1.25, 0.25], rotation: 180, texture: "#0" },
+  },
+};
+const FACING_ANGLE = { north: 0, west: Math.PI / 2, south: Math.PI, east: (Math.PI * 3) / 2 };
+function doubleChestMesh(state, res) {
+  const name = String(state.getName()).replace(/^minecraft:/, "");
+  const type = state.getProperty("type");
+  if (!CHEST_TEXTURE[name] || (type !== "left" && type !== "right")) return null;
+  const left = type === "left";
+  const [x0, x1] = left ? [1, 16] : [0, 15];
+  const elements = [
+    { from: [x0, 0, 1], to: [x1, 10, 15], faces: CHEST_FACES.body },
+    { from: [x0, 10, 1], to: [x1, 14, 15], faces: CHEST_FACES.lid },
+  ];
+  if (left) elements.push({ from: [15, 7, 0], to: [17, 11, 2], faces: CHEST_FACES.latch });
+  const model = new deepslate.BlockModel(undefined, { 0: "minecraft:entity/chest/" + CHEST_TEXTURE[name] }, elements);
+  const mesh = model.getMesh(res, deepslate.Cull.none());
+  const m = mat4.create();
+  mat4.scale(m, m, [1 / 16, 1 / 16, 1 / 16]);
+  mat4.translate(m, m, [8, 8, 8]);
+  mat4.rotateY(m, m, FACING_ANGLE[state.getProperty("facing")] ?? Math.PI);
+  mat4.translate(m, m, [-8, -8, -8]);
+  return mesh.transform(m);
+}
+
+// ---- 背景：地板（海洋 / 草地 / 末地石）+ 天空（CSS 背景，见 viewer.css 的 .stage[data-env]）。
+// 地板是一层平铺的方块贴图：结构四周各多铺 24 格，太大就用 2×2、4×4… 的贴片，最多两万片
+export const ENVIRONMENTS = {
+  ocean: { texture: "minecraft:block/water_still", tint: [0.25, 0.46, 0.85] },
+  grass: { texture: "minecraft:block/grass_block_top", tint: [0.49, 0.74, 0.34] },
+  end: { texture: "minecraft:block/end_stone", tint: null },
+};
+
 export async function loadResources() {
   iconIndex = await fetch("resource/icons.json").then((r) => r.json()).catch(() => ({}));
   atlasImage = await new Promise((resolve, reject) => {
@@ -144,6 +200,8 @@ export async function loadResources() {
   if (!deepslate.SpecialRenderers.__lvPatched) {
     const special = deepslate.SpecialRenderers.getBlockMesh;
     deepslate.SpecialRenderers.getBlockMesh = (state, nbt, res, cull) => {
+      const chest = doubleChestMesh(state, res);
+      if (chest) return chest;
       missingTexture = false;
       const mesh = special(state, nbt, res, cull);
       return missingTexture ? new deepslate.Mesh() : mesh;
@@ -167,6 +225,11 @@ export async function loadResources() {
 // 挑哪一块由 icons.json 决定（桌面版 atlas.py 生成，两边用同一张表）：有物品贴图的用物品贴图，
 // 完整方块顺着模型链挑一张面贴图，草、树叶、水这些灰度贴图带一个染色值。实体查不到就试它的刷怪蛋。
 const iconCache = new Map();
+// 有没有图标（不生成图片，挑物品列表时用）
+export function hasIcon(id) {
+  const name = String(id).replace(/^(entity:)?minecraft:/, "").split("[")[0];
+  return !!(iconIndex[name] || iconIndex[name + "_spawn_egg"]);
+}
 export function blockIcon(id, px = 20) {
   const name = String(id).replace(/^(entity:)?minecraft:/, "").split("[")[0];
   const key = name + "@" + px;
@@ -266,6 +329,11 @@ export class View {
   constructor(canvas, { overlay = null, onPick = () => {}, onContext = () => {} } = {}) {
     this.canvas = canvas;
     this.gl = canvas.getContext("webgl");
+    // 混合方式：deepslate 用 blendFunc(SRC_ALPHA, ONE_MINUS_SRC_ALPHA)，透明度通道也这么混，
+    // 玻璃挡在方块前面时画布在那里变成半透明，页面的浅色背景透出来，玻璃看着发白。
+    // 改成颜色照常混、透明度只增不减（ONE, ONE_MINUS_SRC_ALPHA），画面就和游戏里一样
+    const gl = this.gl;
+    gl.blendFunc = (src, dst) => gl.blendFuncSeparate(src, dst, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     this.overlay = overlay;
     this.onPick = onPick;
     this.onContext = onContext;
@@ -277,6 +345,9 @@ export class View {
     this.frame = 0;
     this.building = 0;
     this.pending = new Map();  // 待重画的区块（替换方块后），见 queueChunks
+    this.env = null;           // 背景：null / "ocean" / "grass" / "end"
+    this.envMesh = null;
+    this.regionMesh = null;    // 多子区域时每个区域的边框
     this.scene = null;    // {structure, box, entries, byY, byStep, live, filter}
     this.selected = null; // 选中方块的位置 [x,y,z]（相对包围盒），画白框
     this.markers = [];    // 实体：{el, pos, entity, size, category}
@@ -302,6 +373,7 @@ export class View {
   setTheme(theme) {
     this.theme = theme;
     this.rebuildHitboxes();
+    this.buildRegionBoxes();
     for (const m of this.markers) m.el.style.setProperty("--cat", theme[CATEGORY_COLOR[m.category]]);
     this.draw();
   }
@@ -309,13 +381,13 @@ export class View {
   // 结构 → 场景。先把所有非空气方块摊成条目（分批，onProgress 0~1），按 Y 和按步骤分好桶，
   // 之后换显示层、换步骤都只碰变化的那几桶方块。
   // 区域如果带 stepOf（分步拆解的结果），每格的步骤号就从那里来。
-  async show(structure, box, { resetCamera = true, onProgress = () => {} } = {}) {
+  async show(structure, box, { resetCamera = true, onProgress = () => {}, region = null } = {}) {
     const token = ++this.building; // 新的构建开始，旧的那次就作废
     const [sx, sy, sz] = box.size;
     const entries = [], byY = Array.from({ length: sy }, () => []), byStep = [];
     const total = structure.regions.reduce((s, r) => s + r.blocks.length, 0);
     let done = 0;
-    for (const region of structure.regions) {
+    for (const [ri, region] of structure.regions.entries()) {
       const [, ry, rz] = region.size;
       const off = region.origin.map((o, i) => o - box.origin[i]);
       const states = region.palette.map(stateOf);
@@ -326,7 +398,7 @@ export class View {
           const pos = [local[0] + off[0], local[1] + off[1], local[2] + off[2]];
           const step = region.stepOf ? region.stepOf[i] : -1;
           const entry = {
-            pos, step, region, local, block: region.palette[region.blocks[i]],
+            pos, step, region, ri, local, block: region.palette[region.blocks[i]],
             key: (pos[0] * sy + pos[1]) * sz + pos[2],
             placed: { pos, state, nbt: undefined },
           };
@@ -345,8 +417,8 @@ export class View {
     onProgress(1);
 
     const live = new LiveStructure([sx, sy, sz]);
-    const filter = { layers: [0, sy - 1], step: byStep.length ? byStep.length - 1 : null };
-    for (const e of entries) live.put(e);
+    const filter = { layers: [0, sy - 1], step: byStep.length ? byStep.length - 1 : null, region };
+    for (const e of entries) if (this.visible(e, filter)) live.put(e);
     this.scene = { structure, box, entries, byY, byStep, live, filter };
     this.pending.clear();
 
@@ -360,6 +432,8 @@ export class View {
     this.renderer.setViewport(0, 0, this.canvas.width, this.canvas.height);
     this.selected = null;
     this.buildMarkers(structure, box);
+    this.buildEnvironment();
+    this.buildRegionBoxes();
     if (resetCamera) {
       this.target = [sx / 2, sy / 2, sz / 2];
       this.distance = Math.max(sx, sy, sz) * 1.6 + 4;
@@ -446,9 +520,9 @@ export class View {
   snapshot(size = 512, background = null) {
     const sc = this.scene;
     if (!sc || !this.renderer) return null;
-    const full = { layers: [0, sc.box.size[1] - 1], step: sc.byStep.length ? sc.byStep.length - 1 : null };
+    const full = { layers: [0, sc.box.size[1] - 1], step: sc.byStep.length ? sc.byStep.length - 1 : null, region: null };
     const before = sc.filter;
-    const filtered = before.layers[0] !== full.layers[0] || before.layers[1] !== full.layers[1] || before.step !== full.step;
+    const filtered = before.layers[0] !== full.layers[0] || before.layers[1] !== full.layers[1] || before.step !== full.step || before.region !== null;
     if (filtered) this.setFilter(full);
 
     const [sx, sy, sz] = sc.box.size;
@@ -493,18 +567,20 @@ export class View {
   }
 
   visible(entry, f) {
+    if (f.region != null && entry.ri !== f.region) return false;
     if (entry.pos[1] < f.layers[0] || entry.pos[1] > f.layers[1]) return false;
     return f.step === null || entry.step <= f.step;
   }
 
   // 换显示层 / 换步骤：只看两次范围之间变了的那几桶，增删 live 里的方块，再只重画碰到的区块
-  setFilter({ layers, step } = {}) {
+  setFilter({ layers, step, region } = {}) {
     const sc = this.scene;
     if (!sc) return;
     const old = sc.filter;
-    const next = { layers: layers || old.layers, step: step === undefined ? old.step : step };
+    const next = { layers: layers || old.layers, step: step === undefined ? old.step : step, region: region === undefined ? old.region : region };
     const touched = new Set();
     const consider = (list) => { if (list) for (const e of list) touched.add(e); };
+    if (next.region !== old.region) consider(sc.entries); // 换子区域：每格都可能变
     // 层：两次范围的并集里、只在一边的那些层
     const lo = Math.min(old.layers[0], next.layers[0]), hi = Math.max(old.layers[1], next.layers[1]);
     for (let y = lo; y <= hi; y++) {
@@ -529,6 +605,7 @@ export class View {
       }
     }
     sc.filter = next;
+    if (next.region !== old.region) this.buildRegionBoxes();
     if (chunks.size) this.renderer.updateStructureBuffers([...chunks.values()].filter((c) => c.every((v) => v >= 0)));
     if (this.selected && !sc.live.getBlock(this.selected)) this.selected = null;
     this.placeMarkersVisibility();
@@ -557,16 +634,74 @@ export class View {
   renderNow() {
     if (!this.renderer) return;
     const view = this.viewMatrix();
+    if (this.envMesh) {
+      const r = this.renderer;
+      r.setShader(r.shaderProgram);
+      r.setTexture(r.atlasTexture, resources.getPixelSize?.());
+      r.prepareDraw(view);
+      r.drawMesh(this.envMesh, { pos: true, color: true, texture: true, normal: true });
+    }
     this.renderer.drawStructure(view);
-    this.renderer.drawGrid(view);
+    if (!this.envMesh) this.renderer.drawGrid(view); // 有地板时不画底下的网格线
     if (this.hitboxMesh) {
       // 借 deepslate 画网格线的着色器画碰撞箱（和 drawOutline 同一套调用）
       this.renderer.setShader(this.renderer.gridShaderProgram);
       this.renderer.prepareDraw(view);
       this.renderer.drawMesh(this.hitboxMesh, { pos: true, color: true });
     }
+    if (this.regionMesh) {
+      this.renderer.setShader(this.renderer.gridShaderProgram);
+      this.renderer.prepareDraw(view);
+      this.renderer.drawMesh(this.regionMesh, { pos: true, color: true });
+    }
     if (this.selected) this.renderer.drawOutline(view, this.selected);
     this.placeMarkers(view);
+  }
+
+  // ---- 背景
+  setEnvironment(kind) {
+    this.env = ENVIRONMENTS[kind] ? kind : null;
+    this.buildEnvironment();
+    this.draw();
+  }
+
+  buildEnvironment() {
+    this.envMesh = null;
+    const sc = this.scene, cfg = ENVIRONMENTS[this.env];
+    if (!sc || !cfg || !this.renderer) return;
+    const [sx, , sz] = sc.box.size, margin = 24;
+    let tile = 1;
+    while (((sx + 2 * margin) / tile) * ((sz + 2 * margin) / tile) > 20000) tile *= 2;
+    const elements = [];
+    for (let x = -margin; x < sx + margin; x += tile) {
+      for (let z = -margin; z < sz + margin; z += tile) {
+        elements.push({ from: [x * 16, -16, z * 16], to: [(x + tile) * 16, 0, (z + tile) * 16],
+          faces: { up: { uv: [0, 0, 16, 16], texture: "#t", ...(cfg.tint ? { tintindex: 0 } : {}) } } });
+      }
+    }
+    const model = new deepslate.BlockModel(undefined, { t: cfg.texture }, elements);
+    const mesh = model.getMesh(resources, deepslate.Cull.none(), cfg.tint ? () => cfg.tint : undefined);
+    const m = mat4.create();
+    mat4.translate(m, m, [0, -0.002, 0]); // 比结构底面低一点点，免得和方块底面打架
+    mat4.scale(m, m, [1 / 16, 1 / 16, 1 / 16]);
+    mesh.transform(m);
+    mesh.computeNormals(); // deepslate 的区块构建会补法线，自己做的网格要手动算
+    this.envMesh = mesh.rebuild(this.gl, { pos: true, color: true, texture: true, normal: true });
+  }
+
+  // ---- 多子区域：每个区域画一圈边框，选中的那个用主题深色，其他用浅色
+  buildRegionBoxes() {
+    this.regionMesh = null;
+    const sc = this.scene;
+    if (!sc || !this.renderer || sc.structure.regions.length < 2) return;
+    const Mesh = this.renderer.outlineMesh.constructor;
+    const mesh = new Mesh();
+    sc.structure.regions.forEach((r, i) => {
+      const o = r.origin.map((v, k) => v - sc.box.origin[k]);
+      const color = hexToRgb(this.theme[sc.filter.region === i ? "PC" : "MC"]);
+      mesh.addLineCube(o[0], o[1], o[2], o[0] + r.size[0], o[1] + r.size[1], o[2] + r.size[2], color);
+    });
+    this.regionMesh = mesh.rebuild(this.gl, { pos: true, color: true });
   }
 
   // ---- 实体：deepslate 不画实体。画一个按种类上色的碰撞箱，再在头顶贴一个图标，点图标看信息

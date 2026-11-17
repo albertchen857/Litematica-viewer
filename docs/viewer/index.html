@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>投影查看器 · 网页版</title>
-  <link rel="icon" href="../assets/icon.ico">
+  <link rel="icon" href="../assets/icon.png">
   <link rel="stylesheet" href="viewer.css">
   <!-- 渲染引擎：deepslate 0.27（带透明网格和选中框）+ gl-matrix（相机矩阵）。
        桌面版「手动3D渲染」打开的也是这个页面 -->
@@ -35,7 +35,7 @@
 
 <header class="bar">
   <a class="brand" href="../">
-    <img src="../assets/icon.ico" alt="" width="28" height="28">
+    <img src="../assets/icon.png" alt="" width="28" height="28">
     <span>Litematica Viewer</span>
   </a>
   <span class="bar-file" id="bar-file"></span>
@@ -88,28 +88,33 @@
     <!-- 点了方块 / 实体之后，左上角显示：译名、ID、属性；容器再列出里面的物品 -->
     <div class="inspect" id="inspect" hidden>
       <button class="inspect-close" id="inspect-close" aria-label="close">×</button>
+      <!-- 原始 NBT：投影文件里的原样（litematic 给 litematic 的，nbt 给 nbt 的） -->
+      <button class="inspect-nbt" id="inspect-nbt" type="button" data-t="nbt.title">原始 NBT</button>
       <div class="inspect-head"><img id="inspect-icon" alt=""><div><b id="inspect-name"></b><code id="inspect-id"></code></div></div>
       <p class="inspect-pos" id="inspect-pos"></p>
       <table class="inspect-props" id="inspect-props"></table>
-      <!-- 点开是方块选择框：同类方块排前面，后面按字母排（js/app.js 的 openPicker） -->
-      <div class="inspect-replace edit-only" id="inspect-replace" hidden>
-        <button class="btn btn-small" id="inspect-replace-btn" type="button"><span data-t="replaceBtn">替换方块</span><i class="caret" aria-hidden="true"></i></button>
-        <!-- 高级：改属性。属性选物 = 勾「只选」的属性只换这个值的方块；属性替换 = 「改成」里选新值 -->
-        <details class="inspect-adv" id="inspect-adv">
-          <summary data-t="adv.title">高级：改属性</summary>
-          <table class="adv-table">
-            <thead><tr><th data-t="adv.filter">只选</th><th data-t="adv.prop">属性</th><th data-t="adv.now">现在</th><th data-t="adv.set">改成</th></tr></thead>
-            <tbody id="adv-rows"></tbody>
-          </table>
-          <div class="adv-scope">
-            <label><input type="radio" name="adv-scope" value="all" checked> <span id="adv-scope-all"></span></label>
-            <label><input type="radio" name="adv-scope" value="one"> <span data-t="picker.scopeOne">只换这一格</span></label>
-          </div>
-          <button class="btn btn-small" id="adv-apply" type="button" data-t="adv.apply">应用</button>
-          <p class="tool-msg" id="adv-msg"></p>
-        </details>
-      </div>
+      <!-- 替换方块 / 改属性：先选「换成」和属性，最后点「应用」。
+           属性一行一个：只选（原方块是这个值才换）、改成（新值，不变 = 沿用） -->
+      <details class="inspect-edit edit-only" id="inspect-edit" hidden>
+        <summary data-t="edit.title">替换方块 / 改属性</summary>
+        <div class="edit-target-row">
+          <span data-t="edit.to">换成</span>
+          <button class="pick" id="edit-target" type="button"></button>
+          <button class="btn btn-small btn-plain" id="edit-target-reset" type="button" data-t="edit.keep" hidden>保持原方块</button>
+        </div>
+        <table class="adv-table">
+          <thead><tr><th data-t="adv.prop">属性</th><th data-t="adv.filter">只选</th><th data-t="adv.set">改成</th></tr></thead>
+          <tbody id="edit-rows"></tbody>
+        </table>
+        <div class="adv-scope">
+          <label><input type="radio" name="edit-scope" value="all" checked> <span id="edit-scope-all"></span></label>
+          <label><input type="radio" name="edit-scope" value="one"> <span data-t="picker.scopeOne">只换这一格</span></label>
+        </div>
+        <button class="btn btn-small btn-accent" id="edit-apply" type="button" data-t="edit.apply">应用</button>
+        <p class="tool-msg" id="edit-msg"></p>
+      </details>
       <div class="inspect-items" id="inspect-items"></div>
+      <p class="inspect-tip" id="inspect-items-tip" data-t="items.tip" hidden>点格子放物品</p>
       <p class="inspect-extra" id="inspect-extra"></p>
     </div>
     <div class="slot-tip" id="slot-tip" hidden></div>
@@ -141,6 +146,14 @@
     <div class="hint" id="hint" hidden>
       <span data-t="controls">左键拖动旋转 · 右键拖动平移 · 滚轮缩放 · WASD 移动</span>
       <!-- WASD 按世界方向走（W/S 北南、A/D 西东、空格/Shift 上下），速度每秒几格 -->
+      <!-- 背景：地板 + 天空，默认关闭 -->
+      <label class="env-pick"><span data-t="env.title">背景</span>
+        <select id="env">
+          <option value="" data-t="env.off">关闭</option>
+          <option value="ocean" data-t="env.ocean">海洋</option>
+          <option value="grass" data-t="env.grass">草地</option>
+          <option value="end" data-t="env.end">末地</option>
+        </select></label>
       <label class="move-speed"><span data-t="moveSpeed">移动速度</span>
         <input type="range" id="move-speed" min="2" max="64" step="1" value="12"><b id="move-speed-val">12</b></label>
     </div>
@@ -176,7 +189,7 @@
         <div class="batch-rows" id="batch-rows"></div>
         <div class="tool-actions">
           <button class="btn btn-small btn-plain" id="batch-add" type="button">＋ <span data-t="batch.add">添加一行</span></button>
-          <button class="btn btn-small" id="batch-run" type="button" data-t="batch.run">全部替换</button>
+          <button class="btn btn-small btn-accent" id="batch-run" type="button" data-t="edit.apply">应用</button>
         </div>
         <p class="tool-msg" id="batch-msg"></p>
       </details>
@@ -249,6 +262,7 @@
      下面先列同类方块（官方方块标签，resource/tags.json），再按字母列全部方块，带图标和译名 -->
 <div class="picker" id="picker" role="dialog" hidden>
   <div class="picker-scope" id="picker-scope" hidden></div>
+  <div class="picker-extra" id="picker-extra" hidden></div>
   <input class="picker-search" id="picker-search" type="search" autocomplete="off" spellcheck="false">
   <div class="picker-list" id="picker-list"></div>
 </div>
@@ -256,29 +270,27 @@
 <!-- 右键菜单：材料表的行、3D 里的方块共用 -->
 <div class="ctx" id="ctx" role="menu" hidden></div>
 
-<!-- 快速替换方块（同桌面版右键「快速替换方块」，规则写法同 script/lv/edit.py） -->
-<dialog class="dlg" id="replace-dlg">
-  <form method="dialog" id="replace-form">
-    <h2 data-ui="row.replace">快速替换方块</h2>
-    <p class="dlg-from" id="replace-from"></p>
-    <!-- 3D 里右键点的方块才有：只换这一格 / 换全部同类 -->
-    <div class="dlg-scope" id="replace-scope">
-      <label><input type="radio" name="scope" value="all" checked> <span id="scope-all"></span></label>
-      <label class="dlg-sub"><input type="checkbox" id="replace-same"> <span data-t="replace.sameState">只换状态完全一样的</span></label>
-      <label><input type="radio" name="scope" value="one"> <span id="scope-one"></span></label>
-    </div>
-    <input class="dlg-input" id="replace-target" list="block-list" autocomplete="off" spellcheck="false">
-    <datalist id="block-list"></datalist>
-    <p class="dlg-note" data-t="replace.keep">朝向、半砖上下这些状态会尽量保留</p>
-    <details class="dlg-rules" id="replace-adv">
-      <summary data-t="replace.rules">高级：直接写替换规则</summary>
-      <textarea id="replace-rules" rows="4" spellcheck="false"></textarea>
-      <p class="dlg-note dlg-pre" data-t="replace.rulesHint"></p>
-    </details>
-    <p class="dlg-error" id="replace-error"></p>
+<!-- 换成 2 格高的方块（门、高草、玫瑰丛……）时，上面一格已经有东西：问怎么办 -->
+<dialog class="dlg" id="tall-dlg">
+  <form method="dialog">
+    <h2 data-t="tall.title">上面一格不是空的</h2>
+    <p id="tall-text"></p>
     <div class="dlg-actions">
-      <button class="btn btn-plain" value="cancel" formnovalidate data-t="cancel">取消</button>
-      <button class="btn btn-accent" id="replace-apply" value="apply" data-t="replace.apply">替换</button>
+      <button class="btn btn-plain" value="cancel" data-t="cancel">取消</button>
+      <button class="btn btn-plain" value="ok" data-t="tall.okOnly">只换没问题的</button>
+      <button class="btn btn-accent" value="overwrite" data-t="tall.overwrite">覆盖</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- 原始 NBT -->
+<dialog class="dlg dlg-wide" id="nbt-dlg">
+  <form method="dialog">
+    <h2 data-t="nbt.title">原始 NBT</h2>
+    <pre class="nbt-text" id="nbt-text"></pre>
+    <div class="dlg-actions">
+      <button class="btn btn-plain" id="nbt-copy" type="button" data-t="nbt.copy">复制</button>
+      <button class="btn btn-accent" value="close" data-t="nbt.close">关闭</button>
     </div>
   </form>
 </dialog>
@@ -294,6 +306,7 @@
       <li data-t="tut.move"></li>
       <li data-t="tut.replace"></li>
       <li data-t="tut.tools"></li>
+      <li data-t="tut.edit"></li>
       <li data-t="tut.undo"></li>
       <li data-t="tut.export"></li>
       <li data-t="tut.convert"></li>

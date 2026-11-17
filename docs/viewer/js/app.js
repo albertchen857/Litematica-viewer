@@ -1,12 +1,12 @@
 // 网页版查看器的界面层：读文件 → 统计 → 渲染 → 右侧信息栏 + 工具。
 // 算法都在别的模块里，这里只负责把它们接起来、把结果画到页面上。
 
-import { parse, bounds, EXTENSIONS, fromPayload, isAir } from "./formats.js";
+import { parse, bounds, EXTENSIONS, fromPayload, isAir, RAW_TAG } from "./formats.js";
 import { analyse, totalRows, unitParts, materialOf } from "./analysis.js";
-import { SAVE_FORMATS, exportText, download } from "./writers.js";
+import { SAVE_FORMATS, exportText, download, compoundWith, toTag } from "./writers.js";
 import { exportWorld } from "./world.js";
 import { parseRules, replaceBlocks, RuleError } from "./edit.js";
-import { loadResources, View, blockIcon } from "./render.js";
+import { loadResources, View, blockIcon, hasIcon } from "./render.js";
 import { splitSteps, structureWithSteps } from "./tools/steps.js";
 import { toContour } from "./tools/contour.js";
 
@@ -93,7 +93,6 @@ function applyLang() {
   document.documentElement.lang = lang === "en_US" ? "en" : lang === "zh_TW" ? "zh-TW" : "zh-CN";
   document.querySelectorAll("[data-t]").forEach((el) => (el.textContent = t(el.dataset.t)));
   document.querySelectorAll("[data-ui]").forEach((el) => (el.textContent = ui(el.dataset.ui)));
-  $("replace-target").placeholder = t("replace.target");
   $("picker-search").placeholder = t("picker.search");
   renderBatch(); // 全面替换那几行的「原方块 / 换成」提示字
   $("lang").value = lang;
@@ -187,7 +186,8 @@ function progress(ratio, label) {
 
 async function draw(structure, resetCamera, label = t("building")) {
   const box = bounds(structure);
-  await view.show(structure, box, { resetCamera, onProgress: (r) => progress(r, label) });
+  const region = structure === state.structure ? regionIndex() : null;
+  await view.show(structure, box, { resetCamera, region, onProgress: (r) => progress(r, label) });
   progress(null);
   $("hint").hidden = false;
 }
@@ -269,7 +269,8 @@ function renderInfo() {
     ["ui.stat.l6", version],
     ["ui.stat.l7", (s.description || "-").slice(0, 120)],
   ];
-  $("stats").innerHTML = stats.map(([k, v]) => `<div class="stat"><b>${esc(ui(k))}</b><span>${esc(v)}</span></div>`).join("");
+  $("stats").innerHTML = stats.map(([k, v]) => `<div class="stat" data-stat="${k}"${k === "ui.stat.l7" && !isDesktop() ? ` title="${esc(t("rename.tip"))}"` : ""}><b>${esc(ui(k))}</b><span>${esc(v)}</span></div>`).join("");
+  $("file-name").title = isDesktop() ? "" : t("rename.tip");
 
   // 子区域：总体 + 每个区域，单区域时不显示
   const regions = $("regions");
@@ -372,8 +373,12 @@ function showInspect(hit) {
   const box = $("inspect");
   inspectHit = hit;
   if (!hit) { box.hidden = true; closePicker(); return; }
-  $("inspect-replace").hidden = hit.kind !== "block" || isDesktop();
-  if (hit.kind === "block" && !isDesktop()) renderAdv(hit);
+  // 方块：按坐标找回结构里真正的格子（分步模式下 3D 里的是拆分后的结构；替换后要拿新的）
+  const at = hit.kind === "block" ? locate(hit.pos) : null;
+  if (at) hit = { ...hit, block: at.block, region: at.region, local: at.local };
+  inspectHit = hit;
+  $("inspect-edit").hidden = !at || isDesktop();
+  if (at && !isDesktop()) renderEdit(hit);
   const id = hit.kind === "entity" ? hit.entity.id : hit.block.id;
   const icon = blockIcon(id, 32);
   $("inspect-icon").src = icon || "";
@@ -402,6 +407,7 @@ function showInspect(hit) {
   const used = items.length ? Math.max(...items.map(slotOf)) + 1 : 0;
   const slots = capacity ? Math.max(capacity, used) : Math.ceil(used / 9) * 9;
   const cells = Array.from({ length: Math.min(slots, 54) }, () => ({ html: "" }));
+  const editable = hit.kind === "block" && capacity > 0 && !isDesktop(); // 方块容器的格子可以点着放物品
   $("inspect-items").style.gridTemplateColumns = `repeat(${Math.min(9, slots || 9)}, 1fr)`;
   items.forEach((item, n) => {
     const slot = slotOf(item, n);
@@ -411,9 +417,11 @@ function showInspect(hit) {
       cells[slot] = { html: `<img src="${blockIcon(itemId, 24)}" alt="">${count > 1 ? `<span>${count}</span>` : ""}`, name: nameOf(itemId), id: itemId, count };
     }
   });
-  $("inspect-items").innerHTML = cells.map((c) => c.id
-    ? `<div class="slot-cell" data-name="${esc(c.name)}" data-id="${esc(c.id)}" data-count="${c.count}">${c.html}</div>`
-    : `<div class="slot-cell"></div>`).join("");
+  const slotAttr = (i) => (editable ? ` data-slot="${i}"` : "");
+  $("inspect-items").innerHTML = cells.map((c, i) => c.id
+    ? `<div class="slot-cell${editable ? " is-editable" : ""}"${slotAttr(i)} data-name="${esc(c.name)}" data-id="${esc(c.id)}" data-count="${c.count}">${c.html}</div>`
+    : `<div class="slot-cell${editable ? " is-editable" : ""}"${slotAttr(i)}></div>`).join("");
+  $("inspect-items-tip").hidden = !editable;
 
   // 其他值得一看的：命令方块的命令、告示牌的字、自定义名字
   const extra = [];
@@ -540,7 +548,7 @@ async function saveAs(ext) {
   }
 }
 
-// ---------------------------------------------------------------- 右键菜单 + 快速替换方块
+// ---------------------------------------------------------------- 右键菜单 + 快捷替换方块
 
 function openMenu(x, y, head, items) {
   const menu = $("ctx");
@@ -561,12 +569,22 @@ function openMenu(x, y, head, items) {
 function closeMenu() { $("ctx").hidden = true; }
 
 const short = (id) => id.replace(/^minecraft:/, "");
+const json = (o) => (Object.keys(o).length ? JSON.stringify(o) : "");
+// 选择框贴在鼠标位置（右键菜单里打开时没有按钮可贴）
+const pointAt = (x, y) => ({ getBoundingClientRect: () => ({ left: x, right: x, top: y, bottom: y }), contains: () => false });
+
+// 选中的子区域在结构里的下标（没选 = null）
+function regionIndex() {
+  if (state.region === null || !state.structure) return null;
+  const i = state.structure.regions.findIndex((r, k) => (r.name || `Region${k + 1}`) === state.region);
+  return i < 0 ? null : i;
+}
 
 // 材料表里的一行 → 调色板里对应的方块 id。行是折算后的材料（红石粉、火把……），
 // 所以「本身就是它」和「折算出来有它」的方块都算上（墙上的火把会和火把一起换）
 function blockSourcesFor(id) {
-  const index = state.results.regions.findIndex(([n]) => n === state.region);
-  const regions = index < 0 ? state.structure.regions : [state.structure.regions[index]];
+  const index = regionIndex();
+  const regions = index === null ? state.structure.regions : [state.structure.regions[index]];
   const found = new Set();
   for (const r of regions) for (const b of r.palette) {
     if (isAir(b) || found.has(b.id)) continue;
@@ -575,7 +593,7 @@ function blockSourcesFor(id) {
   return [...found];
 }
 
-// 桌面版里打开的 3D 窗口（#desktop）没有顶栏、存不了文件，替换在桌面版主程序里做
+// 桌面版里打开的 3D 窗口（#desktop）没有顶栏、存不了文件，编辑功能在桌面版主程序里做
 const isDesktop = () => document.body.classList.contains("desktop");
 
 function rowMenu(e) {
@@ -587,7 +605,7 @@ function rowMenu(e) {
   const sources = state.tab === "entities" || state.tab === "items" ? [] : blockSourcesFor(id);
   openMenu(e.clientX, e.clientY, nameOf(id), [{
     label: ui("row.replace"), disabled: !sources.length, note: sources.length ? "" : t("replace.noBlock"),
-    action: () => openReplace({ sources, label: nameOf(id) }),
+    action: () => quickReplace({ anchor: pointAt(e.clientX, e.clientY), sources }),
   }]);
 }
 
@@ -598,8 +616,9 @@ function locate(pos) {
   for (let k = s.regions.length - 1; k >= 0; k--) {
     const r = s.regions[k], local = world.map((v, i) => v - r.origin[i]);
     if (local.some((v, i) => v < 0 || v >= r.size[i])) continue;
-    const block = r.palette[r.blocks[local[0] * r.size[1] * r.size[2] + local[1] * r.size[2] + local[2]]];
-    if (!isAir(block)) return { region: r, local, block };
+    const index = local[0] * r.size[1] * r.size[2] + local[1] * r.size[2] + local[2];
+    const block = r.palette[r.blocks[index]];
+    if (!isAir(block)) return { region: r, local, block, index };
   }
   return null;
 }
@@ -609,12 +628,32 @@ function blockMenu(hit, x, y) {
   const at = locate(hit.pos);
   if (!at) return;
   openMenu(x, y, nameOf(at.block.id), [
-    ...(isDesktop() ? [] : [{ label: ui("row.replace"), action: () => openReplace({ sources: [at.block.id], label: nameOf(at.block.id), at }) }]),
+    ...(isDesktop() ? [] : [{ label: ui("row.replace"), action: () => quickReplace({ anchor: pointAt(x, y), sources: [at.block.id], at }) }]),
     { label: t("inspectMenu"), action: () => showInspect(hit) },
   ]);
 }
 
-let replaceJob = null;
+// 快捷替换：选完就换。3D 里点的方块可选 全部同类 / 只这一格（记住上次选的）
+function quickReplace({ anchor, sources, at = null }) {
+  const id = sources[0];
+  const scope = at ? {
+    value: loadPrefs().replaceScope === "one" ? "one" : "all",
+    options: [{ value: "all", label: t("picker.scopeAll", nameOf(id)) }, { value: "one", label: t("picker.scopeOne") }],
+    onChange: (v) => setPref("replaceScope", v),
+  } : null;
+  openPicker({
+    anchor, current: short(id), scope,
+    groups: [{ label: t("picker.related"), ids: similarBlocks(id) }],
+    onPick: async (target) => {
+      const one = scope?.value === "one";
+      // 只换这一格：把它的状态写进规则，保证换的就是这格
+      const props = one ? json(at.block.props) : "";
+      const text = sources.map((s) => `${short(s)}${props}-${target}`).join("\n");
+      const result = await runRules(text, one ? { region: at.region, local: at.local } : null);
+      if (result.error) toast(result.error, { undo: false });
+    },
+  });
+}
 
 // 中文名 → id（同桌面版 tools.translate(n, to_chinese=False)：先当前语言，再简体、繁体）
 function nameToId(name) {
@@ -624,56 +663,6 @@ function nameToId(name) {
     for (const [id, n] of Object.entries(table)) if (n === name) return id;
   }
   return name.toLowerCase().replace(/\s+/g, "_");
-}
-
-// 目标方块的候选：资源包里有方块状态定义的都算（能摆出来、能渲染）
-function fillBlockList() {
-  const list = $("block-list");
-  if (list.dataset.lang === lang) return;
-  const names = gamedata.blocks[lang] || {};
-  list.innerHTML = Object.keys(assets.blockstates).sort()
-    .map((id) => `<option value="${esc(id)}">${names[id] ? esc(names[id]) : ""}</option>`).join("");
-  list.dataset.lang = lang;
-}
-
-function openReplace(job) {
-  replaceJob = job;
-  fillBlockList();
-  $("replace-from").textContent = ui("row.replace.from", job.label);
-  $("replace-scope").hidden = !job.at;
-  if (job.at) {
-    const pos = job.at.local.map((v, i) => v + job.at.region.origin[i]).join(", ");
-    $("scope-all").textContent = t("replace.scopeAll", job.label);
-    $("scope-one").textContent = t("replace.scopeOne", `(${pos})`);
-    document.querySelector("#replace-form [name=scope][value=all]").checked = true;
-    $("replace-same").checked = false;
-  }
-  $("replace-target").value = "";
-  $("replace-rules").value = job.sources.map((id) => short(id) + "-").join("\n");
-  $("replace-adv").open = false;
-  $("replace-error").textContent = "";
-  $("replace-dlg").showModal();
-  $("replace-target").focus();
-}
-
-// 点「替换」：拼成规则交给 edit.js（规则写法同桌面版），成功就换掉当前结构、重画，相机不动
-function applyReplace() {
-  const job = replaceJob;
-  const one = !!job.at && document.querySelector("#replace-form [name=scope]:checked").value === "one";
-  let text;
-  if ($("replace-adv").open && !one) {
-    text = $("replace-rules").value;
-  } else {
-    const target = $("replace-target").value.trim();
-    if (!target) { $("replace-target").focus(); return false; }
-    // 3D 里点的方块：只换这一格、或勾了「只换状态一样的」，就把它的状态写进规则
-    const props = job.at && (one || $("replace-same").checked) && Object.keys(job.at.block.props).length
-      ? JSON.stringify(job.at.block.props) : "";
-    text = job.sources.map((id) => `${short(id)}${props}-${target}`).join("\n");
-  }
-  const result = runRules(text, one ? { region: job.at.region, local: job.at.local } : null);
-  if (result.error) { $("replace-error").textContent = result.error; return false; }
-  return true;
 }
 
 let toastTimer = 0;
@@ -716,20 +705,27 @@ function bindEditing() {
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenu(); });
   window.addEventListener("resize", closeMenu);
   $("side").addEventListener("scroll", closeMenu);
-
-  $("replace-form").addEventListener("submit", (e) => {
-    if (e.submitter?.value !== "apply") return; // 取消：直接关
-    if (!applyReplace()) e.preventDefault();    // 有错：留在弹窗里显示
-  });
   $("toast-undo").addEventListener("click", undoReplace);
   bindTools();
 }
 
 // ---------------------------------------------------------------- 替换方块：规则 → 结构 → 增量重画
 
-// 规则文本（写法同桌面版 edit.py）→ 替换。only：只换这一格 { region, local }。
-// 返回 { replaced } 或 { error }（错误文字已翻译好）
-function runRules(text, only = null) {
+// 能含水的方块（waterlogged 不影响模型，方块状态定义里看不出来，按名字认）
+const WATERLOGGABLE = /(stairs|_slab|fence|_wall$|pane|iron_bars|trapdoor|chain|lantern|sign|ladder|chest|campfire|candle|scaffolding|coral|sea_pickle|conduit|lightning_rod|dripstone|amethyst|dripleaf|glow_lichen|hanging_roots|mangrove_roots|grate|heavy_core|decorated_pot|barrier|^light$|rail|bulb|shelf)/;
+
+// 方块状态定义里第一种状态的属性，当默认值（石头换成门：朝向、铰链这些没带过来，就用它补，不然找不到模型）
+function defaultProps(id) {
+  const first = Object.keys(assets.blockstates[short(id)]?.variants || {})[0];
+  const out = {};
+  if (first) for (const pair of first.split(",")) { const [k, v] = pair.split("="); if (v !== undefined) out[k] = v; }
+  return out;
+}
+
+// 规则文本（写法同桌面版 edit.py）→ 替换。only：只换这一格 { region, local }。选中了子区域就只换那个区域。
+// 占两格的方块（床、门、高花……）会检查一遍，有问题弹窗问怎么办。
+// 返回 { replaced } / { error }（错误文字已翻译好）/ { cancelled }
+async function runRules(text, only = null) {
   let rules;
   try {
     rules = parseRules(text, nameToId);
@@ -740,21 +736,127 @@ function runRules(text, only = null) {
   // 目标得是认识的方块（资源包里有定义），不然渲染不出来，进游戏也放不了
   const unknown = [...rules.values()].map(([id]) => id).filter((id) => !assets.blockstates[short(id)]);
   if (unknown.length) return { error: ui("app.replace.badrule", unknown.map(short).join(", ")) };
-  // 换成没有任何状态的整方块（金块、泥土……）时，旧方块的朝向 / 半砖类型这些就不带过去了
-  const clean = (id, props) => {
+  const clean = (id, props, source) => {
     const variants = assets.blockstates[short(id)]?.variants;
-    return variants && Object.keys(variants).every((k) => k === "") ? {} : props;
+    // 换成没有任何状态的整方块（金块、泥土……）：旧方块的朝向 / 半砖类型这些就不带过去了
+    if (variants && Object.keys(variants).every((k) => k === "")) return {};
+    // 换成别的方块：只留新方块认识的属性（台阶换成门，type=top 就不该跟过去）
+    if (source && short(source.id) !== short(id)) {
+      const known = propValues(id);
+      props = Object.fromEntries(Object.entries(props).filter(([k]) => k in known || (k === "waterlogged" && WATERLOGGABLE.test(short(id)))));
+    }
+    return { ...defaultProps(id), ...props };
   };
-  const { structure, replaced } = replaceBlocks(state.structure, rules, only, clean);
-  if (!replaced) return { error: ui("app.replace.none") };
-  state.undo = { structure: state.structure, original: state.original, edited: state.edited };
-  state.edited = true;
-  swapStructure(structure);
-  toast(ui("app.replace.done", replaced) + " " + t("replace.saveHint"));
+  const index = regionIndex();
+  const inRegion = only ? null : index === null ? null : state.structure.regions[index];
+  const { structure } = replaceBlocks(state.structure, rules, only, clean, inRegion);
+  const fixed = await fixMultiBlock(state.structure, structure);
+  if (fixed.cancelled) return { cancelled: true };
+  const replaced = countChanged(state.structure, fixed.structure);
+  const notes = [fixed.beds ? t("bed.skipped", fixed.beds) : "", fixed.skipped ? t("tall.skipped", fixed.skipped) : ""].filter(Boolean).join(" ");
+  if (!replaced) return { error: [ui("app.replace.none"), notes].filter(Boolean).join(" ") };
+  commitEdit(fixed.structure);
+  toast([ui("app.replace.done", replaced), notes, t("replace.saveHint")].filter(Boolean).join(" "));
   return { replaced };
 }
 
-// 换成另一份「同样形状」的结构（替换后 / 撤销时）：不整体重载。
+function commitEdit(next) {
+  state.undo = { structure: state.structure, original: state.original, edited: state.edited };
+  state.edited = true;
+  swapStructure(next);
+}
+
+function countChanged(prev, next) {
+  let n = 0;
+  next.regions.forEach((r, i) => {
+    const old = prev.regions[i];
+    if (old.blocks === r.blocks) return;
+    for (let j = 0; j < r.blocks.length; j++) if (old.palette[old.blocks[j]] !== r.palette[r.blocks[j]]) n++;
+  });
+  return n;
+}
+
+// ---- 占两格的方块
+const isBed = (b) => /_bed$/.test(b.id);
+const tallCache = new Map();
+// 2 格高：方块状态里有 half=upper（门、高草、玫瑰丛、向日葵、小型垂滴叶……；楼梯 / 活板门的 half 是 top/bottom，不算）
+function isTall(id) {
+  if (!tallCache.has(id)) {
+    const def = assets.blockstates[short(id)] || {};
+    tallCache.set(id, Object.keys(def.variants || {}).some((k) => /(^|,)half=upper/.test(k)) || JSON.stringify(def.multipart || []).includes('"half":"upper"'));
+  }
+  return tallCache.get(id);
+}
+function paletteIndex(region, block) {
+  const key = block.id + JSON.stringify(Object.entries(block.props).sort());
+  const found = region.palette.findIndex((b) => b.id + JSON.stringify(Object.entries(b.props).sort()) === key);
+  return found >= 0 ? found : region.palette.push(block) - 1;
+}
+
+// 弹一个对话框，等用户点某个按钮（返回按钮的 value；Esc = cancel）。
+// 不靠 dialog 的 close 事件：页面没拿到焦点时浏览器会把它往后拖，点了按钮也迟迟不继续
+function askDialog(dlg) {
+  return new Promise((resolve) => {
+    const done = (value) => {
+      dlg.removeEventListener("click", onClick);
+      dlg.removeEventListener("cancel", onCancel);
+      if (dlg.open) dlg.close(value);
+      resolve(value);
+    };
+    const onClick = (e) => {
+      const b = e.target.closest("button[value]");
+      if (b) { e.preventDefault(); done(b.value); }
+    };
+    const onCancel = (e) => { e.preventDefault(); done("cancel"); };
+    dlg.addEventListener("click", onClick);
+    dlg.addEventListener("cancel", onCancel);
+    dlg.showModal();
+  });
+}
+
+// 检查替换结果里的多格方块：
+//   床：只能和床互相换（床是两格拼的，单换一半就坏了），不是床↔床的这些格子恢复原样；
+//   2 格高的（门、高草……）：原来不是 2 格高的，要在上面一格放上半截。上面是空气就直接放；
+//   上面有东西的弹窗问：覆盖 / 只换没问题的 / 取消
+async function fixMultiBlock(prev, next) {
+  let beds = 0;
+  const ok = [], blocked = [];
+  next.regions.forEach((region, ri) => {
+    const old = prev.regions[ri];
+    if (old.blocks === region.blocks) return;
+    const [, ry, rz] = region.size;
+    for (let j = 0; j < region.blocks.length; j++) {
+      const before = old.palette[old.blocks[j]], after = region.palette[region.blocks[j]];
+      if (before === after || before.id === after.id) continue; // 只改了属性：上下半 / 床头床尾都还在
+      if (isBed(before) !== isBed(after)) { region.blocks[j] = old.blocks[j]; beds++; continue; }
+      if (isTall(after.id) && !isTall(before.id)) {
+        const up = Math.floor(j / rz) % ry + 1 < ry ? j + rz : -1;
+        (up >= 0 && isAir(region.palette[region.blocks[up]]) ? ok : blocked).push({ ri, j, up });
+      }
+    }
+  });
+  let choice = "ok";
+  if (blocked.length) {
+    const target = next.regions[blocked[0].ri].palette[next.regions[blocked[0].ri].blocks[blocked[0].j]];
+    $("tall-text").textContent = t("tall.text", nameOf(target.id), blocked.length, ok.length);
+    choice = await askDialog($("tall-dlg"));
+    if (choice === "cancel") return { cancelled: true };
+  }
+  // 顶上已经是区域边界的放不下，覆盖也没用
+  const place = choice === "overwrite" ? [...ok, ...blocked.filter((c) => c.up >= 0)] : ok;
+  const skip = choice === "overwrite" ? blocked.filter((c) => c.up < 0) : blocked;
+  for (const c of skip) next.regions[c.ri].blocks[c.j] = prev.regions[c.ri].blocks[c.j];
+  for (const c of place) {
+    const region = next.regions[c.ri], b = region.palette[region.blocks[c.j]];
+    const [, ry, rz] = region.size, j = c.up;
+    region.blocks[c.j] = paletteIndex(region, { id: b.id, props: { ...b.props, half: "lower" } });
+    region.blocks[j] = paletteIndex(region, { id: b.id, props: { ...b.props, half: "upper" } });
+    region.blockEntities.delete(`${Math.floor(j / (ry * rz))},${Math.floor(j / rz) % ry},${j % rz}`); // 被覆盖的格子原来的方块实体不要了
+  }
+  return { structure: next, beds, skipped: skip.length };
+}
+
+// 换成另一份「同样形状」的结构（替换后 / 撤销时 / 改了容器物品）：不整体重载。
 // 只把变了的格子挑出来交给 3D 增量重画（后台分批换上，期间照常能转、能点），统计和表格马上刷新
 function swapStructure(next) {
   const prev = state.structure, box = bounds(prev);
@@ -778,21 +880,21 @@ function swapStructure(next) {
   $("bar-file").textContent = (next.fileName || next.name) + (state.edited ? ` · ${t("edited")}` : "");
   $("restore").hidden = next === state.pristine;
   view.applyChanges(changes, regionMap);
-  // 左上角正开着方块信息：换成新方块的
-  if (inspectHit?.kind === "block") {
-    const at = locate(inspectHit.pos);
-    if (at) showInspect({ ...inspectHit, block: at.block, region: at.region, local: at.local });
-  }
+  // 左上角正开着方块信息：换成新的
+  if (inspectHit?.kind === "block") showInspect(inspectHit);
 }
 
-// ---------------------------------------------------------------- 方块选择框
+// ---------------------------------------------------------------- 方块 / 物品选择框
 
 // 同类方块：官方方块标签（resource/tags.json，tools/update_jsassets.py 生成，只留「同一类东西」的标签），
 // 小的标签更具体，排前面。没有标签的（玻璃、红石块……）按名字最后一个词找同族（*_glass、*_block）
 let tags = {};
 let tagsOf = null;
-let allBlockIds = null;
+let allBlockIds = null, allItemIds = null;
 const allBlocks = () => (allBlockIds ||= Object.keys(assets.blockstates).sort());
+// 物品：物品名表 + 方块（方块也能放进箱子），有图标的才列
+const allItems = () => (allItemIds ||= [...new Set([...Object.keys(gamedata.items.zh_CN), ...Object.keys(assets.blockstates)])]
+  .filter((id) => hasIcon("minecraft:" + id)).sort());
 function similarBlocks(id) {
   const name = short(id);
   if (!tagsOf) {
@@ -824,16 +926,14 @@ function structureBlocks() {
 // 列表里显示的名字：中文界面用译名，英文界面把 id 的下划线换成空格
 const blockLabel = (b) => (lang === "en_US" ? b.replace(/_/g, " ") : nameOf("minecraft:" + b));
 
-const picker = { groups: [], onPick: null, anchor: null, limit: 0, current: null };
-const PICKER_PAGE = 150; // 「全部方块」一次先画这么多，滚到底再接着画
+const picker = { groups: [], onPick: null, anchor: null, limit: 0, current: null, all: [], allLabel: "" };
+const PICKER_PAGE = 150; // 「全部」一次先画这么多，滚到底再接着画
 
-// groups：[{ label, ids }]，最后自动加「全部方块（A–Z）」；scope：可选，{ value, options: [{value,label}], onChange }
-function openPicker({ anchor, groups, onPick, scope = null, current = null }) {
+// groups：[{ label, ids }]，最后跟着「全部」（all，默认全部方块）；
+// scope：可选，{ value, options: [{value,label}], onChange }；extra：可选，{ html, mount(el) }（比如物品数量）
+function openPicker({ anchor, groups, onPick, scope = null, current = null, all = allBlocks(), allLabel = t("picker.all"), extra = null }) {
   picker.groups = groups.filter((g) => g.ids.length);
-  picker.onPick = onPick;
-  picker.anchor = anchor;
-  picker.current = current;
-  picker.limit = PICKER_PAGE;
+  Object.assign(picker, { onPick, anchor, current, all, allLabel, limit: PICKER_PAGE });
   const scopeBox = $("picker-scope");
   scopeBox.hidden = !scope;
   if (scope) {
@@ -848,6 +948,10 @@ function openPicker({ anchor, groups, onPick, scope = null, current = null }) {
       paint();
     };
   }
+  const extraBox = $("picker-extra");
+  extraBox.hidden = !extra;
+  extraBox.innerHTML = extra ? extra.html : "";
+  if (extra?.mount) extra.mount(extraBox);
   $("picker-search").value = "";
   renderPicker();
   const box = $("picker");
@@ -864,7 +968,8 @@ function pickerMatches() {
   const q = $("picker-search").value.trim().toLowerCase();
   if (!q) return () => true;
   const qid = q.replace(/\s+/g, "_");
-  return (b) => b.includes(qid) || (gamedata.blocks.zh_CN[b] || "").includes(q) || (gamedata.blocks.zh_TW[b] || "").includes(q);
+  const names = [gamedata.blocks.zh_CN, gamedata.blocks.zh_TW, gamedata.items.zh_CN, gamedata.items.zh_TW];
+  return (b) => b.includes(qid) || names.some((table) => (table[b] || "").includes(q));
 }
 
 function renderPicker() {
@@ -877,8 +982,8 @@ function renderPicker() {
     ids.forEach((b) => seen.add(b));
     if (ids.length) html += `<p class="picker-group">${esc(g.label)}</p>` + ids.map(item).join("");
   }
-  const rest = allBlocks().filter((b) => match(b) && !seen.has(b));
-  if (rest.length) html += `<p class="picker-group">${esc(t("picker.all"))}</p>` + rest.slice(0, picker.limit).map(item).join("");
+  const rest = picker.all.filter((b) => match(b) && !seen.has(b));
+  if (rest.length) html += `<p class="picker-group">${esc(picker.allLabel)}</p>` + rest.slice(0, picker.limit).map(item).join("");
   picker.more = rest.length > picker.limit;
   $("picker-list").innerHTML = html || `<p class="picker-empty">${esc(t("picker.none"))}</p>`;
 }
@@ -889,32 +994,7 @@ function choosePicked(id) {
   fn?.(id);
 }
 
-// 点选信息里的「替换方块」：范围可选 全部同类 / 只这一格（记住上次选的）
-function inspectReplace(e) {
-  const hit = inspectHit;
-  if (!hit || hit.kind !== "block") return;
-  const at = locate(hit.pos);
-  if (!at) return;
-  const id = at.block.id;
-  const scope = {
-    value: loadPrefs().replaceScope === "one" ? "one" : "all",
-    options: [{ value: "all", label: t("picker.scopeAll", nameOf(id)) }, { value: "one", label: t("picker.scopeOne") }],
-    onChange: (v) => setPref("replaceScope", v),
-  };
-  openPicker({
-    anchor: e.currentTarget, current: short(id), scope,
-    groups: [{ label: t("picker.related"), ids: similarBlocks(id) }],
-    onPick: (target) => {
-      const one = scope.value === "one";
-      // 只换这一格：把它的状态写进规则，保证换的就是这格
-      const props = one && Object.keys(at.block.props).length ? JSON.stringify(at.block.props) : "";
-      const result = runRules(`${short(id)}${props}-${target}`, one ? { region: at.region, local: at.local } : null);
-      if (result.error) toast(result.error, { undo: false });
-    },
-  });
-}
-
-// ---------------------------------------------------------------- 高级：改属性
+// ---------------------------------------------------------------- 属性表（替换方块 / 改属性共用）
 
 // 方块每个属性能取哪些值：从方块状态定义里收集（variants 的键、multipart 的 when 条件）
 function propValues(id) {
@@ -933,53 +1013,180 @@ function propValues(id) {
 }
 const natural = (a, b) => (isNaN(a) || isNaN(b) ? a.localeCompare(b) : a - b);
 
-// 点选的方块的属性表：只选（属性选物）+ 改成（属性替换）
-let advAt = null;
-function renderAdv(hit) {
-  const at = locate(hit.pos);
-  advAt = at;
-  if (!at) return;
-  const known = propValues(at.block.id), props = Object.entries(at.block.props);
-  $("adv-scope-all").textContent = t("adv.scopeAll", nameOf(at.block.id));
-  $("adv-msg").textContent = "";
-  $("adv-rows").innerHTML = props.length ? props.map(([k, v]) => {
-    let options = [...(known[k] || [])];
-    if (v === "true" || v === "false") options.push("true", "false");
-    options = [...new Set([v, ...options])].sort(natural);
-    // 模型里看不出这个属性能取哪些值（比如红石线的 power）：给个输入框直接写
-    const control = options.length > 1
-      ? `<select data-set="${esc(k)}">${options.map((o) => `<option${o === v ? " selected" : ""}>${esc(o)}</option>`).join("")}</select>`
-      : `<input type="text" data-set="${esc(k)}" value="${esc(v)}" spellcheck="false">`;
-    return `<tr><td><input type="checkbox" data-filter="${esc(k)}" title="${esc(t("adv.filterTip"))}"></td>` +
-      `<td>${esc(k)}</td><td>${esc(v)}</td><td>${control}</td></tr>`;
-  }).join("") : `<tr><td colspan="4">${esc(t("adv.noProps"))}</td></tr>`;
-  $("adv-apply").disabled = !props.length;
+// 一行一个属性：只选（原方块的这个属性是这个值才换；任意 = 不管）+ 改成（新方块的这个属性；不变 = 沿用原来的）。
+// current：点中方块现在的属性（标在选项后面）；chosen：已经选好的 { filter, set }
+function propRowsHTML(source, target, current = null, chosen = { filter: {}, set: {} }) {
+  const sv = propValues(source), tv = propValues(target);
+  // 方块自己带的属性也算（模型里看不出来的，比如 waterlogged、红石线的 power）
+  if (current) for (const [k, v] of Object.entries(current)) {
+    (sv[k] ||= new Set()).add(v);
+    if (target === source) (tv[k] ||= new Set()).add(v);
+  }
+  for (const values of [...Object.values(sv), ...Object.values(tv)]) if (values.has("true") || values.has("false")) values.add("true").add("false");
+  const keys = [...new Set([...Object.keys(sv), ...Object.keys(tv)])].sort();
+  if (!keys.length) return `<tr><td colspan="3">${esc(t("adv.noProps"))}</td></tr>`;
+  const select = (attr, k, values, empty, picked, mark) => values
+    ? `<select data-${attr}="${esc(k)}" class="${picked ? "is-changed" : ""}"><option value="">${esc(empty)}</option>` +
+      [...values].sort(natural).map((v) => `<option value="${esc(v)}"${picked === v ? " selected" : ""}>${esc(v)}${v === mark ? " ←" : ""}</option>`).join("") + "</select>"
+    : `<span class="adv-none">—</span>`;
+  return keys.map((k) => `<tr><td>${esc(k)}${current && k in current ? `<small>${esc(current[k])}</small>` : ""}</td>` +
+    `<td>${select("filter", k, sv[k], t("adv.any"), chosen.filter[k], current?.[k])}</td>` +
+    `<td>${select("set", k, tv[k], t("adv.keep"), chosen.set[k], null)}</td></tr>`).join("");
+}
+function readChosen(box) {
+  const filter = {}, set = {};
+  for (const el of box.querySelectorAll("[data-filter]")) if (el.value) filter[el.dataset.filter] = el.value;
+  for (const el of box.querySelectorAll("[data-set]")) if (el.value) set[el.dataset.set] = el.value;
+  return { filter, set };
 }
 
-// 应用：勾了「只选」的属性作为筛选条件，「改成」里变了的作为新值；规则写法同桌面版，例如
-//   hopper{"facing":"west"}-hopper{"facing":"down"}
-function applyAdv() {
-  const at = advAt;
+// ---------------------------------------------------------------- 点选信息：替换方块 / 改属性（合在一起，最后点「应用」）
+
+let editAt = null, editTarget = null;
+function renderEdit(hit) {
+  const at = locate(hit.pos);
+  editAt = at;
   if (!at) return;
-  const filter = {}, set = {};
-  for (const box of $("adv-rows").querySelectorAll("[data-filter]:checked")) filter[box.dataset.filter] = at.block.props[box.dataset.filter];
-  for (const el of $("adv-rows").querySelectorAll("[data-set]")) {
-    const k = el.dataset.set, v = el.value.trim();
-    if (v && v !== at.block.props[k]) set[k] = v;
-  }
-  if (!Object.keys(set).length) { $("adv-msg").textContent = t("adv.none"); return; }
-  const one = document.querySelector('[name="adv-scope"]:checked').value === "one";
-  const json = (o) => (Object.keys(o).length ? JSON.stringify(o) : "");
-  const id = short(at.block.id);
+  if (!editTarget || editTarget.pos !== hit.pos.join()) editTarget = { pos: hit.pos.join(), id: short(at.block.id) };
+  paintEdit();
+}
+function paintEdit(chosen) {
+  const at = editAt, src = short(at.block.id), tgt = editTarget.id;
+  $("edit-target").innerHTML = `<img src="${blockIcon("minecraft:" + tgt, 20)}" alt=""><span>${esc(blockLabel(tgt))}</span><i class="caret" aria-hidden="true"></i>`;
+  $("edit-target-reset").hidden = tgt === src;
+  $("edit-scope-all").textContent = t("adv.scopeAll", nameOf(at.block.id));
+  $("edit-rows").innerHTML = propRowsHTML(src, tgt, at.block.props, chosen || { filter: {}, set: {} });
+}
+
+async function applyEdit() {
+  const at = editAt;
+  if (!at) return;
+  const { filter, set } = readChosen($("edit-rows"));
+  const src = short(at.block.id), tgt = editTarget.id;
+  if (tgt === src && !Object.keys(set).length) { $("edit-msg").textContent = t("adv.none"); return; }
+  const one = document.querySelector('[name="edit-scope"]:checked').value === "one";
   // 只换这一格：用它自己的全部属性做条件，保证换的就是这格
-  const result = runRules(`${id}${json(one ? at.block.props : filter)}-${id}${json(set)}`, one ? { region: at.region, local: at.local } : null);
-  $("adv-msg").textContent = result.error || ui("app.replace.done", result.replaced);
+  const result = await runRules(`${src}${json(one ? at.block.props : filter)}-${tgt}${json(set)}`, one ? { region: at.region, local: at.local } : null);
+  if (!result.cancelled) $("edit-msg").textContent = result.error || ui("app.replace.done", result.replaced);
+}
+
+// ---------------------------------------------------------------- 点选信息：容器里放物品
+
+const RECENT_ITEMS = "lv-viewer-recent-items";
+const recentItems = () => { try { return JSON.parse(localStorage.getItem(RECENT_ITEMS)) || []; } catch { return []; } };
+const rememberItem = (id) => localStorage.setItem(RECENT_ITEMS, JSON.stringify([id, ...recentItems().filter((x) => x !== id)].slice(0, 10)));
+
+// 点一个格子：选物品（最近放过的 10 个排前面，后面按字母），数量可改；有东西的格子还能清空
+function openItemPicker(cell) {
+  const at = locate(inspectHit.pos);
+  if (!at) return;
+  const slot = +cell.dataset.slot, occupied = cell.dataset.id ? short(cell.dataset.id) : null;
+  openPicker({
+    anchor: cell, current: occupied,
+    groups: [{ label: t("items.recent"), ids: recentItems() }],
+    all: allItems(), allLabel: t("items.all"),
+    extra: {
+      html: `<label class="picker-count"><span>${esc(t("items.count"))}</span><input type="number" id="picker-count" min="1" max="99" value="${cell.dataset.count || 1}"></label>` +
+        (occupied ? `<button class="btn btn-small btn-plain" id="picker-clear" type="button">${esc(t("items.clear"))}</button>` : ""),
+      mount: (box) => box.querySelector("#picker-clear")?.addEventListener("click", () => { closePicker(); setSlotItem(at, slot, null); }),
+    },
+    onPick: (id) => {
+      rememberItem(id);
+      setSlotItem(at, slot, id, Math.max(1, Math.min(99, Math.round(+$("picker-count").value) || 1)));
+    },
+  });
+}
+
+// 改一个格子：新的方块实体（原来的其他字段原样留着），写文件时类型也对（Slot 是 Byte，数量按原文件的写法）
+function setSlotItem(at, slot, id, count = 1) {
+  const D = globalThis.deepslate;
+  const key = at.local.join(","), data = at.region.blockEntities.get(key) || null;
+  const items = Array.isArray(data?.Items) ? data.Items : [];
+  const slotOf = (it, n) => +(it.Slot ?? it.slot ?? n);
+  const old = items.some((it) => "Count" in it); // 1.20.5 以前是 Count（Byte），之后是 count（Int）
+  const kept = items.filter((it, n) => slotOf(it, n) !== slot);
+  if (id) {
+    const full = "minecraft:" + short(id), countKey = old ? "Count" : "count";
+    const item = { Slot: slot, id: full, [countKey]: count };
+    RAW_TAG.set(item, compoundWith(null, {
+      Slot: new D.NbtByte(slot), id: new D.NbtString(full), [countKey]: old ? new D.NbtByte(count) : new D.NbtInt(count),
+    }));
+    kept.push(item);
+  }
+  kept.sort((a, b) => slotOf(a, 0) - slotOf(b, 0));
+  const beId = data?.id || (/shulker_box$/.test(at.block.id) ? "minecraft:shulker_box" : at.block.id);
+  const next = { ...(data || {}), id: beId, Items: kept };
+  RAW_TAG.set(next, compoundWith(data, { id: new D.NbtString(beId), Items: new D.NbtList(kept.map(toTag), 10) }));
+  const s = state.structure;
+  commitEdit({ ...s, regions: s.regions.map((r) => (r === at.region ? { ...r, blockEntities: new Map(r.blockEntities).set(key, next) } : r)) });
+  toast(id ? t("items.done", blockLabel(short(id)), count) : t("items.cleared"));
+}
+
+// ---------------------------------------------------------------- 点选信息：原始 NBT
+
+// 投影文件就给 litematic 里的原样（调色板条目 + 方块实体），.nbt 给调色板 + blocks 条目，
+// .mcstructure 给 block_palette + block_position_data。替换过的格子是新条目，按同样的格式现写一份
+const snbt = (v) => {
+  const tag = v && typeof v === "object" ? toTag(v) : null;
+  return tag ? (tag.toPrettyString ? tag.toPrettyString("  ") : tag.toString()) : String(v);
+};
+function rawNbtText(hit) {
+  if (hit.kind === "entity") return `// Entity\n${snbt(hit.entity.nbt || {})}`;
+  const at = locate(hit.pos);
+  if (!at) return "";
+  const r = at.region, raw = r.raw, p = r.blocks[at.index], parts = [];
+  const ri = raw ? p - raw.offset : -1;
+  const rawPalette = raw && ri >= 0 && ri < raw.palette.length && raw.palette[ri];
+  const name = { litematic: "BlockStatePalette", nbt: "palette", mcstructure: "block_palette" }[raw?.kind] || "block";
+  if (rawPalette) parts.push(`// ${name}[${ri}]\n${snbt(rawPalette)}`);
+  else parts.push(`// ${t("nbt.edited")}\n${snbt({ Name: at.block.id, ...(Object.keys(at.block.props).length ? { Properties: at.block.props } : {}) })}`);
+  const be = r.blockEntities.get(at.local.join(","));
+  if (raw?.kind === "nbt") {
+    const entry = raw.blocks.find((b) => b.pos && b.pos.every((v, i) => v === at.local[i]));
+    if (entry) parts.push(`// blocks[${raw.blocks.indexOf(entry)}]\n${snbt(entry)}`);
+    if (be && (!entry || be !== entry.nbt)) parts.push(`// nbt\n${snbt(be)}`);
+  } else if (raw?.kind === "mcstructure") {
+    const flat = String(r.size[2] * r.size[1] * at.local[0] + r.size[2] * at.local[1] + at.local[2]);
+    if (raw.positionData[flat]) parts.push(`// block_position_data["${flat}"]\n${snbt(raw.positionData[flat])}`);
+    else if (be) parts.push(`// block_entity_data\n${snbt(be)}`);
+  } else if (be) {
+    parts.push(`// ${raw?.kind === "litematic" ? "TileEntities" : "block entity"}\n${snbt(be)}`);
+  }
+  return parts.join("\n\n");
+}
+
+// ---------------------------------------------------------------- 右键改名字 / 简介
+
+// 在原地变成可编辑：回车保存（简介里 Shift+回车换行），Esc 放弃，点别处也保存
+function editInline(el, value, commit, { multiline = false } = {}) {
+  if (isDesktop() || el.isContentEditable) return;
+  el.textContent = value;
+  el.contentEditable = "true";
+  el.classList.add("is-editing");
+  el.focus();
+  document.getSelection().selectAllChildren(el);
+  const done = (save) => {
+    el.removeEventListener("keydown", onKey);
+    el.removeEventListener("blur", onBlur);
+    el.contentEditable = "false";
+    el.classList.remove("is-editing");
+    if (save) commit(el.innerText.replace(/\n$/, ""));
+    renderInfo();
+  };
+  const onKey = (e) => {
+    if (e.key === "Escape") { e.preventDefault(); done(false); }
+    if (e.key === "Enter" && !(multiline && e.shiftKey)) { e.preventDefault(); done(true); }
+  };
+  const onBlur = () => done(true);
+  el.addEventListener("keydown", onKey);
+  el.addEventListener("blur", onBlur);
 }
 
 // ---------------------------------------------------------------- 工具：全面替换方块
 
-// 同桌面版「替换特定方块」：一行一组 输入 → 输出，＋/− 增删，一次全换
-const batch = [{ from: null, to: null }];
+// 同桌面版「替换特定方块」：一行一组 原方块 → 换成，＋/− 增删；每行可以展开属性（只选 / 改成），最后统一「应用」
+const newRow = () => ({ from: null, to: null, open: false, filter: {}, set: {} });
+const batch = [newRow()];
 function pickButton(id, side) {
   const empty = t(side === "from" ? "batch.from" : "batch.to");
   return `<button class="pick${id ? "" : " is-empty"}" type="button" data-side="${side}">` +
@@ -989,13 +1196,19 @@ function pickButton(id, side) {
 function renderBatch() {
   $("batch-rows").innerHTML = batch.map((row, i) =>
     `<div class="batch-row" data-i="${i}">${pickButton(row.from, "from")}<span class="batch-arrow">→</span>${pickButton(row.to, "to")}` +
-    `<button class="btn btn-small btn-plain batch-del" type="button" data-del="${i}" aria-label="remove">−</button></div>`).join("");
+    `<button class="btn btn-small btn-plain batch-props-btn${row.open ? " is-on" : ""}" type="button" data-props="${i}" title="${esc(t("batch.props"))}"${row.from ? "" : " disabled"}>⚙</button>` +
+    `<button class="btn btn-small btn-plain batch-del" type="button" data-del="${i}" aria-label="remove">−</button>` +
+    (row.open && row.from
+      ? `<table class="adv-table batch-props"><thead><tr><th>${esc(t("adv.prop"))}</th><th>${esc(t("adv.filter"))}</th><th>${esc(t("adv.set"))}</th></tr></thead>` +
+        `<tbody>${propRowsHTML(row.from, row.to || row.from, null, row)}</tbody></table>`
+      : "") + "</div>").join("");
 }
-function runBatch() {
-  const rows = batch.filter((r) => r.from && r.to && r.from !== r.to);
+async function runBatch() {
+  const rows = batch.filter((r) => r.from && ((r.to && r.to !== r.from) || Object.keys(r.set).length));
   if (!rows.length) { $("batch-msg").textContent = t("batch.empty"); return; }
-  const result = runRules(rows.map((r) => `${r.from}-${r.to}`).join("\n"));
-  $("batch-msg").textContent = result.error || ui("app.replace.done", result.replaced);
+  const text = rows.map((r) => `${r.from}${json(r.filter)}-${r.to || r.from}${json(r.set)}`).join("\n");
+  const result = await runRules(text);
+  if (!result.cancelled) $("batch-msg").textContent = result.error || ui("app.replace.done", result.replaced);
 }
 
 // ---------------------------------------------------------------- 工具：缩略图 / 世界存档
@@ -1046,21 +1259,52 @@ function setMoveSpeed(v) {
   $("move-speed-val").textContent = v;
 }
 
+// 背景：关闭 / 海洋 / 草地 / 末地（地板在 3D 里画，天空是舞台的 CSS 背景）
+function setEnvironment(kind) {
+  kind = ["ocean", "grass", "end"].includes(kind) ? kind : "";
+  view.setEnvironment(kind || null);
+  $("stage").dataset.env = kind;
+  $("env").value = kind;
+}
+
 function bindTools() {
-  $("inspect-replace-btn").addEventListener("click", inspectReplace);
-  $("adv-apply").addEventListener("click", applyAdv);
-  // 改过的值描个边，一眼看出改了哪几个
-  $("adv-rows").addEventListener("change", (e) => {
-    const el = e.target.closest("[data-set]");
-    if (el && advAt) el.classList.toggle("is-changed", el.value !== advAt.block.props[el.dataset.set]);
+  // 点选信息：替换方块 / 改属性
+  $("edit-target").addEventListener("click", (e) => {
+    const at = editAt;
+    if (!at) return;
+    const keep = readChosen($("edit-rows"));
+    openPicker({
+      anchor: e.currentTarget, current: editTarget.id,
+      groups: [{ label: t("picker.related"), ids: similarBlocks(at.block.id) }],
+      onPick: (id) => { editTarget.id = id; paintEdit({ filter: keep.filter, set: {} }); },
+    });
   });
+  $("edit-target-reset").addEventListener("click", () => { editTarget.id = short(editAt.block.id); paintEdit(); });
+  $("edit-rows").addEventListener("change", (e) => e.target.classList.toggle("is-changed", !!e.target.value));
+  $("edit-apply").addEventListener("click", applyEdit);
+  $("inspect-nbt").addEventListener("click", () => {
+    if (!inspectHit) return;
+    $("nbt-text").textContent = rawNbtText(inspectHit);
+    $("nbt-dlg").showModal();
+  });
+  $("nbt-copy").addEventListener("click", async () => {
+    await navigator.clipboard?.writeText($("nbt-text").textContent).catch(() => {});
+    $("nbt-copy").textContent = t("nbt.copied");
+    setTimeout(() => ($("nbt-copy").textContent = t("nbt.copy")), 1500);
+  });
+  $("inspect-items").addEventListener("click", (e) => {
+    const cell = e.target.closest(".slot-cell[data-slot]");
+    if (cell && !isDesktop()) openItemPicker(cell);
+  });
+
+  // 选择框
   $("picker-search").addEventListener("input", () => { picker.limit = PICKER_PAGE; renderPicker(); $("picker-list").scrollTop = 0; });
   $("picker-search").addEventListener("keydown", (e) => {
     if (e.key === "Enter") { const first = $("picker-list").querySelector("[data-id]"); if (first) choosePicked(first.dataset.id); }
     if (e.key === "Escape") closePicker();
   });
   $("picker-list").addEventListener("click", (e) => { const b = e.target.closest("[data-id]"); if (b) choosePicked(b.dataset.id); });
-  // 「全部方块」滚到底再接着画
+  // 「全部」滚到底再接着画
   $("picker-list").addEventListener("scroll", (e) => {
     const el = e.currentTarget;
     if (picker.more && el.scrollTop + el.clientHeight > el.scrollHeight - 200) { picker.limit += PICKER_PAGE; const top = el.scrollTop; renderPicker(); el.scrollTop = top; }
@@ -1069,14 +1313,17 @@ function bindTools() {
     if (!$("picker").hidden && !e.target.closest("#picker") && !(picker.anchor && picker.anchor.contains(e.target))) closePicker();
   });
 
+  // 全面替换
   $("batch-rows").addEventListener("click", (e) => {
     const del = e.target.closest("[data-del]");
     if (del) {
       batch.splice(+del.dataset.del, 1);
-      if (!batch.length) batch.push({ from: null, to: null });
+      if (!batch.length) batch.push(newRow());
       renderBatch();
       return;
     }
+    const props = e.target.closest("[data-props]");
+    if (props) { const row = batch[+props.dataset.props]; row.open = !row.open; renderBatch(); return; }
     const btn = e.target.closest("[data-side]");
     if (!btn) return;
     const row = batch[+btn.closest(".batch-row").dataset.i], side = btn.dataset.side;
@@ -1085,10 +1332,24 @@ function bindTools() {
       groups: side === "from"
         ? [{ label: t("picker.inStructure"), ids: structureBlocks() }]
         : [{ label: t("picker.related"), ids: row.from ? similarBlocks(row.from) : [] }],
-      onPick: (id) => { row[side] = id; renderBatch(); },
+      onPick: (id) => {
+        row[side] = id;
+        // 换了方块，属性可选的值也跟着变：原方块换了就清空「只选」，目标换了就清空「改成」
+        if (side === "from") row.filter = {};
+        row.set = {};
+        renderBatch();
+      },
     });
   });
-  $("batch-add").addEventListener("click", () => { batch.push({ from: null, to: null }); renderBatch(); });
+  $("batch-rows").addEventListener("change", (e) => {
+    const el = e.target, row = batch[+el.closest(".batch-row")?.dataset.i];
+    if (!row) return;
+    const [kind, key] = el.dataset.filter !== undefined ? ["filter", el.dataset.filter] : el.dataset.set !== undefined ? ["set", el.dataset.set] : [];
+    if (!kind) return;
+    if (el.value) row[kind][key] = el.value; else delete row[kind][key];
+    el.classList.toggle("is-changed", !!el.value);
+  });
+  $("batch-add").addEventListener("click", () => { batch.push(newRow()); renderBatch(); });
   $("batch-run").addEventListener("click", runBatch);
 
   $("thumb-run").addEventListener("click", runThumb);
@@ -1096,6 +1357,20 @@ function bindTools() {
   $("thumb-embed").addEventListener("click", embedThumb);
 
   $("move-speed").addEventListener("input", (e) => { setMoveSpeed(e.target.value); setPref("moveSpeed", view.moveSpeed); });
+  $("env").addEventListener("change", (e) => { setEnvironment(e.target.value); setPref("env", e.target.value); });
+
+  // 右键标题改结构名、右键简介改简介（导出 .litematic 时写进去）
+  $("file-name").addEventListener("contextmenu", (e) => {
+    if (!state.structure || isDesktop()) return;
+    e.preventDefault();
+    editInline(e.currentTarget, state.structure.name || "", (v) => { if (v.trim()) state.structure.name = v.trim(); });
+  });
+  $("stats").addEventListener("contextmenu", (e) => {
+    const value = e.target.closest('[data-stat="ui.stat.l7"] span');
+    if (!value || isDesktop()) return;
+    e.preventDefault();
+    editInline(value, state.structure.description || "", (v) => (state.structure.description = v.trim()), { multiline: true });
+  });
   renderBatch();
 }
 
@@ -1124,7 +1399,10 @@ function bind() {
   }
   $("regions").addEventListener("click", (e) => {
     const b = e.target.closest("[data-region]");
-    if (b) { state.region = b.dataset.region || null; renderInfo(); }
+    if (!b) return;
+    state.region = b.dataset.region || null;
+    renderInfo();
+    if (!state.steps) view.setFilter({ region: regionIndex() }); // 3D 只显示这个区域（分步时显示拆分结果，不筛）
   });
   $("tabs").addEventListener("click", (e) => {
     const b = e.target.closest("[data-tab]");
@@ -1172,7 +1450,8 @@ async function main() {
   view = new View($("canvas"), { overlay: $("markers"), onPick: showInspect, onContext: blockMenu });
   restorePrefs();
   setMoveSpeed(loadPrefs().moveSpeed || 12);
-  window.lvViewer = { view, state, showInspect }; // 方便在控制台里调试 / 以后扩展
+  setEnvironment(loadPrefs().env || ""); // 默认关闭
+  window.lvViewer = { view, state, showInspect, runRules }; // 方便在控制台里调试 / 以后扩展
   applyTheme(themeName);
 
   // 桌面版「手动3D渲染」：主程序把结构写进 payload.json，用 #desktop 打开本页
