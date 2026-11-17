@@ -4,7 +4,7 @@
 // assets 是 assets.js 定义的全局常量；NON_SELF_CULLING 来自 opaque.js。
 
 const { mat4, vec3, vec4 } = glMatrix;
-const BUILD_CHUNK = 20000; // 每次最多加这么多方块就让出主线程，大结构不会把页面卡死
+const BUILD_CHUNK = 4096; // 每扫这么多格看一眼时间，忙够 25 ms 就让出主线程，大结构不会把页面卡死
 const FOV = (70 * Math.PI) / 180; // 和 deepslate 的透视一致，点选算射线要用同一个
 
 let resources = null;
@@ -148,6 +148,73 @@ export const ENVIRONMENTS = {
   end: { texture: "minecraft:block/end_stone", tint: null },
 };
 
+// ---- 大结构：deepslate 默认的做法几十万方块就会卡死或者把标签页撑崩，这里打几个补丁
+//   1. 网格上传到显卡后，丢掉 JS 里的顶点对象，只记数量（之前每个面一堆对象，几十万方块几千万个对象）
+//   2. merge 用 concat 每加一个方块就把整个列表复制一遍，改成就地追加
+//   3. 同一种方块状态（含六个面的遮挡情况）的网格只算一次，之后复制一份用（返回的网格会被就地平移，必须复制）
+//   4. 每帧要画的网格列表缓存起来，区块有改动才重算（之前每帧都把所有区块翻一遍）
+function patchDeepslate() {
+  if (deepslate.__lvMeshPatched) return;
+  deepslate.__lvMeshPatched = true;
+  const M = deepslate.Mesh.prototype;
+  M.merge = function (other) {
+    for (const q of other.quads) this.quads.push(q);
+    for (const l of other.lines) this.lines.push(l);
+    return this;
+  };
+  const rebuild = M.rebuild, clear = M.clear;
+  M.rebuild = function (gl, options) {
+    rebuild.call(this, gl, options);
+    // deepslate 的索引是 16 位，一份网格最多 16383 个面（茂密的树叶区块会超），超了改用 32 位索引
+    if (this.indexBuffer) {
+      const n = this.quads.length, wide = n * 4 > 65535 && !!gl.getExtension("OES_element_index_uint");
+      if (wide) {
+        const index = new Uint32Array(n * 6);
+        for (let a = 0; a < n; a++) index.set([4 * a, 4 * a + 1, 4 * a + 2, 4 * a, 4 * a + 2, 4 * a + 3], a * 6);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.indexBuffer);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, index, gl.DYNAMIC_DRAW);
+      }
+      this.indexBuffer.wide = wide;
+    }
+    this.uploadedQuads = this.quads.length;
+    this.quads = [];
+    return this;
+  };
+  M.clear = function () { this.uploadedQuads = 0; return clear.call(this); };
+  M.quadVertices = function () { return (this.quads.length || this.uploadedQuads || 0) * 4; };
+  M.quadIndices = function () { return (this.quads.length || this.uploadedQuads || 0) * 6; };
+  M.isEmpty = function () { return !this.quads.length && !this.lines.length && !this.uploadedQuads; };
+
+  const cloneVertex = (v) => new deepslate.Vertex(v.pos, v.color, v.texture, v.textureLimit, v.normal, v.blockPos);
+  const cloneMesh = (mesh) => {
+    const out = new deepslate.Mesh();
+    out.quads = mesh.quads.map((q) => new deepslate.Quad(cloneVertex(q.v1), cloneVertex(q.v2), cloneVertex(q.v3), cloneVertex(q.v4)));
+    out.lines = mesh.lines.slice();
+    return out;
+  };
+  const meshCache = new WeakMap();
+  const getMesh = deepslate.BlockDefinition.prototype.getMesh;
+  deepslate.BlockDefinition.prototype.getMesh = function (name, props, uv, blockProps, cull) {
+    let cache = meshCache.get(this);
+    if (!cache) meshCache.set(this, (cache = new Map()));
+    const key = Object.keys(props).sort().map((k) => k + "=" + props[k]).join(",") + "|" +
+      (cull ? (cull.up ? 1 : 0) + (cull.down ? 2 : 0) + (cull.north ? 4 : 0) + (cull.south ? 8 : 0) + (cull.east ? 16 : 0) + (cull.west ? 32 : 0) : "");
+    let mesh = cache.get(key);
+    if (!mesh) cache.set(key, (mesh = getMesh.call(this, name, props, uv, blockProps, cull)));
+    return cloneMesh(mesh);
+  };
+}
+
+// 4. 网格列表缓存：拿到第一个区块构建器的时候给它的类打补丁
+function patchChunkBuilder(builder) {
+  const CB = Object.getPrototypeOf(builder);
+  if (CB.__lvPatched) return;
+  CB.__lvPatched = true;
+  const getMeshes = CB.getMeshes, update = CB.updateStructureBuffers;
+  CB.getMeshes = function () { return this.meshList || (this.meshList = getMeshes.call(this)); };
+  CB.updateStructureBuffers = function (chunks) { this.meshList = null; return update.call(this, chunks); };
+}
+
 export async function loadResources() {
   iconIndex = await fetch("resource/icons.json").then((r) => r.json()).catch(() => ({}));
   atlasImage = await new Promise((resolve, reject) => {
@@ -197,6 +264,7 @@ export async function loadResources() {
     }
     return atlas.getTextureUV(key);
   };
+  patchDeepslate();
   if (!deepslate.SpecialRenderers.__lvPatched) {
     const special = deepslate.SpecialRenderers.getBlockMesh;
     deepslate.SpecialRenderers.getBlockMesh = (state, nbt, res, cull) => {
@@ -262,7 +330,8 @@ export function blockIcon(id, px = 20) {
 const AIR_RE = /:(cave_|void_)?air$/;
 // deepslate 的特殊渲染器只注册了 16 种染色潜影盒，未染色的会整个不显示；画的时候借最接近的紫色
 const RENDER_AS = { "minecraft:shulker_box": "minecraft:purple_shulker_box" };
-const CHUNK = 8; // deepslate 的区块边长（StructureRenderer 的 chunkSize）
+const CHUNK = 16; // deepslate 的区块边长（StructureRenderer 的 chunkSize）。每个区块两份网格、每份 7 个显卡缓冲区，
+// 边长 8 时几十万方块会切出几万个区块、几十万个缓冲区，显卡进程直接崩；16 是 deepslate 的默认值
 const stateOf = (b) => (b.id && !AIR_RE.test(b.id) ? new deepslate.BlockState(RENDER_AS[b.id] || b.id, b.props) : null);
 // WASD 移动：跟着视角走。W/S 沿视线前后（往上看就往上飞），A/D 左右平移，空格 / Shift 竖直上下。
 // 值是 [前后, 左右, 上下]
@@ -274,21 +343,42 @@ const MOVE_KEYS = {
 // 给 deepslate 用的「活」结构：可以随时加减方块。deepslate 自己的 Structure 只能加不能删，
 // 换步骤 / 换显示层时要整个重建；用这个只要改动那几格、重画受影响的区块。
 // deepslate 只会调 getSize / getBlocks / getBlock 三个方法。
+// 方块按区块分好：deepslate 局部重画（updateStructureBuffers(区块列表)）时会把 getBlocks() 全扫一遍，
+// 只给它要重画的那几个区块的方块（only），大结构局部更新才快
+const chunkOf = (p) => `${Math.floor(p[0] / CHUNK)},${Math.floor(p[1] / CHUNK)},${Math.floor(p[2] / CHUNK)}`;
 class LiveStructure {
   constructor(size) {
     this.size = size;
     this.map = new Map();
+    this.chunks = new Map(); // "cx,cy,cz" → Map(key → placed)
     this.list = null;
+    this.only = null;        // Set("cx,cy,cz")：正在重画的区块
   }
   key(p) { return (p[0] * this.size[1] + p[1]) * this.size[2] + p[2]; }
   getSize() { return this.size; }
-  getBlocks() { return this.list || (this.list = [...this.map.values()]); }
+  getBlocks() {
+    if (this.only) {
+      const out = [];
+      for (const k of this.only) { const c = this.chunks.get(k); if (c) for (const b of c.values()) out.push(b); }
+      return out;
+    }
+    return this.list || (this.list = [...this.map.values()]);
+  }
   getBlock(p) {
     if (p[0] < 0 || p[1] < 0 || p[2] < 0 || p[0] >= this.size[0] || p[1] >= this.size[1] || p[2] >= this.size[2]) return null;
     return this.map.get(this.key(p)) || null;
   }
-  put(entry) { this.map.set(entry.key, entry.placed); this.list = null; }
-  drop(entry) { this.map.delete(entry.key); this.list = null; }
+  put(entry) {
+    this.map.set(entry.key, entry.placed);
+    const k = chunkOf(entry.pos);
+    (this.chunks.get(k) || this.chunks.set(k, new Map()).get(k)).set(entry.key, entry.placed);
+    this.list = null;
+  }
+  drop(entry) {
+    this.map.delete(entry.key);
+    this.chunks.get(chunkOf(entry.pos))?.delete(entry.key);
+    this.list = null;
+  }
 }
 
 // ---- 实体碰撞箱：按种类上色（用当前主题的五个颜色），尺寸取游戏里的碰撞箱（宽, 高）
@@ -334,6 +424,12 @@ export class View {
     // 改成颜色照常混、透明度只增不减（ONE, ONE_MINUS_SRC_ALPHA），画面就和游戏里一样
     const gl = this.gl;
     gl.blendFunc = (src, dst) => gl.blendFuncSeparate(src, dst, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    // 配合上面的 32 位索引：记住当前绑的索引缓冲区，画的时候它是 32 位的就换成 UNSIGNED_INT
+    gl.getExtension("OES_element_index_uint");
+    let elements = null;
+    const bindBuffer = gl.bindBuffer.bind(gl), drawElements = gl.drawElements.bind(gl);
+    gl.bindBuffer = (target, buffer) => { if (target === gl.ELEMENT_ARRAY_BUFFER) elements = buffer; return bindBuffer(target, buffer); };
+    gl.drawElements = (mode, count, type, offset) => drawElements(mode, count, elements?.wide ? gl.UNSIGNED_INT : type, offset);
     this.overlay = overlay;
     this.onPick = onPick;
     this.onContext = onContext;
@@ -384,9 +480,9 @@ export class View {
   async show(structure, box, { resetCamera = true, onProgress = () => {}, region = null } = {}) {
     const token = ++this.building; // 新的构建开始，旧的那次就作废
     const [sx, sy, sz] = box.size;
-    const entries = [], byY = Array.from({ length: sy }, () => []), byStep = [];
+    const entries = [], byY = Array.from({ length: sy }, () => []), byStep = [], byKey = new Map();
     const total = structure.regions.reduce((s, r) => s + r.blocks.length, 0);
-    let done = 0;
+    let done = 0, slice = performance.now();
     for (const [ri, region] of structure.regions.entries()) {
       const [, ry, rz] = region.size;
       const off = region.origin.map((o, i) => o - box.origin[i]);
@@ -399,30 +495,49 @@ export class View {
           const step = region.stepOf ? region.stepOf[i] : -1;
           const entry = {
             pos, step, region, ri, local, block: region.palette[region.blocks[i]],
-            key: (pos[0] * sy + pos[1]) * sz + pos[2],
+            key: (pos[0] * sy + pos[1]) * sz + pos[2], hidden: false,
             placed: { pos, state, nbt: undefined },
           };
           entry.placed.entry = entry; // 反查：点选时从 live 里拿到的方块直接找回条目
           entries.push(entry);
+          byKey.set(entry.key, entry);
           byY[pos[1]].push(entry);
           if (step >= 0) (byStep[step] ||= []).push(entry);
         }
-        if (++done % BUILD_CHUNK === 0) {
-          onProgress(done / total);
+        // 按时间让出主线程：每忙 25 ms 让一次（按格数让的话，大包围盒里几千万个空气格要让上千次，光等就好几秒）
+        if (++done % BUILD_CHUNK === 0 && performance.now() - slice > 25) {
+          onProgress((done / total) * 0.3);
           await new Promise((r) => setTimeout(r, 0));
           if (token !== this.building) return;
+          slice = performance.now();
         }
       }
     }
-    onProgress(1);
-
     const live = new LiveStructure([sx, sy, sz]);
     const filter = { layers: [0, sy - 1], step: byStep.length ? byStep.length - 1 : null, region };
-    for (const e of entries) if (this.visible(e, filter)) live.put(e);
-    this.scene = { structure, box, entries, byY, byStep, live, filter };
+    const sc = { structure, box, entries, byY, byStep, byKey, live, filter };
+    // 六面都被不透明整方块包住的格子看不见，不进渲染（地形这类实心结构能省掉一大半）；切层露出来时再补上。
+    // 几十万格一口气做完会卡一下，分批做、中间让出主线程
+    for (let i = 0; i < entries.length; i += 50000) {
+      for (const e of entries.slice(i, i + 50000)) {
+        e.hidden = this.isHidden(e, sc);
+        if (this.visible(e, filter)) live.put(e);
+      }
+      if (entries.length > 50000) {
+        await new Promise((r) => setTimeout(r, 0));
+        if (token !== this.building) return;
+      }
+    }
+    this.scene = sc;
     this.pending.clear();
 
-    this.renderer = new deepslate.StructureRenderer(this.gl, live, resources, { chunkSize: CHUNK });
+    // 先建一个空的渲染器（不在这里一口气做完所有网格，几十万方块会卡死页面），网格交给后台分批做
+    live.only = new Set();
+    // useInvisibleBlockBuffer：deepslate 默认给包围盒里每个空格画一个小线框（标空气 / 结构空位），
+    // 461×83×461 的投影就是一千多万格、上亿根线，直接把页面撑崩 —— 这就是之前的「几十万方块上限」。我们不显示它
+    this.renderer = new deepslate.StructureRenderer(this.gl, live, resources, { chunkSize: CHUNK, useInvisibleBlockBuffer: false });
+    live.only = null;
+    patchChunkBuilder(this.renderer.chunkBuilder);
     // deepslate 0.27 的远平面写死 500 格，大结构拉远会被切掉；换成同样的透视、远平面放大
     this.renderer.getPerspective = () => {
       const m = mat4.create();
@@ -441,6 +556,25 @@ export class View {
       this.pitch = 0.6;
     }
     this.draw();
+    // 网格分批做，边做边显示；做完前照样能转、能点
+    const all = [...live.chunks.keys()].map((k) => k.split(",").map(Number));
+    this.drainTotal = all.length;
+    this.onDrain = (left) => onProgress(0.3 + 0.7 * (1 - left / Math.max(1, this.drainTotal)));
+    await this.queueChunks(all);
+    this.onDrain = null;
+    onProgress(1);
+  }
+
+  // 只有不透明的整方块挡得住视线
+  opaque(entry) {
+    return !!entry && !!resources.getBlockFlags(String(entry.placed.state.getName())).opaque;
+  }
+  isHidden(entry, sc) {
+    const [sx, sy, sz] = sc.box.size, [x, y, z] = entry.pos;
+    if (x === 0 || y === 0 || z === 0 || x === sx - 1 || y === sy - 1 || z === sz - 1) return false;
+    const k = entry.key, step = sy * sz;
+    for (const n of [k + step, k - step, k + sz, k - sz, k + 1, k - 1]) if (!this.opaque(sc.byKey.get(n))) return false;
+    return true;
   }
 
   // ---- 替换方块后的增量更新：只改动过的格子换状态，碰到的区块分批重画。
@@ -450,18 +584,29 @@ export class View {
     const sc = this.scene;
     if (!sc || !changes.length) return Promise.resolve();
     const [, sy, sz] = sc.box.size;
-    sc.byKey ||= new Map(sc.entries.map((e) => [e.key, e]));
     const chunks = new Map();
     const mark = (p) => {
       const c = [Math.floor(p[0] / CHUNK), Math.floor(p[1] / CHUNK), Math.floor(p[2] / CHUNK)];
       if (c.every((v) => v >= 0)) chunks.set(c.join(","), c);
     };
+    const recheck = new Set();
     for (const { pos, block } of changes) {
       const e = sc.byKey.get((pos[0] * sy + pos[1]) * sz + pos[2]);
       if (!e) continue;
       e.block = block;
       e.placed.state = stateOf(block) || e.placed.state;
-      if (!sc.live.getBlock(e.pos)) continue; // 现在没显示（被层 / 步骤藏起来）：轮到显示时自然是新的
+      recheck.add(e);
+      for (const n of [e.key + sy * sz, e.key - sy * sz, e.key + sz, e.key - sz, e.key + 1, e.key - 1]) {
+        const ne = sc.byKey.get(n);
+        if (ne) recheck.add(ne);
+      }
+    }
+    for (const e of recheck) {
+      if (sc.entries === undefined) break;
+      e.hidden = this.isHidden(e, sc);
+      const shown = sc.live.map.has(e.key), want = this.visible(e, sc.filter);
+      if (shown !== want) (want ? sc.live.put(e) : sc.live.drop(e));
+      if (!shown && !want) continue; // 现在没显示（被层 / 步骤藏起来）：轮到显示时自然是新的
       mark(e.pos);
       for (let a = 0; a < 3; a++) {
         const r = e.pos[a] % CHUNK;
@@ -500,17 +645,29 @@ export class View {
         sc.chunkCount.set(k, (sc.chunkCount.get(k) || 0) + 1);
       }
     }
-    const batch = [];
-    let blocks = 0;
-    for (const [k, c] of this.pending) {
-      batch.push(c);
-      this.pending.delete(k);
-      blocks += sc.chunkCount.get(k) || 1;
-      if (blocks >= 250) break;
+    // 每次最多忙 30 ms 就让出主线程（一批大约 250 个方块）
+    const start = performance.now();
+    while (this.pending.size && performance.now() - start < 30) {
+      const batch = [];
+      let blocks = 0;
+      for (const [k, c] of this.pending) {
+        batch.push(c);
+        this.pending.delete(k);
+        blocks += sc.chunkCount.get(k) || 1;
+        if (blocks >= 250) break;
+      }
+      this.updateChunks(batch);
     }
-    this.renderer.updateStructureBuffers(batch);
+    this.onDrain?.(this.pending.size);
     this.draw();
     setTimeout(() => this.drainChunks(), 0);
+  }
+
+  // 局部重画：只把这几个区块的方块交给 deepslate
+  updateChunks(list) {
+    const live = this.scene.live;
+    live.only = new Set(list.map((c) => c.join(",")));
+    try { this.renderer.updateStructureBuffers(list); } finally { live.only = null; }
   }
 
   // ---- 缩略图：标准等轴（绕竖轴 45°、俯角 30°，同桌面版 snapshot.py），正交投影、带贴图。
@@ -568,6 +725,8 @@ export class View {
 
   visible(entry, f) {
     if (f.region != null && entry.ri !== f.region) return false;
+    // 被包住的格子：在显示范围的中间就不画（在最上 / 最下一层时上下有一面露出来了，要画）
+    if (entry.hidden && f.region == null && f.step === null && entry.pos[1] > f.layers[0] && entry.pos[1] < f.layers[1]) return false;
     if (entry.pos[1] < f.layers[0] || entry.pos[1] > f.layers[1]) return false;
     return f.step === null || entry.step <= f.step;
   }
@@ -581,6 +740,9 @@ export class View {
     const touched = new Set();
     const consider = (list) => { if (list) for (const e of list) touched.add(e); };
     if (next.region !== old.region) consider(sc.entries); // 换子区域：每格都可能变
+    if (next.layers[0] !== old.layers[0] || next.layers[1] !== old.layers[1]) {
+      for (const y of new Set([...old.layers, ...next.layers])) consider(sc.byY[y]);
+    }
     // 层：两次范围的并集里、只在一边的那些层
     const lo = Math.min(old.layers[0], next.layers[0]), hi = Math.max(old.layers[1], next.layers[1]);
     for (let y = lo; y <= hi; y++) {
@@ -606,7 +768,7 @@ export class View {
     }
     sc.filter = next;
     if (next.region !== old.region) this.buildRegionBoxes();
-    if (chunks.size) this.renderer.updateStructureBuffers([...chunks.values()].filter((c) => c.every((v) => v >= 0)));
+    if (chunks.size) this.updateChunks([...chunks.values()].filter((c) => c.every((v) => v >= 0)));
     if (this.selected && !sc.live.getBlock(this.selected)) this.selected = null;
     this.placeMarkersVisibility();
     this.draw();

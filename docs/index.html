@@ -52,6 +52,8 @@
 }
   </script>
   <link rel="icon" href="assets/icon.ico">
+  <!-- LCP（最大内容渲染）就是 Banner 背景截图：一开始就以高优先级下载，不用等 CSS 解析完才排队 -->
+  <link rel="preload" as="image" href="assets/app_en.webp" type="image/webp" fetchpriority="high">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -84,7 +86,7 @@
   <!-- 背景：放大的软件截图 + COVER2 的浅天蓝斜三角，整体虚化 -->
   <div class="hero-bg" aria-hidden="true">
     <!-- 背景截图固定用简体界面那张 -->
-    <img class="hero-shot" id="hero-shot" src="assets/app_en.webp" alt="Litematica Viewer material list window, blurred background">
+    <img class="hero-shot" id="hero-shot" src="assets/app_en.webp" fetchpriority="high" alt="Litematica Viewer material list window, blurred background">
     <div class="hero-sky"></div>
   </div>
 
