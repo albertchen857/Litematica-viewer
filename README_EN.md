@@ -19,6 +19,7 @@ GITHUB Link: https://github.com/albertchen857/LitematicaViewer
 Website: https://lite-viewer.com
 Stable builds are under Releases; clone the repo for the latest preview.
 Please give a star! Target 1000 stars.
+QQ Discussion Group：1044260630
 
 ## Supported formats
 
