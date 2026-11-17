@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title data-en="Litematica Viewer · Count your schematic's materials in a second" data-tw="投影檢視器 Litematica Viewer · 一秒算完投影材料" data-zh="投影查看器 Litematica Viewer · 一秒算完投影材料">Litematica Viewer · Count your schematic's materials in a second</title>
   <!-- 搜索结果里的简介：写死的是英文（默认语言），main.js 按 ?lang= 换成对应语言（DESCRIPTIONS） -->
-  <meta name="description" content="Free, open-source Minecraft schematic viewer for .litematic / .nbt / .mcstructure: material lists in boxes and stacks, textured 3D view, container contents and format conversion. Windows, macOS, Linux and web.">
+  <meta name="description" content="Free, open-source Minecraft schematic viewer: material lists in boxes and stacks, textured 3D view and format conversion for .litematic, .nbt and .mcstructure.">
   <!-- 三种语言的网址互相标明：英文 = 首页，简体 / 繁体 = ?lang=cn / ?lang=tw。
        canonical（以哪个网址为准）由 main.js 按当前语言写，?lang=en 会归到首页 -->
   <link rel="alternate" hreflang="en" href="https://lite-viewer.com/">
@@ -18,7 +18,7 @@
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Litematica Viewer">
   <meta property="og:title" content="Litematica Viewer · Count your schematic's materials in a second">
-  <meta property="og:description" content="Free, open-source Minecraft schematic viewer for .litematic / .nbt / .mcstructure: material lists in boxes and stacks, textured 3D view, container contents and format conversion. Windows, macOS, Linux and web.">
+  <meta property="og:description" content="Free, open-source Minecraft schematic viewer: material lists in boxes and stacks, textured 3D view and format conversion for .litematic, .nbt and .mcstructure.">
   <meta property="og:url" content="https://lite-viewer.com/">
   <meta property="og:image" content="https://lite-viewer.com/assets/app_cn.png">
   <meta name="twitter:card" content="summary_large_image">
@@ -36,7 +36,7 @@
   "url": "https://lite-viewer.com/",
   "applicationCategory": "UtilitiesApplication",
   "operatingSystem": "Windows, macOS, Linux, Web",
-  "description": "Free, open-source Minecraft schematic viewer for .litematic / .nbt / .mcstructure: material lists in boxes and stacks, textured 3D view, container contents and format conversion. Windows, macOS, Linux and web.",
+  "description": "Free, open-source Minecraft schematic viewer: material lists in boxes and stacks, textured 3D view and format conversion for .litematic, .nbt and .mcstructure.",
   "image": "https://lite-viewer.com/assets/app_cn.png",
   "downloadUrl": "https://github.com/albertchen857/Litematica-viewer/releases/latest",
   "offers": {
@@ -55,16 +55,11 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<!--
-  中英双语：每个要翻译的元素上写 data-en="英文"，元素里的内容就是中文。
-  切换语言时 main.js 把两者互换。默认跟随浏览器语言，右上角按钮可以切，选择会记住；
-  也可以直接用 ?lang=en / ?lang=zh 打开。
--->
 
 <!-- ============================================================ 顶栏 -->
 <header class="topbar">
   <a class="brand" href="#top">
-    <img class="pixel" src="assets/icon.ico" alt="" width="32" height="32">
+    <img class="pixel" src="assets/icon.ico" alt="Litematica Viewer logo" width="32" height="32">
     <span>Litematica Viewer</span>
     <small>投影查看器</small>
   </a>
@@ -89,7 +84,7 @@
   <!-- 背景：放大的软件截图 + COVER2 的浅天蓝斜三角，整体虚化 -->
   <div class="hero-bg" aria-hidden="true">
     <!-- 背景截图固定用简体界面那张 -->
-    <img class="hero-shot" id="hero-shot" src="assets/app_cn.png" alt="">
+    <img class="hero-shot" id="hero-shot" src="assets/app_cn.png" alt="Litematica Viewer material list window, blurred background">
     <div class="hero-sky"></div>
   </div>
 
@@ -193,17 +188,17 @@
     <div class="panel features">
       <h3 class="panel-title" data-en="What it does" data-tw="能做什麼" data-zh="能做什么">What it does</h3>
       <ul class="feature-list">
-        <li data-stagger><img class="pixel" src="assets/blocks/grass_block.png" alt="" width="32" height="32">
+        <li data-stagger><img class="pixel" src="assets/blocks/grass_block.png" alt="Grass block" width="32" height="32">
           <div><b data-en="Material list" data-tw="材料清單" data-zh="材料清单">Material list</b><p data-en="Total / Blocks / Entities / Items tabs; right-click a row to ignore or quick-replace it" data-tw="方塊 / 實體 / 物品 / 總數四個頁籤，右鍵可忽略或快捷替換某一行" data-zh="方块 / 实体 / 物品 / 总数四个页签，右键可忽略或快捷替换某一行">Total / Blocks / Entities / Items tabs; right-click a row to ignore or quick-replace it</p></div></li>
-        <li data-stagger><img class="pixel" src="assets/blocks/smooth_quartz.png" alt="" width="32" height="32">
+        <li data-stagger><img class="pixel" src="assets/blocks/smooth_quartz.png" alt="Smooth quartz" width="32" height="32">
           <div><b data-en="3D preview" data-tw="3D 預覽" data-zh="3D 预览">3D preview</b><p data-en="Drag to rotate and scroll to zoom the thumbnail; open the web 3D renderer for a closer look" data-tw="縮圖可拖曳旋轉、滾輪縮放，需要細看就開網頁 3D 渲染" data-zh="缩略图可拖拽旋转、滚轮缩放，需要细看就开网页 3D 渲染">Drag to rotate and scroll to zoom the thumbnail; open the web 3D renderer for a closer look</p></div></li>
-        <li data-stagger><img class="pixel" src="assets/blocks/chest.png" alt="" width="32" height="32">
+        <li data-stagger><img class="pixel" src="assets/blocks/chest.png" alt="Chest" width="32" height="32">
           <div><b data-en="Container analysis" data-tw="容器分析" data-zh="容器分析">Container analysis</b><p data-en="What's inside every chest, shulker box and hopper, slot by slot" data-tw="箱子、界伏盒、漏斗裡裝了什麼，一格一格擺給你看" data-zh="箱子、潜影盒、漏斗里装了什么，一格一格摆给你看">What's inside every chest, shulker box and hopper, slot by slot</p></div></li>
-        <li data-stagger><img class="pixel" src="assets/blocks/bricks.png" alt="" width="32" height="32">
+        <li data-stagger><img class="pixel" src="assets/blocks/bricks.png" alt="Bricks" width="32" height="32">
           <div><b data-en="Step checker" data-tw="步驟檢視器" data-zh="步骤查看器">Step checker</b><p data-en="Layer by layer, with textures, facing and upper/lower halves" data-tw="逐層看方塊的貼圖、朝向和上下半，照著一層層蓋" data-zh="逐层看方块的贴图、朝向和上下半，照着一层层盖">Layer by layer, with textures, facing and upper/lower halves</p></div></li>
-        <li data-stagger><img class="pixel" src="assets/blocks/redstone_block.png" alt="" width="32" height="32">
+        <li data-stagger><img class="pixel" src="assets/blocks/redstone_block.png" alt="Redstone block" width="32" height="32">
           <div><b data-en="Redstone ratio" data-tw="紅石偏度" data-zh="红石偏度">Redstone ratio</b><p data-en="Seven stats tell a building from a machine" data-tw="七項指標看出它是建築還是機器" data-zh="七项指标看出它是建筑还是机器">Seven stats tell a building from a machine</p></div></li>
-        <li data-stagger><img class="pixel" src="assets/blocks/hopper.png" alt="" width="32" height="32">
+        <li data-stagger><img class="pixel" src="assets/blocks/hopper.png" alt="Hopper" width="32" height="32">
           <div><b data-en="Replace &amp; generate" data-tw="替換與生成" data-zh="替换与生成">Replace & generate</b><p data-en="Batch-replace blocks with properties, or generate solid / hollow boxes" data-tw="批次替換方塊（可帶屬性），或生成實心 / 空心長方體" data-zh="批量替换方块（可带属性），或生成实心 / 空心长方体">Batch-replace blocks with properties, or generate solid / hollow boxes</p></div></li>
       </ul>
     </div>
@@ -222,7 +217,7 @@
 
   <!-- 界面一览：一张放大的截图 -->
   <figure class="shot" data-reveal>
-    <img src="assets/app_cn.png" alt="" loading="lazy" width="1600" height="934">
+    <img src="assets/app_cn.png" alt="Litematica Viewer showing a schematic's material list, stats and pie charts" loading="lazy" width="1600" height="934">
     <figcaption data-en="The desktop app with “Schematic tools” open" data-tw="桌面版主介面，右側展開了「投影工具」" data-zh="桌面版主界面，右侧展开了「投影工具」">The desktop app with “Schematic tools” open</figcaption>
   </figure>
 

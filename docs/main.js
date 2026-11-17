@@ -24,9 +24,9 @@ let lang = FROM_URL[new URLSearchParams(location.search).get("lang")] || "en";
 const t = (zh, en, tw = zh) => (lang === "en" ? en : lang === "tw" ? tw : zh);
 const SITE = "https://lite-viewer.com/";
 const DESCRIPTIONS = {
-  "en": "Free, open-source Minecraft schematic viewer for .litematic / .nbt / .mcstructure: material lists in boxes and stacks, textured 3D view, container contents and format conversion. Windows, macOS, Linux and web.",
-  "zh": "投影查看器 Litematica Viewer：免费开源的 Minecraft 投影查看工具，支持 .litematic / .nbt / .mcstructure。一秒算出材料清单（盒 / 组 / 个），贴图 3D 渲染、容器物品、格式互转。Windows / macOS / Linux 和网页版。",
-  "tw": "投影檢視器 Litematica Viewer：免費開源的 Minecraft 投影檢視工具，支援 .litematic / .nbt / .mcstructure。一秒算出材料清單（盒 / 組 / 個），貼圖 3D 渲染、容器物品、格式互轉。Windows / macOS / Linux 與網頁版。"
+  "en": "Free, open-source Minecraft schematic viewer: material lists in boxes and stacks, textured 3D view and format conversion for .litematic, .nbt and .mcstructure.",
+  "zh": "免费开源的 Minecraft 投影查看器：一秒算出材料清单（盒/组/个），贴图 3D 渲染，.litematic / .nbt / .mcstructure 互转。",
+  "tw": "免費開源的 Minecraft 投影檢視器：一秒算出材料清單（盒/組/個），貼圖 3D 渲染，.litematic / .nbt / .mcstructure 互轉。"
 };
 
 function applyLang() {
@@ -297,7 +297,7 @@ function fillTable(view, animate = true) {
       row.className = animate ? "mrow" : "mrow no-anim";
       row.style.setProperty("--i", Math.min(i, STAGGER_CAP));
       row.innerHTML =
-        `<img src="assets/blocks/${tex}.png" alt=""><span>${t(zh, en, tw)}</span>` +
+        `<img src="assets/blocks/${tex}.png" alt="${t(zh, en, tw)}"><span>${t(zh, en, tw)}</span>` +
         `<span class="num">${n}</span><span class="slots">${slots(n)}</span>`;
       return row;
     })
