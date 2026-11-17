@@ -13,6 +13,7 @@ GITHUB 連結: https://github.com/albertchen857/LitematicaViewer
 網頁：https://lite-viewer.com
 穩定版 EXE 在右側 Release 下載，最新預覽版請自行 clone 執行（發現問題歡迎提 ISSUE）
 求求點點星吧 I want Stars~ target 1000 stars
+QQ: 1044260630
 
 ## 支援的檔案格式
 
