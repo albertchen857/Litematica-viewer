@@ -29,7 +29,8 @@
     js/writers.js   统一模型 → .litematic / .nbt / .mcstructure / 材料表 txt（照 formats.py 的 _save_*）
     js/edit.js      批量替换方块（照 script/lv/edit.py）
     js/blockmap.js  Java ↔ 基岩方块 ID / 状态互转（照 script/lv/blockmap.py）
-    js/app.js       界面：拖文件、页签、子区域、语言、导出、右键替换
+    js/world.js     导出虚空世界存档（照 script/lv/world.py），js/zip.js 打包
+    js/app.js       界面：拖文件、页签、子区域、语言、导出、替换方块、工具
 -->
 
 <header class="bar">
@@ -46,14 +47,23 @@
     <!-- 导出材料表 / 分类导出（同桌面版「数据分析」菜单），转换文件类型：鼠标放上去出下拉框。
          没打开文件时灰掉 -->
     <div class="bar-tools is-off" id="bar-tools">
-      <button class="btn btn-plain" id="export-btn" type="button" data-ui="litem.menuAnalysis.2">导出</button>
-      <button class="btn btn-plain" id="export-cat-btn" type="button" data-ui="litem.menuAnalysis.3">分类导出</button>
+      <div class="menu-wrap" id="export-wrap">
+        <button class="btn btn-plain" id="export-btn" type="button" aria-haspopup="menu"><span data-ui="litem.menuAnalysis.2">导出</span><i class="caret" aria-hidden="true"></i></button>
+        <div class="dropdown" id="export-menu" role="menu">
+          <button type="button" role="menuitem" data-export="txt"><b data-t="export.txt">文本导出</b><span data-t="export.txtNote">按数量排的材料表 .txt</span></button>
+          <button type="button" role="menuitem" data-export="txt-cat"><b data-t="export.txtCat">文本分类导出</b><span data-t="export.catNote">按红石、石质、木质等分组</span></button>
+          <button type="button" role="menuitem" data-export="csv"><b data-t="export.csv">CSV 导出</b><span data-t="export.csvNote">用 Excel 打开 .csv</span></button>
+          <button type="button" role="menuitem" data-export="csv-cat"><b data-t="export.csvCat">CSV 分类导出</b><span data-t="export.catNote">按红石、石质、木质等分组</span></button>
+        </div>
+      </div>
       <div class="menu-wrap" id="convert-wrap">
         <button class="btn btn-plain" id="convert-btn" type="button" aria-haspopup="menu"><span data-t="saveAs">转换文件类型</span><i class="caret" aria-hidden="true"></i></button>
         <div class="dropdown" id="convert-menu" role="menu">
           <button type="button" role="menuitem" data-ext=".litematic"><b>.litematic</b><span data-t="fmt.litematic">Litematica 投影</span></button>
           <button type="button" role="menuitem" data-ext=".nbt"><b>.nbt</b><span data-t="fmt.nbt">结构方块（Java 版）</span></button>
           <button type="button" role="menuitem" data-ext=".mcstructure"><b>.mcstructure</b><span data-t="fmt.mcstructure">结构（基岩版）</span></button>
+          <!-- 同桌面版「导出世界」（script/lv/world.py）：zip 里一个存档文件夹，解压进 .minecraft/saves 就能进 -->
+          <button type="button" role="menuitem" data-ext="world"><b>.zip</b><span data-t="fmt.world">存档（虚空世界）</span></button>
         </div>
       </div>
     </div>
@@ -81,6 +91,10 @@
       <div class="inspect-head"><img id="inspect-icon" alt=""><div><b id="inspect-name"></b><code id="inspect-id"></code></div></div>
       <p class="inspect-pos" id="inspect-pos"></p>
       <table class="inspect-props" id="inspect-props"></table>
+      <!-- 点开是方块选择框：同类方块排前面，后面按字母排（js/app.js 的 openPicker） -->
+      <div class="inspect-replace edit-only" id="inspect-replace" hidden>
+        <button class="btn btn-small" id="inspect-replace-btn" type="button"><span data-t="replaceBtn">替换方块</span><i class="caret" aria-hidden="true"></i></button>
+      </div>
       <div class="inspect-items" id="inspect-items"></div>
       <p class="inspect-extra" id="inspect-extra"></p>
     </div>
@@ -110,7 +124,12 @@
       </div>
       <span class="layers-value" id="layer-value"></span>
     </div>
-    <p class="hint" id="hint" hidden data-t="controls">左键拖动旋转 · 右键拖动平移 · 滚轮缩放</p>
+    <div class="hint" id="hint" hidden>
+      <span data-t="controls">左键拖动旋转 · 右键拖动平移 · 滚轮缩放 · WASD 移动</span>
+      <!-- WASD 按世界方向走（W/S 北南、A/D 西东、空格/Shift 上下），速度每秒几格 -->
+      <label class="move-speed"><span data-t="moveSpeed">移动速度</span>
+        <input type="range" id="move-speed" min="2" max="64" step="1" value="12"><b id="move-speed-val">12</b></label>
+    </div>
 
     <!-- 替换完的提示 + 撤销 -->
     <div class="toast" id="toast" hidden><span id="toast-text"></span><button class="btn btn-small" id="toast-undo" type="button" data-t="replace.undo">撤销</button></div>
@@ -132,14 +151,36 @@
       <div class="table" id="table"></div>
     </div>
 
-    <!-- 工具：分步拆解 / 等高图。都在当前结构上算，可以随时还原 -->
+    <!-- 工具：每项默认折叠，点标题展开。都在当前结构上算，可以随时还原 -->
     <div class="card tools-card" id="tools" hidden>
       <h2 class="card-title" data-t="tools">工具</h2>
 
-      <div class="tool">
-        <div class="tool-head"><b data-t="steps">分步拆解</b>
-          <span><button class="btn btn-small" id="steps-run" data-t="split">拆分</button>
-          <button class="btn btn-small btn-plain" id="steps-exit" hidden data-t="stepsExit">退出分步</button></span></div>
+      <!-- 全面替换方块（同桌面版「替换特定方块」）：每行选输入 / 输出方块，＋/− 增删，一次全换 -->
+      <details class="tool edit-only" id="batch-tool">
+        <summary class="tool-head"><b data-t="batch.title">全面替换方块</b></summary>
+        <p class="tool-note" data-t="batch.note">每行一组：左边的方块换成右边的，可以一次换好几组</p>
+        <div class="batch-rows" id="batch-rows"></div>
+        <div class="tool-actions">
+          <button class="btn btn-small btn-plain" id="batch-add" type="button">＋ <span data-t="batch.add">添加一行</span></button>
+          <button class="btn btn-small" id="batch-run" type="button" data-t="batch.run">全部替换</button>
+        </div>
+        <p class="tool-msg" id="batch-msg"></p>
+      </details>
+
+      <!-- 缩略图（同桌面版「生成缩略图」）：等轴视角，可下载 PNG，也能写进 .litematic 的预览图 -->
+      <details class="tool" id="thumb-tool">
+        <summary class="tool-head"><b data-t="thumb.title">缩略图</b></summary>
+        <p class="tool-note" data-t="thumb.note">等轴视角的结构图</p>
+        <div class="tool-actions"><button class="btn btn-small" id="thumb-run" type="button" data-t="thumb.run">生成</button></div>
+        <img class="thumb-img" id="thumb-img" alt="" hidden>
+        <div class="tool-actions" id="thumb-actions" hidden>
+          <button class="btn btn-small btn-plain" id="thumb-png" type="button" data-t="thumb.png">下载 PNG</button>
+          <button class="btn btn-small edit-only" id="thumb-embed" type="button" data-t="thumb.embed">写入投影并下载 .litematic</button>
+        </div>
+      </details>
+
+      <details class="tool" id="steps-tool">
+        <summary class="tool-head"><b data-t="steps">分步拆解</b></summary>
         <p class="tool-note" data-t="stepsNote">按层、按材质把投影拆成一步步的建造顺序</p>
         <!-- 拆分参数：细分程度一个滑块管两个数（颜色合并阈值、小组并入阈值），其余是开关。
              跨层上限固定 64（每层最多 64 块、最多跨 64 层），不放出来 -->
@@ -150,6 +191,10 @@
           <label class="opt-check"><input type="checkbox" id="opt-shapes"> <span data-t="mergeShapes">楼梯 / 台阶并入同材质的方块</span></label>
           <label class="opt-check"><input type="checkbox" id="opt-band" checked> <span data-t="bandMerge">连续几层一样就合成一步</span></label>
           <label class="opt-check"><input type="checkbox" id="opt-cross" checked> <span data-t="crossLayer">允许跨层（柱子、墙一口气做完）</span></label>
+        </div>
+        <div class="tool-actions">
+          <button class="btn btn-small" id="steps-run" type="button" data-t="split">拆分</button>
+          <button class="btn btn-small btn-plain" id="steps-exit" type="button" hidden data-t="stepsExit">退出分步</button>
         </div>
         <div class="steps" id="steps" hidden>
           <div class="steps-nav">
@@ -162,17 +207,17 @@
           <div class="step-mats" id="step-mats"></div>
           <ul class="step-notes" id="step-notes"></ul>
         </div>
-      </div>
+      </details>
 
-      <div class="tool">
-        <div class="tool-head"><b data-t="contour">等高图</b></div>
+      <details class="tool" id="contour-tool">
+        <summary class="tool-head"><b data-t="contour">等高图</b></summary>
         <p class="tool-note" data-t="contourNote">去掉树木花草，只留地表，按高度每 5 格换一种陶瓦 / 羊毛</p>
         <div class="contour-row">
           <label for="base-y" data-t="baseY">最底层的世界 Y</label>
           <input type="number" id="base-y" value="63" step="1">
           <button class="btn btn-small" id="contour-run" data-t="convert">转换</button>
         </div>
-      </div>
+      </details>
 
       <button class="btn btn-small btn-plain restore" id="restore" hidden data-t="restore">还原原始投影</button>
     </div>
@@ -185,6 +230,14 @@
 </main>
 
 <div class="drop-veil" id="drop-veil" hidden><span data-t="dropNow">松手打开</span></div>
+
+<!-- 方块选择框：替换方块时选目标。上面可选范围（3D 里点的方块：全部同类 / 只这一格），
+     下面先列同类方块（官方方块标签，resource/tags.json），再按字母列全部方块，带图标和译名 -->
+<div class="picker" id="picker" role="dialog" hidden>
+  <div class="picker-scope" id="picker-scope" hidden></div>
+  <input class="picker-search" id="picker-search" type="search" autocomplete="off" spellcheck="false">
+  <div class="picker-list" id="picker-list"></div>
+</div>
 
 <!-- 右键菜单：材料表的行、3D 里的方块共用 -->
 <div class="ctx" id="ctx" role="menu" hidden></div>
@@ -224,7 +277,9 @@
       <li data-t="tut.open"></li>
       <li data-t="tut.view"></li>
       <li data-t="tut.inspect"></li>
+      <li data-t="tut.move"></li>
       <li data-t="tut.replace"></li>
+      <li data-t="tut.tools"></li>
       <li data-t="tut.undo"></li>
       <li data-t="tut.export"></li>
       <li data-t="tut.convert"></li>

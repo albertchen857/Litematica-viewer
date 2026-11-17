@@ -25,3 +25,7 @@ icon.icns
 
 # 本地测试脚本（自检、生成样例、截图），只在本机用，不进版本库
 local_tests/
+
+# wrangler（上传 R2 时生成的缓存）、本地测试用的临时投影
+.wrangler/
+viewer/_tmp/

@@ -5,6 +5,7 @@
     python tools/update_jsassets.py            # 拉默认版本（见 DEFAULT_VERSION）
     python tools/update_jsassets.py latest     # 拉 mcmeta 最新（可能是快照版）
     python tools/update_jsassets.py 26.3       # 拉指定正式版
+    python tools/update_jsassets.py tags       # 只更新方块标签（tags.json），按默认版本
 
 资源来自 misode/mcmeta，这几个分支是分开更新的，所以按版本各自锁一个提交，
 免得 atlas 和 blockstates 对不上。版本 -> 提交的查法：
@@ -81,7 +82,62 @@ def fetch(version: str) -> tuple:
         "en_us": get("assets", "assets/minecraft/lang/en_us.json"),
         "zh_cn": get("assets", "assets/minecraft/lang/zh_cn.json"),
     }
-    return assets, atlas, names
+    tags = get("summary", "data/tag/block/data.min.json")
+    return assets, atlas, names, tags
+
+
+# 方块标签里很多是按「玩法」分的（镐可挖、可被替换、能在上面刷怪……），成员五花八门，
+# 对「换成同类方块」没参考价值。只留两种：
+#   1. 标签名就是成员的共同部分：planks → *_planks、wool → *_wool、logs → *_log（六成以上成员带这个词）
+#   2. 下面这些明确是「同一类东西」的标签（花、树苗、树叶、珊瑚……成员名字不一定带标签名）
+SEMANTIC_TAGS = {
+    "flowers", "small_flowers", "saplings", "leaves", "crops", "dirt", "sand", "corals", "coral_plants",
+    "coral_blocks", "wall_corals", "ice", "snow", "terracotta", "base_stone_overworld", "base_stone_nether",
+    "beds", "banners", "candles", "candle_cakes", "flower_pots", "shulker_boxes", "anvil", "cauldrons",
+    "rails", "nylium", "wart_blocks", "cave_vines", "beacon_base_blocks",
+}
+NOT_SIMILAR = {"air", "fire", "portals", "villager_babies_can_jump_on_bed", "villagers_can_sleep_on_bed",
+               "mob_interactable_doors"}
+MAX_TAG_SIZE = 80
+
+
+def _similar(name: str, ids: list) -> bool:
+    if name in NOT_SIMILAR or "/" in name:
+        return False
+    if name in SEMANTIC_TAGS:
+        return True
+    word = name.split("_")[-1]
+    for w in {word, word[:-1] if word.endswith("s") else word, word[:-2] if word.endswith("es") else word}:
+        if len(w) >= 3 and sum(w in i for i in ids) >= 0.6 * len(ids):
+            return True
+    return False
+
+
+def write_block_tags(raw: dict) -> int:
+    """展开标签里的 #引用，只留「同一类东西」的标签（见 _similar），写 viewer/resource/tags.json：{标签: [方块名…]}。
+
+    网页版「替换方块」的下拉框靠它把同类方块排在最前面。
+    """
+    def members(name: str, seen=()) -> list:
+        out = []
+        for v in raw.get(name, {}).get("values", []):
+            v = v["id"] if isinstance(v, dict) else v
+            if v.startswith("#"):
+                ref = v[1:].replace("minecraft:", "")
+                if ref not in seen:
+                    out += members(ref, seen + (name,))
+            else:
+                out.append(v.replace("minecraft:", ""))
+        return list(dict.fromkeys(out))
+
+    tags = {}
+    for name in sorted(raw):
+        ids = members(name)
+        if 2 <= len(ids) <= MAX_TAG_SIZE and _similar(name, ids):
+            tags[name] = ids
+    with open(os.path.join(RESOURCE, "tags.json"), "w", encoding="utf-8") as f:
+        json.dump(tags, f, ensure_ascii=False, separators=(",", ":"))
+    return len(tags)
 
 
 def update_name_tables(names: dict) -> tuple:
@@ -116,11 +172,20 @@ def update_name_tables(names: dict) -> tuple:
 
 
 def main(argv: list) -> int:
+    if argv and argv[0] == "tags":
+        import requests
+
+        url = _url("summary", _refs(DEFAULT_VERSION)["summary"], "data/tag/block/data.min.json")
+        response = requests.get(url, timeout=120)
+        response.raise_for_status()
+        print(f"tags.json：{write_block_tags(response.json())} 个标签（{DEFAULT_VERSION}）")
+        return 0
+
     version = argv[0] if argv else DEFAULT_VERSION
     print(f"目标版本：{version}")
 
     try:
-        assets, atlas, names = fetch(version)
+        assets, atlas, names, tags = fetch(version)
     except Exception as exc:
         print(f"\n下载失败：{exc}\n磁盘上的资源没有改动。网络不稳的话挂代理再试。")
         return 1
@@ -136,6 +201,7 @@ def main(argv: list) -> int:
         f.write(atlas)
 
     added, updated = update_name_tables(names)
+    tag_count = write_block_tags(tags)
 
     from lv.atlas import write_icon_index  # 图标索引跟着新图集重建
     icons = write_icon_index(RESOURCE)
@@ -151,6 +217,7 @@ def main(argv: list) -> int:
     print(f"  atlas.png  {os.path.getsize(atlas_path):>9,} bytes")
     print(f"  icons.json {icons} 个图标")
     print(f"  名称对照表 新增 {added} 条，更新 {updated} 条")
+    print(f"  tags.json  {tag_count} 个方块标签")
     return 0
 
 

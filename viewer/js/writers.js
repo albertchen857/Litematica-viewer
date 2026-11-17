@@ -28,7 +28,7 @@ export function toTag(value) {
 }
 
 // 在原标签的基础上改几个键（值是标签或普通数据，undefined = 删掉这个键），原标签不动
-function compoundWith(value, changes) {
+export function compoundWith(value, changes) {
   const { NbtCompound } = D();
   const base = value ? toTag(value) : null;
   const out = new NbtCompound();
@@ -37,15 +37,15 @@ function compoundWith(value, changes) {
   return out;
 }
 
-const ints = (values) => new (D().NbtList)(values.map((v) => new (D().NbtInt)(v | 0)), LIST_INT);
-const doubles = (values) => new (D().NbtList)(values.map((v) => new (D().NbtDouble)(+v)));
-const floats = (values) => new (D().NbtList)(values.map((v) => new (D().NbtFloat)(+v)));
-const compounds = (tags) => new (D().NbtList)(tags, LIST_COMPOUND);
+export const ints = (values) => new (D().NbtList)(values.map((v) => new (D().NbtInt)(v | 0)), LIST_INT);
+export const doubles = (values) => new (D().NbtList)(values.map((v) => new (D().NbtDouble)(+v)));
+export const floats = (values) => new (D().NbtList)(values.map((v) => new (D().NbtFloat)(+v)));
+export const compounds = (tags) => new (D().NbtList)(tags, LIST_COMPOUND);
 const xyzTag = ([x, y, z]) => compoundWith(null, { x: new (D().NbtInt)(x), y: new (D().NbtInt)(y), z: new (D().NbtInt)(z) });
 const blockKey = (b) => b.id + JSON.stringify(Object.entries(b.props).sort());
 
 // 实体坐标（相对区域）：读文件时已经放进 entity.pos；没有的话从 NBT 的 Pos 里掏（同 _entity_position）
-function entityPos(entity) {
+export function entityPos(entity) {
   if (Array.isArray(entity.pos) && entity.pos.length >= 3) return entity.pos.slice(0, 3).map(Number);
   const raw = entity.nbt || {};
   const p = raw.Pos || raw.pos;
@@ -172,6 +172,8 @@ export function writeLitematic(structure) {
     ...(structure.metadata?.TimeCreated !== undefined ? {} : { TimeCreated: long(now) }), // 原文件有就保留
     TimeModified: long(now),
     EnclosingSize: xyzTag(box),
+    // 缩略图（工具「缩略图」生成的 140×140 ARGB）：写进 Litematica 自己的预览图字段，游戏里的投影浏览界面能看到
+    ...(structure.preview ? { PreviewImageData: new (D().NbtIntArray)(Array.from(structure.preview)) } : {}),
   });
   const lm = +meta.lm_version || 6;
   const root = compoundWith(null, {

@@ -171,6 +171,12 @@ const AIR_RE = /:(cave_|void_)?air$/;
 // deepslate 的特殊渲染器只注册了 16 种染色潜影盒，未染色的会整个不显示；画的时候借最接近的紫色
 const RENDER_AS = { "minecraft:shulker_box": "minecraft:purple_shulker_box" };
 const CHUNK = 8; // deepslate 的区块边长（StructureRenderer 的 chunkSize）
+const stateOf = (b) => (b.id && !AIR_RE.test(b.id) ? new deepslate.BlockState(RENDER_AS[b.id] || b.id, b.props) : null);
+// WASD 移动：按世界的正方向走（不跟着视角转）。W/S 北南（-Z/+Z），A/D 西东（-X/+X），空格 / Shift 上下
+const MOVE_KEYS = {
+  KeyW: [0, 0, -1], KeyS: [0, 0, 1], KeyA: [-1, 0, 0], KeyD: [1, 0, 0],
+  Space: [0, 1, 0], ShiftLeft: [0, -1, 0], ShiftRight: [0, -1, 0],
+};
 
 // 给 deepslate 用的「活」结构：可以随时加减方块。deepslate 自己的 Structure 只能加不能删，
 // 换步骤 / 换显示层时要整个重建；用这个只要改动那几格、重画受影响的区块。
@@ -240,12 +246,16 @@ export class View {
     this.target = [0, 0, 0];
     this.frame = 0;
     this.building = 0;
+    this.pending = new Map();  // 待重画的区块（替换方块后），见 queueChunks
     this.scene = null;    // {structure, box, entries, byY, byStep, live, filter}
     this.selected = null; // 选中方块的位置 [x,y,z]（相对包围盒），画白框
     this.markers = [];    // 实体：{el, pos, entity, size, category}
     this.hitboxMesh = null;
     this.theme = { MC: "#3399ff", PC: "#0066cc", BG: "#f8f9fa", TT: "#343a40", PR: "#babcc2" };
+    this.moveSpeed = 12;      // WASD 每秒走几格，界面上可以调
+    this.held = new Set();    // 正按着的移动键
     this.bindControls();
+    this.bindKeys();
     new ResizeObserver(() => this.resize()).observe(canvas);
   }
 
@@ -278,7 +288,7 @@ export class View {
     for (const region of structure.regions) {
       const [, ry, rz] = region.size;
       const off = region.origin.map((o, i) => o - box.origin[i]);
-      const states = region.palette.map((b) => (b.id && !AIR_RE.test(b.id) ? new deepslate.BlockState(RENDER_AS[b.id] || b.id, b.props) : null));
+      const states = region.palette.map(stateOf);
       for (let i = 0; i < region.blocks.length; i++) {
         const state = states[region.blocks[i]];
         if (state) {
@@ -308,6 +318,7 @@ export class View {
     const filter = { layers: [0, sy - 1], step: byStep.length ? byStep.length - 1 : null };
     for (const e of entries) live.put(e);
     this.scene = { structure, box, entries, byY, byStep, live, filter };
+    this.pending.clear();
 
     this.renderer = new deepslate.StructureRenderer(this.gl, live, resources, { chunkSize: CHUNK });
     // deepslate 0.27 的远平面写死 500 格，大结构拉远会被切掉；换成同样的透视、远平面放大
@@ -326,6 +337,127 @@ export class View {
       this.pitch = 0.6;
     }
     this.draw();
+  }
+
+  // ---- 替换方块后的增量更新：只改动过的格子换状态，碰到的区块分批重画。
+  // 不重建整个场景：没轮到的区块先保持旧样子，一批批换上新的，期间照常能转、能点。
+  // changes: [{ pos: 相对包围盒的 [x,y,z], block: 新方块 }]；regionMap：旧区域对象 → 新区域对象
+  applyChanges(changes, regionMap = null) {
+    const sc = this.scene;
+    if (!sc || !changes.length) return Promise.resolve();
+    const [, sy, sz] = sc.box.size;
+    sc.byKey ||= new Map(sc.entries.map((e) => [e.key, e]));
+    const chunks = new Map();
+    const mark = (p) => {
+      const c = [Math.floor(p[0] / CHUNK), Math.floor(p[1] / CHUNK), Math.floor(p[2] / CHUNK)];
+      if (c.every((v) => v >= 0)) chunks.set(c.join(","), c);
+    };
+    for (const { pos, block } of changes) {
+      const e = sc.byKey.get((pos[0] * sy + pos[1]) * sz + pos[2]);
+      if (!e) continue;
+      e.block = block;
+      e.placed.state = stateOf(block) || e.placed.state;
+      if (!sc.live.getBlock(e.pos)) continue; // 现在没显示（被层 / 步骤藏起来）：轮到显示时自然是新的
+      mark(e.pos);
+      for (let a = 0; a < 3; a++) {
+        const r = e.pos[a] % CHUNK;
+        if (r === 0 || r === CHUNK - 1) { const q = e.pos.slice(); q[a] += r === 0 ? -1 : 1; mark(q); }
+      }
+    }
+    if (regionMap) for (const e of sc.entries) if (regionMap.has(e.region)) e.region = regionMap.get(e.region);
+    sc.live.list = null;
+    return this.queueChunks([...chunks.values()]);
+  }
+
+  // 待重画的区块排队，后台一批批重画：deepslate 给每个方块做网格大约 0.2 ms，一批凑够约 250 个方块
+  // 就让出主线程，所以转视角、点击都不受影响。还没轮到的区块先保持旧样子。
+  // 新的改动来了不取消旧的，直接并进队列（连着替换好几次也不会漏画）
+  queueChunks(list) {
+    for (const c of list) this.pending.set(c.join(","), c);
+    if (!this.drainPromise) {
+      this.drainPromise = new Promise((resolve) => (this.drainDone = resolve));
+      setTimeout(() => this.drainChunks(), 0); // 先让界面（表格、提示）更新出来，再开始画
+    }
+    return this.drainPromise;
+  }
+
+  drainChunks() {
+    const sc = this.scene;
+    if (!sc || !this.pending.size) {
+      this.pending.clear();
+      this.drainPromise = null;
+      this.drainDone?.();
+      return;
+    }
+    if (!sc.chunkCount) {
+      sc.chunkCount = new Map();
+      for (const e of sc.entries) {
+        const k = e.pos.map((v) => Math.floor(v / CHUNK)).join(",");
+        sc.chunkCount.set(k, (sc.chunkCount.get(k) || 0) + 1);
+      }
+    }
+    const batch = [];
+    let blocks = 0;
+    for (const [k, c] of this.pending) {
+      batch.push(c);
+      this.pending.delete(k);
+      blocks += sc.chunkCount.get(k) || 1;
+      if (blocks >= 250) break;
+    }
+    this.renderer.updateStructureBuffers(batch);
+    this.draw();
+    setTimeout(() => this.drainChunks(), 0);
+  }
+
+  // ---- 缩略图：标准等轴（绕竖轴 45°、俯角 30°，同桌面版 snapshot.py），正交投影、带贴图。
+  // 借主画面已经建好网格的渲染器：同一帧里临时换成等轴视角画一张、马上把像素取走，再换回来，
+  // 用户看不到闪动（新建一个渲染器第一次做网格要好几秒，这样只要几十毫秒）。
+  // 不管现在显示到哪层 / 哪步，画的都是整个结构。返回 size×size 的 canvas；background 为空就是透明底
+  snapshot(size = 512, background = null) {
+    const sc = this.scene;
+    if (!sc || !this.renderer) return null;
+    const full = { layers: [0, sc.box.size[1] - 1], step: sc.byStep.length ? sc.byStep.length - 1 : null };
+    const before = sc.filter;
+    const filtered = before.layers[0] !== full.layers[0] || before.layers[1] !== full.layers[1] || before.step !== full.step;
+    if (filtered) this.setFilter(full);
+
+    const [sx, sy, sz] = sc.box.size;
+    const view = mat4.create();
+    mat4.rotateX(view, view, Math.PI / 6);
+    mat4.rotateY(view, view, Math.PI / 4);
+    mat4.translate(view, view, [-sx / 2, -sy / 2, -sz / 2]);
+    // 包围盒 8 个角投到视图里，算正交投影要框多大
+    let lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+    for (const x of [0, sx]) for (const y of [0, sy]) for (const z of [0, sz]) {
+      const p = vec3.transformMat4(vec3.create(), [x, y, z], view);
+      lo = lo.map((v, i) => Math.min(v, p[i]));
+      hi = hi.map((v, i) => Math.max(v, p[i]));
+    }
+    const half = Math.max(hi[0] - lo[0], hi[1] - lo[1]) / 2 * 1.06; // 留一点边
+    const cx = (lo[0] + hi[0]) / 2, cy = (lo[1] + hi[1]) / 2;
+
+    const gl = this.gl, r = this.renderer, oldProj = r.projMatrix;
+    const side = Math.min(this.canvas.width, this.canvas.height);
+    gl.viewport(0, 0, side, side);
+    r.projMatrix = mat4.ortho(mat4.create(), cx - half, cx + half, cy - half, cy + half, -hi[2] - 10, -lo[2] + 10);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    r.drawStructure(view);
+    const out = document.createElement("canvas");
+    out.width = out.height = size;
+    const g = out.getContext("2d");
+    if (background) { g.fillStyle = background; g.fillRect(0, 0, size, size); }
+    g.imageSmoothingQuality = "high";
+    // WebGL 的视口原点在左下，画布坐标原点在左上
+    g.drawImage(this.canvas, 0, this.canvas.height - side, side, side, 0, 0, size, size);
+
+    gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+    r.projMatrix = oldProj;
+    if (filtered) this.setFilter(before);
+    this.frame && cancelAnimationFrame(this.frame);
+    this.frame = 0;
+    this.draw();
+    return out;
   }
 
   visible(entry, f) {
@@ -517,6 +649,31 @@ export class View {
   select(pos) {
     this.selected = pos;
     this.draw();
+  }
+
+  // WASD 在世界里平移观察点（相机跟着走）。输入框里打字、弹窗开着的时候不算
+  bindKeys() {
+    const typing = (e) => e.target.closest?.("input, textarea, select, [contenteditable]") || document.querySelector("dialog[open]");
+    window.addEventListener("keydown", (e) => {
+      if (!MOVE_KEYS[e.code] || e.ctrlKey || e.metaKey || e.altKey || typing(e) || !this.scene) return;
+      e.preventDefault(); // 空格别滚页面
+      if (!this.held.size) { this.lastMove = performance.now(); requestAnimationFrame(() => this.moveTick()); }
+      this.held.add(e.code);
+    });
+    window.addEventListener("keyup", (e) => this.held.delete(e.code));
+    window.addEventListener("blur", () => this.held.clear());
+  }
+
+  moveTick() {
+    if (!this.held.size) return;
+    const now = performance.now(), dt = Math.min(0.25, (now - this.lastMove) / 1000); // 掉帧时也按真实时间走，最多补 0.25 秒
+    this.lastMove = now;
+    const dir = [0, 0, 0];
+    for (const code of this.held) MOVE_KEYS[code].forEach((v, i) => (dir[i] += v));
+    const len = Math.hypot(...dir) || 1;
+    for (let i = 0; i < 3; i++) this.target[i] += (dir[i] / len) * this.moveSpeed * dt;
+    this.draw();
+    requestAnimationFrame(() => this.moveTick());
   }
 
   bindControls() {
