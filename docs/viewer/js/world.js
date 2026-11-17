@@ -8,7 +8,7 @@
 // 新版本才有的方块名升级器不认识也不会动，所以新投影照样能完整进新游戏。
 //
 //   <存档>/level.dat            gzip NBT，世界设置（虚空超平坦、游戏规则、玩家位置）
-//   <存档>/icon.png             存档列表里的小图（缩略图）
+//   <存档>/icon.ico             存档列表里的小图（缩略图）
 //   <存档>/region/r.X.Z.mca     方块和方块实体，32×32 个区块一个文件
 //   <存档>/entities/r.X.Z.mca   1.17 起实体单独存一份
 
@@ -308,6 +308,6 @@ export function exportWorld(structure, name, icon = null) {
     const [rx, rz] = key.split(",");
     files.push({ name: `${name}/entities/r.${rx}.${rz}.mca`, data: regionFile(map) });
   }
-  if (icon) files.push({ name: `${name}/icon.png`, data: icon });
+  if (icon) files.push({ name: `${name}/icon.ico`, data: icon });
   return { bytes: zip(files), chunks, entities, clipped };
 }
