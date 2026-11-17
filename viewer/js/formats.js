@@ -32,7 +32,13 @@ function plain(tag) {
     }
     case LIST: { const out = tag.getItems().map(plain); RAW_TAG.set(out, tag); return out; }
     case LONG: { const [hi, lo] = tag.getAsPair(); return hi * 4294967296 + (lo >>> 0); }
-    case LONG_ARRAY: return tag.getItems().map((l) => l.getAsPair());
+    // long 数组（投影的 BlockStates 有几百万个）：不拆成几百万个 [高, 低] 小数组，
+    // 直接排进一个 Int32Array（高、低、高、低……），大投影能省几百 MB 内存
+    case LONG_ARRAY: {
+      const items = tag.getItems(), out = new Int32Array(items.length * 2);
+      for (let i = 0; i < items.length; i++) { const [hi, lo] = items[i].getAsPair(); out[i * 2] = hi; out[i * 2 + 1] = lo; }
+      return out;
+    }
     case BYTE_ARRAY: case INT_ARRAY: return tag.getItems().map((v) => v.getAsNumber());
     case STRING: return tag.getAsString();
     default: return tag.getAsNumber();
@@ -46,10 +52,11 @@ const xyz = (v) => [v.x, v.y, v.z];
 // BlockStates 是一串紧密排列的 nbits 位整数，可以跨 long 存放（Litematica 的老规则）。
 // 把 long 数组看成小端的 32 位字流，按位偏移取值，跨字的情况一起处理。
 function unpackLitematic(longs, bits, count) {
-  const words = new Uint32Array(longs.length * 2);
-  for (let i = 0; i < longs.length; i++) {
-    words[i * 2] = longs[i][1] >>> 0;     // 低 32 位在前
-    words[i * 2 + 1] = longs[i][0] >>> 0;
+  // longs：plain() 给的 Int32Array，每个 long 占两格（高 32 位、低 32 位）
+  const words = new Uint32Array(longs.length);
+  for (let i = 0; i < longs.length; i += 2) {
+    words[i] = longs[i + 1] >>> 0;     // 低 32 位在前
+    words[i + 1] = longs[i] >>> 0;
   }
   const out = new Uint32Array(count);
   const mask = bits === 32 ? 0xffffffff : (1 << bits) - 1;

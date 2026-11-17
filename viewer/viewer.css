@@ -242,11 +242,11 @@ code { font-family: var(--mono); }
 
 .file-name { margin: 0; font-size: 20px; line-height: 1.25; word-break: break-all; }
 .file-summary { margin: 8px 0 0; color: var(--pc); font: 700 13px/1.5 var(--sans); font-variant-numeric: tabular-nums; }
-.file-summary:empty { display: none; }
+.file-summary:empty::before { content: " a0"; } /* 没文件时也占一行，打开文件不把下面往下挤 */
 
 /* 7 项指标：和桌面版左栏一样，深蓝条、左标签右数值 */
 .stats { display: grid; gap: 4px; padding: 12px; }
-.stats:empty { display: none; }
+/* 没文件时是 7 行「-」的占位（js applyLang），打开文件只换文字，下面的卡片不会被挤动（CLS） */
 .stat { display: flex; justify-content: space-between; gap: 12px; padding: 6px 12px; border-radius: 8px; background: var(--pc); color: var(--bg); font-size: 14px; }
 .stat b { flex: none; }
 .stat span { text-align: right; overflow-wrap: anywhere; }
@@ -266,6 +266,8 @@ code { font-family: var(--mono); }
 
 .table { border-radius: 8px; overflow: hidden; background: var(--pc); }
 .table:empty { display: none; }
+/* 材料表卡片先占住大半屏：打开文件后表格一下子长出几百行，下面的卡片早就在屏幕外了，不算布局偏移 */
+.table-card { min-height: 60vh; }
 .row {
   display: grid; grid-template-columns: 24px 1fr auto; gap: 8px; align-items: center;
   min-height: 36px; padding: 4px 10px; color: var(--bg); font-size: 14px;

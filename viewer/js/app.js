@@ -100,6 +100,7 @@ function applyLang() {
   syncUrl();
   if ($("layer-mode")) $("layer-mode").textContent = t("layerMode." + layerMode);
   if (state.structure) renderInfo();
+  else renderPlaceholder();
   if (state.steps) renderStep();
 }
 
@@ -252,6 +253,12 @@ const CATEGORY_ICON = {
   entity: "minecart", wool: "white_wool", terracotta: "terracotta", concrete: "white_concrete", quartz: "quartz_block",
   ore: "diamond_ore", end: "end_stone", rock: "andesite", prismarine: "prismarine", clay: "clay",
 };
+
+// 还没打开文件：统计卡片先放 7 行「-」占位，和打开后一样高（打开文件时下面的卡片就不会被挤动，CLS）
+function renderPlaceholder() {
+  $("stats").innerHTML = ["l1", "l2", "l3", "l4", "l5", "l6", "l7"]
+    .map((k) => `<div class="stat"><b>${esc(ui("ui.stat." + k))}</b><span>-</span></div>`).join("");
+}
 
 function renderInfo() {
   const s = state.structure, r = current(), all = state.results.all;
