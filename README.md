@@ -19,6 +19,7 @@ GITHUB链接: https://github.com/albertchen857/LitematicaViewer
 网页版：https://lite-viewer.com
 稳定版 EXE 在右侧 Release 下载，最新预览版自行克隆运行（发现问题欢迎提 ISSUE）
 求求点点星吧 I want Stars~ target 1000 stars
+QQ讨论群：1044260630
 
 ## 支持的文件格式
 
