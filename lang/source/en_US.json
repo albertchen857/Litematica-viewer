@@ -356,8 +356,16 @@
   "web.tut.title": "How to use",
   "web.tut.tools": "Tools (right side, click a title to open): Replace blocks (several pairs at once, ⚙ for states), Thumbnail, Build steps and Contour map. For multi-region schematics, pick a region above the material list: 3D shows only that region and replacements only touch it.",
   "web.tut.undo": "After a replace you get an “Undo” button; “Restore original” goes back to the file as opened.",
+  "web.tut.url": "Open from a link: paste a link to a schematic file on the start screen (GitHub, direct cloud links…), or drag a link in from another tab. The site has to allow web pages to read it; if not, download it first and drag it in.",
   "web.tut.view": "Look around: left-drag to rotate, right-drag to pan, scroll to zoom. The slider at the bottom left shows layers.",
   "web.tutorial": "Guide",
   "web.unsupported": "Only .litematic / .nbt / .mcstructure",
+  "web.url.bad": "That doesn't look like a link: it should start with http:// or https://.",
+  "web.url.cors": "Couldn't read that link: the site doesn't let web pages fetch its files (CORS), or the network is down.\nDownload the file first, then drag it in.",
+  "web.url.http": "Download failed: the server answered {}",
+  "web.url.loading": "Downloading",
+  "web.url.open": "Open link",
+  "web.url.placeholder": "…or paste a link to a schematic file",
+  "web.url.unknown": "Not a schematic: it isn't .litematic / .nbt / .mcstructure (maybe the link points to a web page, not the file itself)",
   "web.world.clipped": "The structure is taller than the world; the part above the height limit was left out."
 }

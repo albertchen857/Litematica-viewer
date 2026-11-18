@@ -356,8 +356,16 @@
   "web.tut.title": "怎麼用",
   "web.tut.tools": "工具（右邊，點標題展開）：全面替換方塊（一次換好幾組，⚙ 裡可以按屬性選、改屬性）、縮圖、分步拆解、等高圖。多子區域的投影可以在材料表上面選區域，3D 只顯示那個區域，替換也只換那個區域。",
   "web.tut.undo": "替換完會出現「復原」；「還原原始投影」回到剛開啟時的樣子。",
+  "web.tut.url": "從網址開啟：在開始頁貼上投影檔案的連結（GitHub、網盤直連等），或者把別的分頁裡的連結拖進來。對方網站要允許網頁讀取，不行就先下載再拖進來。",
   "web.tut.view": "看：左鍵拖動旋轉，右鍵拖動平移，滾輪縮放；左下角的滑桿按層看。",
   "web.tutorial": "教學",
   "web.unsupported": "只支援 .litematic / .nbt / .mcstructure",
+  "web.url.bad": "網址不對：要以 http:// 或 https:// 開頭。",
+  "web.url.cors": "讀不到這個網址：對方網站不允許網頁直接讀取檔案（跨域限制），或者網路不通。\n可以先把檔案下載到電腦，再拖進來。",
+  "web.url.http": "下載失敗：伺服器回應 {}",
+  "web.url.loading": "正在下載",
+  "web.url.open": "開啟網址",
+  "web.url.placeholder": "或者貼上投影檔案的網址",
+  "web.url.unknown": "認不出這個檔案：不是 .litematic / .nbt / .mcstructure（可能是網頁而不是檔案本身的連結）",
   "web.world.clipped": "結構比世界還高，超出高度上限的部分沒有匯出。"
 }
