@@ -346,6 +346,9 @@ export async function loadResources() {
     getBlockModel: (id) => models[String(id)],
     getTextureUV: textureUV,
     getTextureAtlas: () => atlas.getTextureAtlas(),
+    // 一个像素在图集里多宽。着色器靠它把取样点往贴图里面缩半个像素；
+    // 之前没给（= 0），方块边上会取到图集里隔壁贴图的像素，每个方块都描了一圈白边 / 杂色边
+    getPixelSize: () => atlas.getPixelSize(),
     getBlockFlags: (id) => flags[String(id)] || { opaque: false, semi_transparent: false, self_culling: true },
     getBlockProperties: () => null,
     getDefaultBlockProperties: () => null,
@@ -409,6 +412,7 @@ export function blockIcon(id, px = 20) {
 const AIR_RE = /:(cave_|void_)?air$/;
 // deepslate 的特殊渲染器只注册了 16 种染色潜影盒，未染色的会整个不显示；画的时候借最接近的紫色
 const RENDER_AS = { "minecraft:shulker_box": "minecraft:purple_shulker_box" };
+const HIGHLIGHT_MAX = 30000; // 高亮框最多画多少个（每个 12 条线）
 const CHUNK = 16; // deepslate 的区块边长（StructureRenderer 的 chunkSize）。每个区块两份网格、每份 7 个显卡缓冲区，
 // 边长 8 时几十万方块会切出几万个区块、几十万个缓冲区，显卡进程直接崩；16 是 deepslate 的默认值
 const stateOf = (b) => (b.id && !AIR_RE.test(b.id) ? new deepslate.BlockState(RENDER_AS[b.id] || b.id, b.props) : null);
@@ -556,7 +560,8 @@ export class View {
   // 结构 → 场景。先把所有非空气方块摊成条目（分批，onProgress 0~1），按 Y 和按步骤分好桶，
   // 之后换显示层、换步骤都只碰变化的那几桶方块。
   // 区域如果带 stepOf（分步拆解的结果），每格的步骤号就从那里来。
-  async show(structure, box, { resetCamera = true, onProgress = () => {}, region = null } = {}) {
+  // ignore：不画的方块种类（Set(方块 id)），信息面板「隐藏这种」
+  async show(structure, box, { resetCamera = true, onProgress = () => {}, region = null, ignore = null } = {}) {
     const token = ++this.building; // 新的构建开始，旧的那次就作废
     const [sx, sy, sz] = box.size;
     const entries = [], byY = Array.from({ length: sy }, () => []), byStep = [], byKey = new Map();
@@ -593,7 +598,7 @@ export class View {
       }
     }
     const live = new LiveStructure([sx, sy, sz]);
-    const filter = { layers: [0, sy - 1], step: byStep.length ? byStep.length - 1 : null, region };
+    const filter = { layers: [0, sy - 1], step: byStep.length ? byStep.length - 1 : null, region, ignore: new Set(ignore || []) };
     const sc = { structure, box, entries, byY, byStep, byKey, live, filter };
     // 六面都被不透明整方块包住的格子看不见，不进渲染（地形这类实心结构能省掉一大半）；切层露出来时再补上。
     // 几十万格一口气做完会卡一下，分批做、中间让出主线程
@@ -618,6 +623,10 @@ export class View {
     live.only = null;
     patchChunkBuilder(this.renderer.chunkBuilder);
     this.renderer.drawStructure = drawStructureCulled;
+    // 图集不用多级纹理（mipmap）：缩小时多级纹理会把图集里相邻的贴图混在一起，
+    // 远处方块边上出现杂色线（玻璃上的紫点就是隔壁贴图混进来的）。和游戏里关掉 mipmap 一样，只取最近的像素
+    this.gl.bindTexture(this.gl.TEXTURE_2D, this.renderer.atlasTexture);
+    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.NEAREST);
     // deepslate 0.27 的远平面写死 500 格，大结构拉远会被切掉；换成同样的透视、远平面放大
     this.renderer.getPerspective = () => {
       const m = mat4.create();
@@ -629,6 +638,7 @@ export class View {
     this.buildMarkers(structure, box);
     this.buildEnvironment();
     this.buildRegionBoxes();
+    this.buildHighlight();
     if (resetCamera) {
       this.target = [sx / 2, sy / 2, sz / 2];
       this.distance = Math.max(sx, sy, sz) * 1.6 + 4;
@@ -645,15 +655,16 @@ export class View {
     onProgress(1);
   }
 
-  // 只有不透明的整方块挡得住视线
-  opaque(entry) {
-    return !!entry && !!resources.getBlockFlags(String(entry.placed.state.getName())).opaque;
+  // 只有不透明的整方块挡得住视线（被「隐藏这种」藏起来的不算）
+  opaque(entry, ignore = null) {
+    if (!entry || ignore?.has(entry.block.id)) return false;
+    return !!resources.getBlockFlags(String(entry.placed.state.getName())).opaque;
   }
-  isHidden(entry, sc) {
+  isHidden(entry, sc, ignore = sc.filter?.ignore) {
     const [sx, sy, sz] = sc.box.size, [x, y, z] = entry.pos;
     if (x === 0 || y === 0 || z === 0 || x === sx - 1 || y === sy - 1 || z === sz - 1) return false;
     const k = entry.key, step = sy * sz;
-    for (const n of [k + step, k - step, k + sz, k - sz, k + 1, k - 1]) if (!this.opaque(sc.byKey.get(n))) return false;
+    for (const n of [k + step, k - step, k + sz, k - sz, k + 1, k - 1]) if (!this.opaque(sc.byKey.get(n), ignore)) return false;
     return true;
   }
 
@@ -695,6 +706,7 @@ export class View {
     }
     if (regionMap) for (const e of sc.entries) if (regionMap.has(e.region)) e.region = regionMap.get(e.region);
     sc.live.list = null;
+    this.buildHighlight(); // 换出来 / 换走的方块，高亮框跟着变
     return this.queueChunks([...chunks.values()]);
   }
 
@@ -803,22 +815,45 @@ export class View {
     return out;
   }
 
-  visible(entry, f) {
+  // 在显示范围里（子区域 / 层 / 步骤）。高亮框按这个画：被包住、被隐藏的照样框出来
+  inView(entry, f) {
     if (f.region != null && entry.ri !== f.region) return false;
-    // 被包住的格子：在显示范围的中间就不画（在最上 / 最下一层时上下有一面露出来了，要画）
-    if (entry.hidden && f.region == null && f.step === null && entry.pos[1] > f.layers[0] && entry.pos[1] < f.layers[1]) return false;
     if (entry.pos[1] < f.layers[0] || entry.pos[1] > f.layers[1]) return false;
     return f.step === null || entry.step <= f.step;
   }
 
+  visible(entry, f) {
+    if (f.ignore?.size && f.ignore.has(entry.block.id)) return false;
+    // 被包住的格子：在显示范围的中间就不画（在最上 / 最下一层时上下有一面露出来了，要画）
+    if (entry.hidden && f.region == null && f.step === null && entry.pos[1] > f.layers[0] && entry.pos[1] < f.layers[1]) return false;
+    return this.inView(entry, f);
+  }
+
   // 换显示层 / 换步骤：只看两次范围之间变了的那几桶，增删 live 里的方块，再只重画碰到的区块
-  setFilter({ layers, step, region } = {}) {
+  setFilter({ layers, step, region, ignore } = {}) {
     const sc = this.scene;
     if (!sc) return;
     const old = sc.filter;
-    const next = { layers: layers || old.layers, step: step === undefined ? old.step : step, region: region === undefined ? old.region : region };
+    const next = {
+      layers: layers || old.layers, step: step === undefined ? old.step : step, region: region === undefined ? old.region : region,
+      ignore: ignore === undefined ? old.ignore : new Set(ignore),
+    };
     const touched = new Set();
     const consider = (list) => { if (list) for (const e of list) touched.add(e); };
+    // 隐藏 / 显示了某种方块：这种方块的格子都要动；它们的邻居原来可能被包住（没画），现在露出来了，要重新判断
+    const kinds = new Set([...old.ignore].filter((id) => !next.ignore.has(id)).concat([...next.ignore].filter((id) => !old.ignore.has(id))));
+    const rehide = new Set();
+    if (kinds.size) {
+      const [, sy, sz] = sc.box.size;
+      for (const e of sc.entries) {
+        if (!kinds.has(e.block.id)) continue;
+        touched.add(e);
+        for (const n of [e.key + sy * sz, e.key - sy * sz, e.key + sz, e.key - sz, e.key + 1, e.key - 1]) {
+          const ne = sc.byKey.get(n);
+          if (ne) { touched.add(ne); rehide.add(ne); }
+        }
+      }
+    }
     if (next.region !== old.region) consider(sc.entries); // 换子区域：每格都可能变
     if (next.layers[0] !== old.layers[0] || next.layers[1] !== old.layers[1]) {
       for (const y of new Set([...old.layers, ...next.layers])) consider(sc.byY[y]);
@@ -835,9 +870,12 @@ export class View {
     }
     const chunks = new Map();
     const mark = (p) => { const c = [Math.floor(p[0] / CHUNK), Math.floor(p[1] / CHUNK), Math.floor(p[2] / CHUNK)]; chunks.set(c.join(","), c); };
+    const was = new Map();
+    for (const e of touched) was.set(e, this.visible(e, old));
+    for (const e of rehide) e.hidden = this.isHidden(e, sc, next.ignore);
     for (const e of touched) {
-      const was = this.visible(e, old), now = this.visible(e, next);
-      if (was === now) continue;
+      const now = this.visible(e, next);
+      if (was.get(e) === now) continue;
       if (now) sc.live.put(e); else sc.live.drop(e);
       mark(e.pos);
       // 贴着区块边界的格子，邻居区块里挨着它的那个面也要重算（被挡 / 不被挡变了）
@@ -848,7 +886,11 @@ export class View {
     }
     sc.filter = next;
     if (next.region !== old.region) this.buildRegionBoxes();
-    if (chunks.size) this.updateChunks([...chunks.values()].filter((c) => c.every((v) => v >= 0)));
+    this.buildHighlight();
+    const dirty = [...chunks.values()].filter((c) => c.every((v) => v >= 0));
+    // 动得少（拖层滑块）就当场重画；动得多（隐藏一整种方块、换子区域）交给后台分批画，不卡页面
+    if (dirty.length > 48) this.queueChunks(dirty);
+    else if (dirty.length) this.updateChunks(dirty);
     if (this.selected && !sc.live.getBlock(this.selected)) this.selected = null;
     this.placeMarkersVisibility();
     this.draw();
@@ -896,6 +938,14 @@ export class View {
       this.renderer.prepareDraw(view);
       this.renderer.drawMesh(this.regionMesh, { pos: true, color: true });
     }
+    if (this.highlightMesh) {
+      const gl = this.gl;
+      this.renderer.setShader(this.renderer.gridShaderProgram);
+      this.renderer.prepareDraw(view);
+      gl.disable(gl.DEPTH_TEST); // 隔着墙也画出来
+      this.renderer.drawMesh(this.highlightMesh, { pos: true, color: true });
+      gl.enable(gl.DEPTH_TEST);
+    }
     if (this.selected) this.renderer.drawOutline(view, this.selected);
     this.placeMarkers(view);
   }
@@ -929,6 +979,33 @@ export class View {
     mesh.transform(m);
     mesh.computeNormals(); // deepslate 的区块构建会补法线，自己做的网格要手动算
     this.envMesh = mesh.rebuild(this.gl, { pos: true, color: true, texture: true, normal: true });
+  }
+
+  // ---- 高亮某几种方块：每格画一个框，关掉深度测试画（隔着墙也看得到），方便找它们在哪。
+  // 框太多画不动，最多 HIGHLIGHT_MAX 个；返回 { shown, total } 给界面提示
+  setHighlight(ids) {
+    this.highlight = new Set(ids);
+    const result = this.buildHighlight();
+    this.draw();
+    return result;
+  }
+
+  buildHighlight() {
+    this.highlightMesh = null;
+    const sc = this.scene, ids = this.highlight;
+    if (!sc || !this.renderer || !ids?.size) return { shown: 0, total: 0 };
+    const Mesh = this.renderer.outlineMesh.constructor;
+    const mesh = new Mesh();
+    const color = [1, 0.84, 0]; // 亮黄，和各套主题色都分得开
+    let total = 0;
+    for (const e of sc.entries) {
+      if (!ids.has(e.block.id) || !this.inView(e, sc.filter)) continue;
+      if (++total > HIGHLIGHT_MAX) continue;
+      const [x, y, z] = e.pos;
+      mesh.addLineCube(x - 0.02, y - 0.02, z - 0.02, x + 1.02, y + 1.02, z + 1.02, color);
+    }
+    this.highlightMesh = total ? mesh.rebuild(this.gl, { pos: true, color: true }) : null;
+    return { shown: Math.min(total, HIGHLIGHT_MAX), total };
   }
 
   // ---- 多子区域：每个区域画一圈边框，选中的那个用主题深色，其他用浅色

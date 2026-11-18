@@ -5,6 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>投影查看器 · 网页版</title>
   <link rel="icon" href="../assets/icon.ico">
+  <!-- 页面里写死的是中文，翻译要等 data/gamedata.json 到了才换。不是简体中文的话先把这些字藏起来（位置照占，
+       不会跳），翻译好了 app.js 去掉 i18n-wait 再显示，免得每次进来先闪一下中文。4 秒兜底：脚本出错也不至于一直空白 -->
+  <script>
+    (function () {
+      var lang = new URLSearchParams(location.search).get("lang") || "";
+      if (location.hash === "#desktop" || !/^(cn|zh|zh_CN)$/.test(lang)) {
+        var root = document.documentElement;
+        root.classList.add("i18n-wait");
+        setTimeout(function () { root.classList.remove("i18n-wait"); }, 4000);
+      }
+    })();
+  </script>
+  <!-- 翻译表提前开始下，不用等后面的大脚本 -->
+  <link rel="preload" href="data/gamedata.json" as="fetch" crossorigin>
   <link rel="stylesheet" href="viewer.css">
   <!-- 渲染引擎：deepslate 0.27（带透明网格和选中框）+ gl-matrix（相机矩阵）。
        桌面版「手动3D渲染」打开的也是这个页面 -->
@@ -97,6 +111,14 @@
       <button class="inspect-nbt" id="inspect-nbt" type="button" data-t="nbt.title">原始 NBT</button>
       <div class="inspect-head"><img id="inspect-icon" alt=""><div><b id="inspect-name"></b><code id="inspect-id"></code></div></div>
       <p class="inspect-pos" id="inspect-pos"></p>
+      <!-- 这种方块：材料表里写的数量；3D 里隐藏这种 / 高亮这种（框隔着墙也看得到） -->
+      <div class="inspect-kind" id="inspect-kind" hidden>
+        <div class="inspect-count" id="inspect-count"></div>
+        <div class="inspect-kind-btns">
+          <button class="btn btn-small btn-plain" id="kind-ignore" type="button" data-t="kind.ignore">隐藏这种</button>
+          <button class="btn btn-small btn-plain" id="kind-highlight" type="button" data-t="kind.highlight">高亮这种</button>
+        </div>
+      </div>
       <table class="inspect-props" id="inspect-props"></table>
       <!-- 替换方块 / 改属性：先选「换成」和属性，最后点「应用」。
            属性一行一个：只选（原方块是这个值才换）、改成（新值，不变 = 沿用） -->
@@ -162,6 +184,9 @@
       <label class="move-speed"><span data-t="moveSpeed">移动速度</span>
         <input type="range" id="move-speed" min="2" max="64" step="1" value="12"><b id="move-speed-val">12</b></label>
     </div>
+
+    <!-- 隐藏 / 高亮了哪些种类方块，一键恢复 -->
+    <div class="kind-bar" id="kind-bar" hidden><span id="kind-bar-text"></span><button class="btn btn-small" id="kind-reset" type="button" data-t="kind.reset">全部恢复</button></div>
 
     <!-- 替换完的提示 + 撤销 -->
     <div class="toast" id="toast" hidden><span id="toast-text"></span><button class="btn btn-small" id="toast-undo" type="button" data-t="replace.undo">撤销</button></div>
@@ -308,6 +333,7 @@
       <li data-t="tut.open"></li>
       <li data-t="tut.view"></li>
       <li data-t="tut.inspect"></li>
+      <li data-t="tut.kind"></li>
       <li data-t="tut.move"></li>
       <li data-t="tut.replace"></li>
       <li data-t="tut.tools"></li>
