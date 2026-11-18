@@ -48,6 +48,16 @@ TINTS = {"water": 0x3F76E4, "bubble_column": 0x3F76E4, "water_cauldron": 0x3F76E
 for _leaf in ("oak", "jungle", "acacia", "dark_oak", "mangrove"):
     TINTS[f"{_leaf}_leaves"] = FOLIAGE
 
+# 箱子的方块模型只有一张粒子贴图（橡木木板），照着挑会变成木板图标。
+# 改用实体贴图 entity/chest/<名>（64×64）拼一个正面：盖子正面 + 箱身正面 + 锁扣。
+# 贴图里这几块都是倒着存的（游戏里按 180° 贴），拼的时候转正。
+CHEST_ICONS = {"chest": "normal", "trapped_chest": "trapped", "ender_chest": "ender"}
+for _stage, _tex in (("", "copper"), ("exposed_", "copper_exposed"),
+                     ("weathered_", "copper_weathered"), ("oxidized_", "copper_oxidized")):
+    CHEST_ICONS[f"{_stage}copper_chest"] = CHEST_ICONS[f"waxed_{_stage}copper_chest"] = _tex
+# (贴图里的 x, y, 宽, 高, 图标里的 x, y)，单位是 64×64 贴图的像素
+CHEST_PARTS = ((42, 14, 14, 5, 1, 1), (42, 33, 14, 10, 1, 6), (1, 1, 2, 4, 7, 4))
+
 
 # --------------------------------------------------------------------------- 生成 icons.json
 
@@ -137,9 +147,17 @@ def build_icon_index(assets: dict) -> dict:
         if box:
             u, v, w, h = box
             index[name] = [u, v, w, min(w, h)]
+    # 箱子：{"parts": [[u, v, 宽, 高, 图标 x, 图标 y, 图标里的宽, 高], ...]}，每块转 180° 贴到 16×16 的图标上
+    for name, texture in CHEST_ICONS.items():
+        box = boxes.get(f"entity/chest/{texture}")
+        if name in states and box:
+            u, v, w = box[0], box[1], box[2]
+            k = w / 64  # 资源包贴图放大过的话按比例取
+            index[name] = {"parts": [[round(u + x * k), round(v + y * k), round(pw * k), round(ph * k), dx, dy, pw, ph]
+                                     for x, y, pw, ph, dx, dy in CHEST_PARTS]}
     # 需要染色的追加第 5 个数：0xRRGGBB，用的时候乘到贴图上
     for name, tint in TINTS.items():
-        if name in index and len(index[name]) == 4:
+        if name in index and isinstance(index[name], list) and len(index[name]) == 4:
             index[name].append(tint)
     return dict(sorted(index.items()))
 
@@ -206,6 +224,8 @@ def texture_image(name: str):
     box = lookup(name)
     if not box:
         return _missing()
+    if isinstance(box, dict):  # 拼出来的图标（箱子）
+        return _compose(box["parts"])
     u, v, w, h = box[:4]
     try:
         tile = _atlas().crop((u, v, u + w, v + h))
@@ -220,6 +240,22 @@ def texture_image(name: str):
         tint = Image.new("RGBA", tile.size, ((box[4] >> 16) & 255, (box[4] >> 8) & 255, box[4] & 255, 255))
         tile = ImageChops.multiply(tile, tint)
     return tile
+
+
+def _compose(parts):
+    """按 icons.json 里的 parts 拼图标：每块从图集里抠出来、转 180°、缩放到 dw×dh 贴到 (dx, dy)。"""
+    from PIL import Image
+
+    image = Image.new("RGBA", (ICON_SIZE, ICON_SIZE), (0, 0, 0, 0))
+    try:
+        atlas = _atlas()
+    except OSError as exc:
+        print(f"[atlas] {exc}")
+        return _missing()
+    for u, v, w, h, dx, dy, dw, dh in parts:
+        piece = atlas.crop((u, v, u + w, v + h)).rotate(180)
+        image.alpha_composite(piece.resize((dw, dh), Image.NEAREST), (dx, dy))
+    return image
 
 
 def block_names() -> list:
