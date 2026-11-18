@@ -9,7 +9,7 @@ const FOV = (70 * Math.PI) / 180; // 和 deepslate 的透视一致，点选算�
 
 let resources = null;
 let atlasImage = null;
-let iconIndex = {}; // resource/icons.json：名字 → [u, v, 宽, 高, (染色)]，由 script/lv/atlas.py 生成
+let iconIndex = {}; // resource/icons.json：名字 → [u, v, 宽, 高, (染色)] 或 {parts: [...]}（拼的，箱子），由 script/lv/atlas.py 生成
 
 // ---------------------------------------------------------------- 资源
 
@@ -92,32 +92,35 @@ function computeFlags(imageData, size) {
   return flags;
 }
 
-// ---- 大箱子：deepslate 的箱子渲染器不管 type=left/right，两半各画一个单箱子（左右各缩 1 像素、各带锁扣），
-// 看起来是两个小箱子。这里给两半换成合在一起的模型：往另一半那边一直延伸到格子边上，锁扣只画一个、跨在中缝上。
+// ---- 大箱子：deepslate 的箱子渲染器不管 type=left/right，两半各画一个单箱子，看起来是两个小箱子。
+// 这里给两半换成游戏里的做法：每半用自己的贴图（entity/chest/<名>_left / _right，15 像素宽、接缝那面留空），
+// 往另一半那边一直延伸到格子边上，锁扣两半各画 1 像素宽、拼在中缝上。
 // 另一半在哪边：type=left 在朝向的顺时针方向（模型空间里是 +x），type=right 在逆时针方向（-x）。
-// 几何和贴图 UV 照抄 deepslate 的单箱子模型，旋转方式也一样（按 facing 绕竖轴转）
+// 半边贴图的排布（像素，64×64）：侧面一圈 y 14–19（盖子）/ 33–43（箱身），
+// x 0–14 / 14–29 / 29–43 / 43–58 = 一侧 / 背面 / 另一侧 / 正面；顶 / 底 y 0–14（盖子）/ 19–33（箱身）。
+// 正面朝北（z=0），按 facing 绕竖轴转，和 deepslate 的单箱子一样
 const CHEST_TEXTURE = {
   chest: "normal", trapped_chest: "trapped",
   copper_chest: "copper", exposed_copper_chest: "copper_exposed", weathered_copper_chest: "copper_weathered", oxidized_copper_chest: "copper_oxidized",
   waxed_copper_chest: "copper", waxed_exposed_copper_chest: "copper_exposed", waxed_weathered_copper_chest: "copper_weathered", waxed_oxidized_copper_chest: "copper_oxidized",
 };
-const CHEST_FACES = {
-  body: {
-    north: { uv: [10.5, 8.25, 14, 10.75], rotation: 180, texture: "#0" }, east: { uv: [7, 8.25, 10.5, 10.75], rotation: 180, texture: "#0" },
-    south: { uv: [3.5, 8.25, 7, 10.75], rotation: 180, texture: "#0" }, west: { uv: [0, 8.25, 3.5, 10.75], rotation: 180, texture: "#0" },
-    up: { uv: [7, 4.75, 10.5, 8.25], texture: "#0" }, down: { uv: [3.5, 4.75, 7, 8.25], texture: "#0" },
-  },
-  lid: {
-    north: { uv: [10.5, 3.75, 14, 4.75], rotation: 180, texture: "#0" }, east: { uv: [7, 3.75, 10.5, 4.75], rotation: 180, texture: "#0" },
-    south: { uv: [3.5, 3.75, 7, 4.75], rotation: 180, texture: "#0" }, west: { uv: [0, 3.75, 3.5, 4.75], rotation: 180, texture: "#0" },
-    up: { uv: [7, 0, 10.5, 3.5], texture: "#0" }, down: { uv: [3.5, 0, 7, 3.5], texture: "#0" },
-  },
-  latch: {
-    north: { uv: [0.25, 0.25, 0.75, 1.25], rotation: 180, texture: "#0" }, east: { uv: [0, 0.25, 0.25, 1.25], rotation: 180, texture: "#0" },
-    south: { uv: [1, 0.25, 1.5, 1.25], rotation: 180, texture: "#0" }, west: { uv: [0.75, 0.25, 1, 1.25], rotation: 180, texture: "#0" },
-    up: { uv: [0.25, 0, 0.75, 0.25], rotation: 180, texture: "#0" }, down: { uv: [0.75, 0, 1.25, 0.25], rotation: 180, texture: "#0" },
-  },
-};
+const px = (x0, y0, x1, y1) => [x0 / 4, y0 / 4, x1 / 4, y1 / 4]; // 64 像素贴图 → 模型 UV（0–16）
+function chestHalfFaces(left, top, side) {
+  // top：顶 / 底那块的 y 起点；side：侧面一圈的 y 范围
+  const [s0, s1] = side;
+  const face = (uv, rotation = 180) => ({ uv, rotation, texture: "#0" });
+  const faces = {
+    north: face(px(43, s0, 58, s1)),
+    south: face(px(14, s0, 29, s1)),
+    // 顶 / 底左右反着取：两张半边贴图的接缝边都和模型里的方向相反（左半贴图接缝在 u 小那边、模型在 +x），不反的话中缝会多一条黑边
+    up: face(px(44, top, 29, top + 14), 0),
+    down: face(px(29, top, 14, top + 14), 0),
+  };
+  // 外侧那面：左半的贴图只有 29–43 那条，右半只有 0–14 那条；接缝那面不画
+  if (left) faces.west = face(px(29, s0, 43, s1));
+  else faces.east = face(px(0, s0, 14, s1));
+  return faces;
+}
 const FACING_ANGLE = { north: 0, west: Math.PI / 2, south: Math.PI, east: (Math.PI * 3) / 2 };
 function doubleChestMesh(state, res) {
   const name = String(state.getName()).replace(/^minecraft:/, "");
@@ -125,12 +128,21 @@ function doubleChestMesh(state, res) {
   if (!CHEST_TEXTURE[name] || (type !== "left" && type !== "right")) return null;
   const left = type === "left";
   const [x0, x1] = left ? [1, 16] : [0, 15];
+  const latch = { uv: px(1, 1, 2, 5), rotation: 180, texture: "#0" };
   const elements = [
-    { from: [x0, 0, 1], to: [x1, 10, 15], faces: CHEST_FACES.body },
-    { from: [x0, 10, 1], to: [x1, 14, 15], faces: CHEST_FACES.lid },
+    { from: [x0, 0, 1], to: [x1, 10, 15], faces: chestHalfFaces(left, 19, [33, 43]) },
+    { from: [x0, 10, 1], to: [x1, 14, 15], faces: chestHalfFaces(left, 0, [14, 19]) },
+    {
+      from: left ? [15, 7, 0] : [0, 7, 0], to: left ? [16, 11, 1] : [1, 11, 1],
+      faces: {
+        north: latch,
+        [left ? "west" : "east"]: { uv: px(0, 1, 1, 5), rotation: 180, texture: "#0" },
+        up: { uv: px(1, 0, 2, 1), texture: "#0" }, down: { uv: px(2, 0, 3, 1), texture: "#0" },
+      },
+    },
   ];
-  if (left) elements.push({ from: [15, 7, 0], to: [17, 11, 2], faces: CHEST_FACES.latch });
-  const model = new deepslate.BlockModel(undefined, { 0: "minecraft:entity/chest/" + CHEST_TEXTURE[name] }, elements);
+  const texture = `minecraft:entity/chest/${CHEST_TEXTURE[name]}_${left ? "left" : "right"}`;
+  const model = new deepslate.BlockModel(undefined, { 0: texture }, elements);
   const mesh = model.getMesh(res, deepslate.Cull.none());
   const m = mat4.create();
   mat4.scale(m, m, [1 / 16, 1 / 16, 1 / 16]);
@@ -304,7 +316,22 @@ export function blockIcon(id, px = 20) {
   if (iconCache.has(key)) return iconCache.get(key);
   const box = iconIndex[name] || iconIndex[name + "_spawn_egg"];
   let url = "";
-  if (box && atlasImage) {
+  if (box?.parts && atlasImage) {
+    // 拼出来的图标（箱子）：每块从图集里抠出来，转 180° 贴到 16×16 上（见 atlas.py 的 CHEST_PARTS）
+    const c = document.createElement("canvas");
+    c.width = c.height = px;
+    const g = c.getContext("2d");
+    g.imageSmoothingEnabled = false;
+    const k = px / 16;
+    for (const [u, v, w, h, dx, dy, dw, dh] of box.parts) {
+      g.save();
+      g.translate((dx + dw) * k, (dy + dh) * k);
+      g.rotate(Math.PI);
+      g.drawImage(atlasImage, u, v, w, h, 0, 0, dw * k, dh * k);
+      g.restore();
+    }
+    url = c.toDataURL();
+  } else if (box && atlasImage) {
     const [u, v, w, h, tint] = box;
     const c = document.createElement("canvas");
     c.width = c.height = px;
