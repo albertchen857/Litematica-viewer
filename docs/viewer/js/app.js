@@ -98,6 +98,8 @@ function applyLang() {
   $("lang").value = lang;
   document.title = t("pageTitle");
   syncUrl();
+  // 字都换好了，显示出来（桌面版要等 payload 里的语言，在 main 里去掉）
+  if (location.hash !== "#desktop") document.documentElement.classList.remove("i18n-wait");
   if ($("layer-mode")) $("layer-mode").textContent = t("layerMode." + layerMode);
   if (state.structure) renderInfo();
   else renderPlaceholder();
@@ -117,6 +119,8 @@ const state = {
   tab: "all",
   steps: null,     // 分步拆解结果
   step: 0,
+  ignored: new Set(),     // 3D 里隐藏的方块种类（方块 id），信息面板「隐藏这种」
+  highlighted: new Set(), // 3D 里高亮的方块种类
 };
 let view = null;
 
@@ -139,7 +143,7 @@ async function openFile(file) {
 
 // pristine：刚打开的文件；original：作为工具的起点；keepCamera：替换 / 撤销时相机不动
 function load(structure, { pristine = false, original = pristine, keepCamera = false } = {}) {
-  if (pristine) { state.pristine = structure; state.edited = false; }
+  if (pristine) { state.pristine = structure; state.edited = false; state.ignored.clear(); state.highlighted.clear(); }
   if (original) state.original = structure;
   state.undo = null;
   $("toast").hidden = true;
@@ -159,6 +163,7 @@ function load(structure, { pristine = false, original = pristine, keepCamera = f
   $("restore").hidden = structure === state.pristine;
   renderInfo();
   setupLayers(structure);
+  renderKindBar();
   draw(structure, !keepCamera);
   // 第一次打开文件时把教程弹出来一次
   if (pristine && !isDesktop() && !localStorage.getItem("lv-viewer-tutorial")) {
@@ -188,7 +193,7 @@ function progress(ratio, label) {
 async function draw(structure, resetCamera, label = t("building")) {
   const box = bounds(structure);
   const region = structure === state.structure ? regionIndex() : null;
-  await view.show(structure, box, { resetCamera, region, onProgress: (r) => progress(r, label) });
+  await view.show(structure, box, { resetCamera, region, ignore: state.ignored, onProgress: (r) => progress(r, label) });
   progress(null);
   $("hint").hidden = false;
 }
@@ -292,7 +297,7 @@ function renderInfo() {
   $("tab-count").textContent = ui("tab.count", rows.length, rows.reduce((a, [, n]) => a + n, 0));
   $("table").innerHTML = rows.slice(0, TABLE_LIMIT).map(([id, n]) => {
     const icon = blockIcon(id);
-    return `<div class="row" title="${esc(id)}" data-id="${esc(id)}">${icon ? `<img src="${icon}" alt="">` : "<span></span>"}` +
+    return `<div class="row${kindClass(id)}" title="${esc(id)}" data-id="${esc(id)}">${icon ? `<img src="${icon}" alt="">` : "<span></span>"}` +
       `<span class="name">${esc(nameOf(id))}</span><span class="right"><span class="num">${n}</span>${slotsHTML(n)}</span></div>`;
   }).join("") + (rows.length > TABLE_LIMIT ? `<div class="row-more">${esc(t("more", rows.length - TABLE_LIMIT))}</div>` : "");
 
@@ -395,6 +400,8 @@ function showInspect(hit) {
   const pos = hit.pos.map((v) => (Number.isInteger(v) ? v : v.toFixed(1))).join(", ");
   const regionName = hit.region && state.structure.regions.length > 1 ? "  " + t("region", hit.region.name) : "";
   $("inspect-pos").textContent = t("pos", pos) + regionName;
+
+  renderKind(hit);
 
   // 方块属性
   const props = hit.kind === "block" ? Object.entries(hit.block.props) : [];
@@ -625,7 +632,7 @@ function rowMenu(e) {
   openMenu(e.clientX, e.clientY, nameOf(id), [{
     label: ui("row.replace"), disabled: !sources.length, note: sources.length ? "" : t("replace.noBlock"),
     action: () => quickReplace({ anchor: pointAt(e.clientX, e.clientY), sources }),
-  }]);
+  }, ...kindMenu(sources)]);
 }
 
 // 3D 里右键点了一个方块。分步模式下显示的是拆分后的结构，按坐标找回真正的区域和格子
@@ -649,7 +656,71 @@ function blockMenu(hit, x, y) {
   openMenu(x, y, nameOf(at.block.id), [
     ...(isDesktop() ? [] : [{ label: ui("row.replace"), action: () => quickReplace({ anchor: pointAt(x, y), sources: [at.block.id], at }) }]),
     { label: t("inspectMenu"), action: () => showInspect(hit) },
+    ...kindMenu([at.block.id]),
   ]);
+}
+
+// ---------------------------------------------------------------- 3D 里隐藏 / 高亮某种方块
+// 按方块 id 算（同一种方块不管什么状态都算）。材料表里的一行可能对应好几种方块（比如床的物品对应 16 色床），一起切换
+
+function toggleKind(set, ids) {
+  const all = ids.every((id) => set.has(id));
+  for (const id of ids) (all ? set.delete(id) : set.add(id));
+}
+
+function applyKinds() {
+  view.setFilter({ ignore: state.ignored });
+  const { shown, total } = view.setHighlight(state.highlighted);
+  if (total > shown) toast(t("kind.tooMany", shown, total), { undo: false });
+  renderKindBar();
+  renderInfo(); // 材料表的行标记
+  if (inspectHit?.kind === "block") renderKind(inspectHit);
+}
+
+function kindMenu(ids) {
+  if (!ids.length || !view) return [];
+  return [
+    { label: t(ids.every((id) => state.ignored.has(id)) ? "kind.unignore" : "kind.ignore"), action: () => { toggleKind(state.ignored, ids); applyKinds(); } },
+    { label: t(ids.every((id) => state.highlighted.has(id)) ? "kind.unhighlight" : "kind.highlight"), action: () => { toggleKind(state.highlighted, ids); applyKinds(); } },
+  ];
+}
+
+// 材料表一行的标记：这行对应的方块全被隐藏了 → 变淡；有被高亮的 → 左边一道黄
+function kindClass(id) {
+  if ((!state.ignored.size && !state.highlighted.size) || state.tab === "entities" || state.tab === "items") return "";
+  const sources = blockSourcesFor(id);
+  if (!sources.length) return "";
+  return (sources.every((s) => state.ignored.has(s)) ? " is-ignored" : "") + (sources.some((s) => state.highlighted.has(s)) ? " is-lit" : "");
+}
+
+function renderKindBar() {
+  const parts = [];
+  if (state.ignored.size) parts.push(t("kind.hiddenCount", state.ignored.size));
+  if (state.highlighted.size) parts.push(t("kind.litCount", state.highlighted.size));
+  $("kind-bar").hidden = !parts.length;
+  $("kind-bar-text").textContent = parts.join(" · ");
+}
+
+// 信息面板里「这种方块」那块：材料表里写的数量（同材料表的折算：床 / 门算一个、双层台阶算两个……）+ 两个开关
+function renderKind(hit) {
+  const box = $("inspect-kind");
+  box.hidden = hit.kind !== "block" || !state.results;
+  if (box.hidden) return;
+  const id = hit.block.id;
+  const rows = current().blocks;
+  const mats = materialOf(hit.block);
+  $("inspect-count").innerHTML = `<span>${esc(t("kind.inTable"))}</span>` + (mats.length
+    ? mats.map(([m]) => {
+      const n = rows.find(([k]) => k === m)?.[1] || 0;
+      const icon = blockIcon(m);
+      return `<span class="inspect-count-row">${icon ? `<img src="${icon}" alt="">` : ""}<b>${esc(nameOf(m))}</b><span class="num">${n}</span>${slotsHTML(n)}</span>`;
+    }).join("")
+    : `<span class="inspect-count-row">${esc(t("kind.notCounted"))}</span>`);
+  const hidden = state.ignored.has(id), lit = state.highlighted.has(id);
+  $("kind-ignore").textContent = t(hidden ? "kind.unignore" : "kind.ignore");
+  $("kind-ignore").classList.toggle("is-on", hidden);
+  $("kind-highlight").textContent = t(lit ? "kind.unhighlight" : "kind.highlight");
+  $("kind-highlight").classList.toggle("is-on", lit);
 }
 
 // 快捷替换：选完就换。3D 里点的方块可选 全部同类 / 只这一格（记住上次选的）
@@ -1447,6 +1518,17 @@ function bind() {
   $("inspect-items").addEventListener("pointerleave", () => (tip.hidden = true));
   $("steps-exit").addEventListener("click", exitSteps);
   $("inspect-close").addEventListener("click", () => { showInspect(null); view.select(null); });
+  $("kind-ignore").addEventListener("click", () => {
+    if (inspectHit?.kind !== "block") return;
+    toggleKind(state.ignored, [inspectHit.block.id]);
+    applyKinds();
+  });
+  $("kind-highlight").addEventListener("click", () => {
+    if (inspectHit?.kind !== "block") return;
+    toggleKind(state.highlighted, [inspectHit.block.id]);
+    applyKinds();
+  });
+  $("kind-reset").addEventListener("click", () => { state.ignored.clear(); state.highlighted.clear(); applyKinds(); });
   $("step-range").addEventListener("change", (e) => showStep(+e.target.value));
   $("step-prev").addEventListener("click", () => showStep(state.step - 1));
   $("step-next").addEventListener("click", () => showStep(state.step + 1));
@@ -1460,8 +1542,11 @@ function bind() {
 async function main() {
   bind();
   applyLang();
+  // 翻译表一到就先换语言，不等图集（图集几 MB，等它的话页面会先显示一阵 HTML 里的中文）
+  const gamedataReady = fetch("data/gamedata.json").then((r) => r.json());
+  gamedataReady.then((data) => { gamedata = data; applyLang(); }).catch(() => document.documentElement.classList.remove("i18n-wait"));
   [gamedata, tags] = await Promise.all([
-    fetch("data/gamedata.json").then((r) => r.json()),
+    gamedataReady,
     fetch("resource/tags.json").then((r) => r.json()).catch(() => ({})),
     loadResources(),
   ]);
@@ -1479,6 +1564,7 @@ async function main() {
     document.body.classList.add("desktop");
     const payload = await fetch("payload.json?t=" + Date.now(), { cache: "no-store" }).then((r) => r.json());
     if (LANGS.includes(payload.lang)) { lang = payload.lang; applyLang(); }
+    document.documentElement.classList.remove("i18n-wait");
     if (payload.theme) applyTheme(payload.theme);
     load(fromPayload(payload), { pristine: true });
     return;
