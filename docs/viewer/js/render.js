@@ -224,7 +224,59 @@ function patchChunkBuilder(builder) {
   CB.__lvPatched = true;
   const getMeshes = CB.getMeshes, update = CB.updateStructureBuffers;
   CB.getMeshes = function () { return this.meshList || (this.meshList = getMeshes.call(this)); };
-  CB.updateStructureBuffers = function (chunks) { this.meshList = null; return update.call(this, chunks); };
+  CB.updateStructureBuffers = function (chunks) { this.meshList = this.chunkList = null; return update.call(this, chunks); };
+  // 5. 视锥剔除用：每个非空区块的网格 + 包围盒。deepslate 存区块的下标是 |c|*2 + (c<0 ? 1 : 0)，这里解回区块坐标
+  CB.getChunkList = function () {
+    if (this.chunkList) return this.chunkList;
+    const list = [], size = this.chunkSize;
+    const coord = (i) => (i & 1 ? -(i >> 1) : i >> 1);
+    this.chunks.forEach((plane, i) => plane?.forEach((row, j) => row?.forEach((chunk, k) => {
+      if (!chunk || (chunk.mesh.isEmpty() && chunk.transparentMesh.isEmpty())) return;
+      const c = [coord(i), coord(j), coord(k)];
+      // 多留 2 格：床、旗帜、高的特殊模型会伸出自己那一格
+      const min = c.map((v, a) => v * size[a] - 2), max = c.map((v, a) => (v + 1) * size[a] + 2);
+      list.push({ mesh: chunk.mesh, transparentMesh: chunk.transparentMesh, min, max });
+    })));
+    return (this.chunkList = list);
+  };
+}
+
+// ---- 视锥剔除：每帧从「投影 × 视图」矩阵取出 6 个裁剪面，整个区块的包围盒都在某个面外面就不画。
+// 拉近看大结构的一角、或者 WASD 飞进结构里时，画面外的区块（往往是大半）整块跳过，不再提交给显卡。
+// 透视和缩略图用的正交投影都适用（裁剪面是从合起来的矩阵里取的）
+function frustumPlanes(proj, view) {
+  const m = mat4.multiply(mat4.create(), proj, view);
+  // 列主序：第 r 行 = m[r], m[r+4], m[r+8], m[r+12]
+  const row = (r) => [m[r], m[r + 4], m[r + 8], m[r + 12]];
+  const w = row(3);
+  const planes = [];
+  for (const r of [0, 1, 2]) {
+    const v = row(r);
+    planes.push(w.map((x, i) => x + v[i]), w.map((x, i) => x - v[i]));
+  }
+  return planes;
+}
+
+function boxVisible(planes, min, max) {
+  for (const [a, b, c, d] of planes) {
+    // 包围盒上沿法线方向最远的那个角都在面外面，整个盒子就在外面
+    const x = a > 0 ? max[0] : min[0], y = b > 0 ? max[1] : min[1], z = c > 0 ? max[2] : min[2];
+    if (a * x + b * y + c * z + d < 0) return false;
+  }
+  return true;
+}
+
+// 替换 StructureRenderer.drawStructure：同样先画不透明再画半透明，只是跳过视锥外的区块
+function drawStructureCulled(view) {
+  this.setShader(this.shaderProgram);
+  this.setTexture(this.atlasTexture, this.resources.getPixelSize?.());
+  this.prepareDraw(view);
+  const planes = frustumPlanes(this.projMatrix, view);
+  const visible = this.chunkBuilder.getChunkList().filter((c) => boxVisible(planes, c.min, c.max));
+  const opts = { pos: true, color: true, texture: true, normal: true };
+  for (const c of visible) if (!c.mesh.isEmpty()) this.drawMesh(c.mesh, opts);
+  for (const c of visible) if (!c.transparentMesh.isEmpty()) this.drawMesh(c.transparentMesh, opts);
+  this.culled = { drawn: visible.length, total: this.chunkBuilder.getChunkList().length }; // 调试用
 }
 
 export async function loadResources() {
@@ -565,6 +617,7 @@ export class View {
     this.renderer = new deepslate.StructureRenderer(this.gl, live, resources, { chunkSize: CHUNK, useInvisibleBlockBuffer: false });
     live.only = null;
     patchChunkBuilder(this.renderer.chunkBuilder);
+    this.renderer.drawStructure = drawStructureCulled;
     // deepslate 0.27 的远平面写死 500 格，大结构拉远会被切掉；换成同样的透视、远平面放大
     this.renderer.getPerspective = () => {
       const m = mat4.create();

@@ -3,7 +3,7 @@
 
 import { parse, bounds, EXTENSIONS, fromPayload, isAir, RAW_TAG } from "./formats.js";
 import { analyse, totalRows, unitParts, materialOf } from "./analysis.js";
-import { SAVE_FORMATS, exportText, download, compoundWith, toTag } from "./writers.js";
+import { SAVE_FORMATS, exportText, download, compoundWith, toTag, writeLitematic } from "./writers.js";
 import { exportWorld } from "./world.js";
 import { parseRules, replaceBlocks, RuleError } from "./edit.js";
 import { loadResources, View, blockIcon, hasIcon } from "./render.js";
@@ -555,6 +555,18 @@ async function saveAs(ext) {
   }
 }
 
+// 换游戏版本（同桌面版 convert_version）：写成 .litematic、Version 改成选的那个，存成 名字_vN.litematic。
+// 桌面版只认 .litematic 原文件；网页这里什么格式打开的都能转，存的是当前结构（含替换）
+function saveVersion(version) {
+  if (!state.structure) { alert(t("needFile")); return; }
+  try {
+    download(`${stem()}_v${version}.litematic`, writeLitematic(state.structure, version));
+  } catch (err) {
+    console.error(err);
+    alert(ui("app.save.fail", err.message || err));
+  }
+}
+
 // ---------------------------------------------------------------- 右键菜单 + 快捷替换方块
 
 function openMenu(x, y, head, items) {
@@ -699,10 +711,11 @@ function bindEditing() {
     exportList(b.dataset.export.endsWith("-cat"), b.dataset.export.startsWith("csv"));
   });
   $("convert-menu").addEventListener("click", (e) => {
-    const b = e.target.closest("[data-ext]");
+    const b = e.target.closest("[data-ext], [data-version]");
     if (!b) return;
     document.activeElement?.blur(); // 收起下拉框（键盘打开时靠 focus-within）
-    saveAs(b.dataset.ext);
+    if (b.dataset.version) saveVersion(+b.dataset.version);
+    else saveAs(b.dataset.ext);
   });
   $("tutorial-btn").addEventListener("click", () => $("tutorial-dlg").showModal());
 

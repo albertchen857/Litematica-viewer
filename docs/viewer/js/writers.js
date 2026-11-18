@@ -116,7 +116,9 @@ function packLitematic(values, bits) {
   return new (D().NbtLongArray)(longs);
 }
 
-export function writeLitematic(structure) {
+// version：Litematica 文件格式版本（Version 标签），不给就沿用原文件的，新建的写 6。
+// 同桌面版「转换到 1.20.6+ / 1.14 ~ 1.20.5 / 1.13」（edit.change_litematic_version）：只改这个标签，内容照常写
+export function writeLitematic(structure, version = null) {
   const { NbtInt, NbtLong, NbtString, NbtFile } = D();
   const meta = structure.meta || {};
   const regions = new (D().NbtCompound)();
@@ -175,7 +177,7 @@ export function writeLitematic(structure) {
     // 缩略图（工具「缩略图」生成的 140×140 ARGB）：写进 Litematica 自己的预览图字段，游戏里的投影浏览界面能看到
     ...(structure.preview ? { PreviewImageData: new (D().NbtIntArray)(Array.from(structure.preview)) } : {}),
   });
-  const lm = +meta.lm_version || 6;
+  const lm = +version || +meta.lm_version || 6;
   const root = compoundWith(null, {
     Version: new NbtInt(lm),
     SubVersion: lm >= 6 ? new NbtInt(+meta.sub_version || 1) : undefined,
@@ -320,6 +322,9 @@ export function exportText(result, { classified, csv, nameOf, unit, catLabel, or
   }
   return String.fromCharCode(0xfeff) + out; // 同桌面版 utf-8-sig，Excel 打开 csv 中文不乱码
 }
+
+// 同桌面版 edit.VERSION_CHOICES：(版本号, 菜单文案的键)
+export const LITEMATIC_VERSIONS = [[7, "menu.version.7"], [6, "menu.version.6"], [3, "menu.version.3"]];
 
 export const SAVE_FORMATS = {
   ".litematic": (s) => ({ bytes: writeLitematic(s), report: new Set() }),
