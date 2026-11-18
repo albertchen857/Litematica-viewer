@@ -97,9 +97,10 @@
       <h1 class="ba-logo" aria-label="投影查看器 Litematica Viewer">
         <span class="sr-only" data-en="Litematica Viewer" data-tw="Litematica Viewer 投影檢視器" data-zh="Litematica Viewer 投影查看器">Litematica Viewer</span>
         <span data-nosnippet class="ba-line ba-zh" aria-hidden="true"><span class="ba-blue"><span class="ch">投</span><span class="ch">影</span></span><span class="ba-ink"><svg class="ba-halo" viewBox="0 0 300 150"><ellipse cx="150" cy="75" rx="138" ry="44" transform="rotate(-12 150 75)"/></svg><span class="ch" data-tw="檢">查</span><span class="ch" data-tw="視">看</span><span class="ch">器</span><svg class="ba-cross" viewBox="0 0 300 300"><line class="under" x1="118" y1="300" x2="178" y2="0"/><line class="under" x1="0" y1="128" x2="300" y2="100"/><line x1="118" y1="300" x2="178" y2="0"/><line x1="0" y1="128" x2="300" y2="100"/></svg></span></span>
-        <span data-nosnippet class="ba-line ba-en" aria-hidden="true"><span class="ba-blue">Litematica</span><span class="ba-ink">Viewer</span></span>
-        <!-- 英文页只用这一行：英文标题当主标题，同样的蔚蓝档案字效 + 光环 / 十字挂在 Litematica|Viewer 交界 -->
-        <span data-nosnippet class="ba-line ba-en-main" aria-hidden="true"><span class="ba-blue">Litematica</span><span class="ba-ink"><svg class="ba-halo" viewBox="0 0 300 150"><ellipse cx="150" cy="75" rx="138" ry="44" transform="rotate(-12 150 75)"/></svg>Viewer<svg class="ba-cross" viewBox="0 0 300 300"><line class="under" x1="118" y1="300" x2="178" y2="0"/><line class="under" x1="0" y1="128" x2="300" y2="100"/><line x1="118" y1="300" x2="178" y2="0"/><line x1="0" y1="128" x2="300" y2="100"/></svg></span></span>
+        <span data-nosnippet class="ba-line ba-en" aria-hidden="true"><span class="ba-blue">Lite-matica</span><span class="ba-ink">Viewer</span></span>
+        <!-- 英文页只用这一行：英文标题当主标题，同样的蔚蓝档案字效 + 光环 / 十字挂在 Lite-matica|Viewer 交界。
+             标题字写成 Lite-matica（和域名 lite-viewer 呼应）；读屏 / 搜索用的 sr-only 和 <title> 仍是 Litematica Viewer -->
+        <span data-nosnippet class="ba-line ba-en-main" aria-hidden="true"><span class="ba-blue">Lite-matica</span><span class="ba-ink"><svg class="ba-halo" viewBox="0 0 300 150"><ellipse cx="150" cy="75" rx="138" ry="44" transform="rotate(-12 150 75)"/></svg>Viewer<svg class="ba-cross" viewBox="0 0 300 300"><line class="under" x1="118" y1="300" x2="178" y2="0"/><line class="under" x1="0" y1="128" x2="300" y2="100"/><line x1="118" y1="300" x2="178" y2="0"/><line x1="0" y1="128" x2="300" y2="100"/></svg></span></span>
       </h1>
       <span class="hero-rule" aria-hidden="true"></span>
 
@@ -107,6 +108,7 @@
         <!-- 下载：鼠标放上去（手机点一下）出下拉框。
              直接下载 = Cloudflare R2（download.lite-viewer.com，学校网络打不开 GitHub 也能下）；
              GitHub 下载 = Releases 页。main.js 按访问者的系统给对应那项标「推荐」 -->
+        <div class="dl-stack">
         <div class="dl" id="hero-dl">
           <button class="btn btn-accent btn-lg hero-download" type="button" aria-haspopup="menu">
             <span class="arrow" aria-hidden="true">▼</span> <span data-en="Download latest" data-tw="下載最新版" data-zh="下载最新版">Download latest</span>
@@ -120,6 +122,10 @@
             <p class="dl-group" data-en="Or from GitHub" data-tw="或從 GitHub" data-zh="或从 GitHub">Or from GitHub</p>
             <a class="dl-item" role="menuitem" href="https://github.com/albertchen857/Litematica-viewer/releases/latest" target="_blank" rel="noopener"><b data-en="GitHub Releases" data-tw="GitHub Releases" data-zh="GitHub Releases">GitHub Releases</b><small data-en="All platforms · older versions" data-tw="全部平台 · 歷史版本" data-zh="全部平台 · 历史版本">All platforms · older versions</small></a>
           </div>
+        </div>
+        <!-- Litematica Nova（原来叫 Pro 版）：跳到它 GitHub 上的最新发行版 -->
+        <a class="btn btn-plain hero-nova" href="https://github.com/LitematicaViewer/Litematica-Nova/releases/latest" target="_blank" rel="noopener"
+           data-en="Try &lt;s&gt;Pro&lt;/s&gt; Nova" data-tw="嘗試 &lt;s&gt;Pro&lt;/s&gt; Nova" data-zh="尝试 &lt;s&gt;Pro&lt;/s&gt; Nova">Try <s>Pro</s> Nova</a>
         </div>
         <span class="hero-meta" data-en="Windows · macOS · Linux · Free &amp; open source" data-tw="Windows · macOS · Linux · 免費開源" data-zh="Windows · macOS · Linux · 免费开源">Windows · macOS · Linux · Free & open source</span>
       </div>

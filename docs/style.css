@@ -252,6 +252,11 @@ html[data-lang="en"] .ba-en-main { display: block; }
 .hero-download { gap: var(--s2); font-size: 19px; padding: 14px 32px; }
 .hero-download .arrow { font-size: 0.7em; }
 .hero-meta { color: var(--tt); font-size: 14px; font-weight: 700; }
+/* 下载按钮和下面的 Nova 按钮竖着排，左对齐、一样宽 */
+.dl-stack { display: grid; gap: 10px; }
+.dl-stack + .hero-meta { align-self: flex-start; margin-top: 18px; } /* 和下载按钮那一行对齐，不跟着两个按钮的中间 */
+.hero-nova { justify-content: center; gap: 0.3em; font-size: 15px; padding: 10px 20px; }
+.hero-nova s { opacity: 0.55; text-decoration-thickness: 2px; }
 
 /* 下载下拉框：鼠标放上去 / 键盘 Tab 进去 / 手机点按钮（按钮拿到焦点）都会展开 */
 .dl { position: relative; }
