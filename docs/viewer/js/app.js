@@ -94,6 +94,7 @@ function applyLang() {
   document.querySelectorAll("[data-t]").forEach((el) => (el.textContent = t(el.dataset.t)));
   document.querySelectorAll("[data-ui]").forEach((el) => (el.textContent = ui(el.dataset.ui)));
   $("picker-search").placeholder = t("picker.search");
+  $("url-input").placeholder = t("url.placeholder");
   renderBatch(); // 全面替换那几行的「原方块 / 换成」提示字
   $("lang").value = lang;
   document.title = t("pageTitle");
@@ -134,6 +135,89 @@ async function openFile(file) {
     const bytes = new Uint8Array(await file.arrayBuffer());
     load(parse(file.name, bytes), { pristine: true });
     window.LVRecent?.save(file).catch(() => {}); // 记成「上次的文件」，下次进来一键再开
+  } catch (err) {
+    console.error(err);
+    progress(null);
+    alert(t("failed", err.message || err));
+  }
+}
+
+// ---- 从网址打开：浏览器直接把文件下下来，跟拖进来的一样处理（也不经过我们的服务器）。
+// 对方网站得允许跨域读取（GitHub raw、大部分网盘直链可以；Discord 附件这类不行，只能先下载再拖进来）
+
+// 常见的「网页链接」换成「文件直链」
+function directUrl(raw) {
+  const url = new URL(raw);
+  // github.com/<用户>/<仓库>/blob/<分支>/<路径> → raw.githubusercontent.com/<用户>/<仓库>/<分支>/<路径>
+  const blob = url.hostname === "github.com" && url.pathname.match(/^\/([^/]+)\/([^/]+)\/blob\/(.+)$/);
+  if (blob) return `https://raw.githubusercontent.com/${blob[1]}/${blob[2]}/${blob[3]}`;
+  // Dropbox 分享链接默认是预览页，dl=1 才是文件本身
+  if (/(^|\.)dropbox\.com$/.test(url.hostname)) { url.searchParams.set("dl", "1"); return url.href; }
+  return url.href;
+}
+
+// 文件名：优先服务器给的（Content-Disposition），再取网址最后一段
+function urlFileName(res, url) {
+  const cd = res.headers.get("content-disposition") || "";
+  const star = cd.match(/filename\*=(?:UTF-8'')?([^;]+)/i), plain = cd.match(/filename="?([^";]+)"?/i);
+  try {
+    if (star) return decodeURIComponent(star[1].trim().replace(/^"|"$/g, ""));
+    if (plain) return plain[1].trim();
+  } catch { /* 名字解不开就用网址的 */ }
+  const last = new URL(url).pathname.split("/").filter(Boolean).pop() || "download";
+  try { return decodeURIComponent(last); } catch { return last; }
+}
+
+// 没有扩展名（或者扩展名不对）的：三种格式挨个试
+function parseAnyFormat(name, bytes) {
+  const ext = name.slice(name.lastIndexOf(".")).toLowerCase();
+  if (EXTENSIONS.includes(ext)) return { structure: parse(name, bytes), name };
+  const stem = name.includes(".") ? name.slice(0, name.lastIndexOf(".")) : name;
+  for (const guess of EXTENSIONS) {
+    try { return { structure: parse(stem + guess, bytes), name: stem + guess }; } catch { /* 下一个 */ }
+  }
+  throw new Error(t("url.unknown"));
+}
+
+async function openUrl(raw) {
+  let url;
+  try {
+    url = directUrl(String(raw).trim());
+    if (!/^https?:$/.test(new URL(url).protocol)) throw new Error();
+  } catch { alert(t("url.bad")); return; }
+  progress(0, t("url.loading"));
+  let res;
+  try {
+    res = await fetch(url);
+  } catch (err) {
+    // fetch 直接抛错基本就是跨域被拦或者网络不通（浏览器不告诉页面具体是哪个）
+    console.error(err);
+    progress(null);
+    alert(t("url.cors"));
+    return;
+  }
+  if (!res.ok) { progress(null); alert(t("url.http", `${res.status} ${res.statusText}`.trim())); return; }
+  try {
+    // 边下边算进度（服务器没给大小就只显示 0%，下完直接跳过去）
+    const total = +res.headers.get("content-length") || 0;
+    const parts = [];
+    let got = 0;
+    const reader = res.body.getReader();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      parts.push(value);
+      got += value.length;
+      if (total) progress(Math.min(1, got / total), t("url.loading"));
+    }
+    const bytes = new Uint8Array(got);
+    let at = 0;
+    for (const p of parts) { bytes.set(p, at); at += p.length; }
+    const { structure, name } = parseAnyFormat(urlFileName(res, url), bytes);
+    progress(0, t("reading"));
+    load(structure, { pristine: true });
+    $("url-input").value = "";
+    window.LVRecent?.save(new File([bytes], name)).catch(() => {});
   } catch (err) {
     console.error(err);
     progress(null);
@@ -1480,8 +1564,12 @@ function bind() {
     e.preventDefault();
     depth = 0;
     $("drop-veil").hidden = true;
-    if (e.dataTransfer.files[0]) openFile(e.dataTransfer.files[0]);
+    if (e.dataTransfer.files[0]) { openFile(e.dataTransfer.files[0]); return; }
+    // 从别的标签页拖过来的链接
+    const link = (e.dataTransfer.getData("text/uri-list") || e.dataTransfer.getData("text/plain") || "").split(/\r?\n/).find((l) => /^https?:\/\//i.test(l.trim()));
+    if (link) openUrl(link.trim());
   });
+  $("url-form").addEventListener("submit", (e) => { e.preventDefault(); openUrl($("url-input").value); });
 
   for (const id of ["layer-min", "layer-max"]) {
     $(id).addEventListener("input", showLayerValue);
@@ -1578,11 +1666,10 @@ async function main() {
     syncUrl();
     if (file) openFile(file);
   }
-  // ?file=<网址> 可以直接打开远程投影（同源或允许跨域的地址）
-  const url = params.get("file");
+  // ?file=<网址>（或 ?url=）可以直接打开远程投影（同源或允许跨域的地址），和输入框里粘贴网址一样
+  const url = params.get("file") || params.get("url");
   if (url) {
-    const res = await fetch(url);
-    openFile(new File([await res.arrayBuffer()], decodeURIComponent(url.split("/").pop())));
+    await openUrl(url);
     return;
   }
   // 什么都没指定：浏览器里存着上次的文件就给个按钮，一键再开（和桌面版「打开上次的文件」一样）

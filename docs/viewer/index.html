@@ -152,6 +152,11 @@
       <p class="empty-sub"><span data-t="supports">支持</span> <code>.litematic</code> · <code>.nbt</code> · <code>.mcstructure</code></p>
       <!-- 中间这块也放一个打开按钮（和顶栏那个是同一个文件框） -->
       <label class="btn btn-accent empty-open" for="file-input"><span data-t="open">打开文件</span></label>
+      <!-- 从网址打开：浏览器直接去下（对方网站要允许跨域），也可以把别的标签页里的链接拖进来 -->
+      <form class="url-open" id="url-form">
+        <input type="url" id="url-input" required autocomplete="off" spellcheck="false" placeholder="或者粘贴投影文件的网址" aria-label="URL">
+        <button class="btn btn-plain" type="submit" data-t="url.open">打开网址</button>
+      </form>
       <p class="empty-note" data-t="local">文件只在你的浏览器里处理，不会上传</p>
       <!-- 浏览器里存着上次打开的文件时出现（handoff.js 的 LVRecent） -->
       <button class="btn btn-plain recent-btn" id="recent-btn" type="button" hidden></button>
@@ -334,6 +339,7 @@
       <li data-t="tut.view"></li>
       <li data-t="tut.inspect"></li>
       <li data-t="tut.kind"></li>
+      <li data-t="tut.url"></li>
       <li data-t="tut.move"></li>
       <li data-t="tut.replace"></li>
       <li data-t="tut.tools"></li>
