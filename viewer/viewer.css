@@ -267,7 +267,8 @@ code { font-family: var(--mono); }
 .table { border-radius: 8px; overflow: hidden; background: var(--pc); }
 .table:empty { display: none; }
 /* 材料表卡片先占住大半屏：打开文件后表格一下子长出几百行，下面的卡片早就在屏幕外了，不算布局偏移 */
-.table-card { min-height: 60vh; }
+/* flex: none：侧栏是竖向 flex，写了 min-height 就顶掉了「不比内容矮」的默认下限，卡片会被压到 60vh、表格被裁掉 */
+.table-card { min-height: 60vh; flex: none; }
 .row {
   display: grid; grid-template-columns: 24px 1fr auto; gap: 8px; align-items: center;
   min-height: 36px; padding: 4px 10px; color: var(--bg); font-size: 14px;
