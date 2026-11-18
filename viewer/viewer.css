@@ -73,6 +73,8 @@ code { font-family: var(--mono); }
 .dropdown button b { font: 700 14px var(--mono); color: var(--pc); }
 .dropdown button span { color: var(--muted); font-size: 12px; }
 .dropdown button:hover, .ctx button:hover:not(:disabled) { background: var(--chip); }
+/* 下拉框里分组的小标题（转换菜单里的「换游戏版本」） */
+.dropdown-sep { margin-top: 4px; padding: 8px 10px 2px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
 
 /* ---------------------------------------------------------------- 布局：左 3D，右信息 */
 
@@ -242,7 +244,7 @@ code { font-family: var(--mono); }
 
 .file-name { margin: 0; font-size: 20px; line-height: 1.25; word-break: break-all; }
 .file-summary { margin: 8px 0 0; color: var(--pc); font: 700 13px/1.5 var(--sans); font-variant-numeric: tabular-nums; }
-.file-summary:empty::before { content: " a0"; } /* 没文件时也占一行，打开文件不把下面往下挤 */
+.file-summary:empty::before { content: "\00a0"; } /* 没文件时也占一行，打开文件不把下面往下挤 */
 
 /* 7 项指标：和桌面版左栏一样，深蓝条、左标签右数值 */
 .stats { display: grid; gap: 4px; padding: 12px; }

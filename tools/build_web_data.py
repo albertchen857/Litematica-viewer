@@ -26,7 +26,7 @@ from lv.tools import CATEGORY_IDS, OTHER  # noqa: E402  分类 id 只在 Python 
 OUT = os.path.join(ROOT, "viewer")
 # 网页版也用到的桌面版文字：导出 / 另存 / 快速替换的提示语，直接复用同一份翻译
 UI_PREFIXES = ("ui.stat.", "cat.", "unit.", "ui.chart.", "litem.chart.", "tab.", "web.",
-               "app.replace.", "app.save.", "row.replace", "litem.menuAnalysis.")
+               "app.replace.", "app.save.", "row.replace", "litem.menuAnalysis.", "menu.version.")
 
 
 def load(name: str) -> dict:
