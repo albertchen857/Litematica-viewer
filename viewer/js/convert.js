@@ -110,7 +110,7 @@ function renderFiles() {
 const target = () => document.querySelector("input[name=cv-target]:checked").value;
 const version = () => +document.querySelector("input[name=cv-version]:checked").value || null;
 // 能放缩略图的：.litematic（Metadata.PreviewImageData）、存档（icon.png）
-const THUMB_TARGETS = new Set([".litematic", "world"]);
+const THUMB_TARGETS = new Set([".litematic", ".bp", "world"]); // .bp 头里带一张 PNG
 function renderOptions() {
   const tg = target();
   $("cv-version-row").hidden = tg !== ".litematic"; // 现在只有 .litematic 有版本可选，别的格式藏起来
