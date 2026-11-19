@@ -322,7 +322,7 @@ document.querySelectorAll(".tab").forEach((tab) =>
 
 const zone = $("dropzone");
 const input = $("file-input");
-const SUPPORTED = /\.(litematic|nbt|mcstructure|schem|schematic)$/i;
+const SUPPORTED = /\.(litematic|nbt|mcstructure|schem|schematic|bp|vschem)$/i;
 let dropped = []; // 记住拖进来的文件，切语言时按新语言重画
 
 function renderDrop() {
@@ -346,8 +346,8 @@ function renderDrop() {
     })
   );
   note.textContent = dropped.length
-    ? t("这个格式打不开，换一个 .litematic / .nbt / .mcstructure / .schem / .schematic 试试。",
-        "That format can't be opened — try a .litematic / .nbt / .mcstructure / .schem / .schematic.", "這個格式打不開，換一個 .litematic / .nbt / .mcstructure / .schem / .schematic 試試。")
+    ? t("这个格式打不开，换一个 .litematic / .nbt / .mcstructure / .schem / .schematic / .bp / .vschem 试试。",
+        "That format can't be opened — try a .litematic / .nbt / .mcstructure / .schem / .schematic / .bp / .vschem.", "這個格式打不開，換一個 .litematic / .nbt / .mcstructure / .schem / .schematic / .bp / .vschem 試試。")
     : t("文件只在你的浏览器里，不会上传到任何地方。", "Your file stays in your browser and is never uploaded.", "檔案只在你的瀏覽器裡，不會上傳到任何地方。");
 }
 
