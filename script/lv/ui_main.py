@@ -43,6 +43,7 @@ SAVE_FORMATS = (
     (formats.LITEMATIC, ".litematic", "Litematica"),
     (formats.JAVA_NBT, ".nbt", "Java structure"),
     (formats.MCSTRUCTURE, ".mcstructure", "Bedrock structure"),
+    (formats.SCHEM, ".schem", "WorldEdit"),
 )
 
 # 窗口窄到这个宽度以下就把对应的一列收掉，优先保住中间的表格
@@ -609,6 +610,11 @@ class App:
 
         size_x, size_y, size_z = structure.size
         self.label_file.config(text=os.path.basename(path))
+        # 老 .schematic 里对照表认不出的数字 ID（模组方块之类）：当空气处理了，告诉用户
+        unknown = structure.meta.get("unknown_legacy") or []
+        if unknown:
+            self.root.after(100, lambda: messagebox.showwarning(
+                _("litem.title"), _("app.legacy.unknown", len(unknown), ", ".join(unknown[:8]))))
         self.label_summary.config(
             text=_("litem.midTop.2b", size_x, size_y, size_z, result.placed,
                    self.charts.multiplier(), result.kinds)
@@ -930,7 +936,7 @@ class App:
         path = filedialog.asksaveasfilename(
             defaultextension=".litematic",
             filetypes=[("Litematica", "*.litematic"), ("Java structure", "*.nbt"),
-                       ("Bedrock structure", "*.mcstructure")],
+                       ("Bedrock structure", "*.mcstructure"), ("WorldEdit", "*.schem")],
             initialfile=f"{stem}.litematic", title=_("menu.saveas"),
         )
         if not path:

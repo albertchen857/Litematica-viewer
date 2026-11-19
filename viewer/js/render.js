@@ -9,6 +9,7 @@ const FOV = (70 * Math.PI) / 180; // 和 deepslate 的透视一致，点选算�
 
 let resources = null;
 let atlasImage = null;
+let avgAtlas = null; // 「平均色图集」：和图集一样大，每张贴图那块填成它的平均色（远处方块用，见 LOD_FRAGMENT）
 let iconIndex = {}; // resource/icons.json：名字 → [u, v, 宽, 高, (染色)] 或 {parts: [...]}（拼的，箱子），由 script/lv/atlas.py 生成
 
 // ---------------------------------------------------------------- 资源
@@ -287,6 +288,114 @@ function drawStructureCulled(view) {
   this.culled = { drawn: visible.length, total: this.chunkBuilder.getChunkList().length }; // 调试用
 }
 
+// 每张贴图的平均色（只算不透明的像素，按透明度加权），填满它在图集里那一块。
+// 着色器在方块很远、一个屏幕像素盖住好几个贴图像素时，往这个颜色过渡：远处不出摩尔纹，极远处就是纯色块
+function buildAverageAtlas(imageData, size) {
+  const src = imageData.data, out = new Uint8Array(size * size * 4);
+  for (const id in assets.textures) {
+    const [u, v, du, dv] = assets.textures[id];
+    const h = du !== dv && id.startsWith("block/") ? du : dv; // 动画贴图只看第一帧
+    let r = 0, g = 0, b = 0, w = 0;
+    for (let y = v; y < v + h; y++) for (let x = u; x < u + du; x++) {
+      const i = (y * size + x) * 4, a = src[i + 3] / 255;
+      r += src[i] * a; g += src[i + 1] * a; b += src[i + 2] * a; w += a;
+    }
+    if (!w) continue;
+    for (let y = v; y < v + dv; y++) for (let x = u; x < u + du; x++) {
+      const i = (y * size + x) * 4;
+      out[i] = r / w; out[i + 1] = g / w; out[i + 2] = b / w; out[i + 3] = 255;
+    }
+  }
+  return { data: out, size };
+}
+
+// ---- 远处降细节：替换 deepslate 的方块着色器（顶点部分原样照抄，片段部分多一步）。
+// fwidth 算出「一个屏幕像素盖住几个贴图像素」：≤1 原样；1～3 之间往平均色过渡；≥3（很远 / 拉得很小）就是纯色块。
+// 原来远处同一张贴图的像素挤在一个屏幕像素里，取哪个全看运气，转动时闪成摩尔纹
+const LOD_VERTEX = `
+  attribute vec4 vertPos;
+  attribute vec2 texCoord;
+  attribute vec4 texLimit;
+  attribute vec3 vertColor;
+  attribute vec3 normal;
+  uniform mat4 mView;
+  uniform mat4 mProj;
+  varying highp vec2 vTexCoord;
+  varying highp vec4 vTexLimit;
+  varying highp vec3 vTintColor;
+  varying highp float vLighting;
+  void main(void) {
+    gl_Position = mProj * mView * vertPos;
+    vTexCoord = texCoord;
+    vTexLimit = texLimit;
+    vTintColor = vertColor;
+    vLighting = normal.y * 0.2 + abs(normal.z) * 0.1 + 0.8;
+  }`;
+const LOD_FRAGMENT = `
+  #extension GL_OES_standard_derivatives : enable
+  precision highp float;
+  varying highp vec2 vTexCoord;
+  varying highp vec4 vTexLimit;
+  varying highp vec3 vTintColor;
+  varying highp float vLighting;
+  uniform sampler2D sampler;
+  uniform sampler2D avgSampler;
+  uniform highp float pixelSize;
+  uniform highp float atlasSize;
+  void main(void) {
+    vec4 texColor = texture2D(sampler, clamp(vTexCoord,
+      vTexLimit.xy + vec2(0.5, 0.5) * pixelSize,
+      vTexLimit.zw - vec2(0.5, 0.5) * pixelSize));
+    if (texColor.a < 0.01) discard;
+    vec2 d = fwidth(vTexCoord) * atlasSize;
+    float far = smoothstep(1.0, 3.0, max(d.x, d.y));
+    vec3 avg = texture2D(avgSampler, (vTexLimit.xy + vTexLimit.zw) * 0.5).rgb;
+    gl_FragColor = vec4(mix(texColor.rgb, avg, far) * vTintColor * vLighting, texColor.a);
+  }`;
+
+function installLodShader(gl, renderer) {
+  if (!avgAtlas || !gl.getExtension("OES_standard_derivatives")) return false; // 不支持就用原来的着色器
+  const compile = (type, src) => {
+    const sh = gl.createShader(type);
+    gl.shaderSource(sh, src);
+    gl.compileShader(sh);
+    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh));
+    return sh;
+  };
+  let program;
+  try {
+    program = gl.createProgram();
+    gl.attachShader(program, compile(gl.VERTEX_SHADER, LOD_VERTEX));
+    gl.attachShader(program, compile(gl.FRAGMENT_SHADER, LOD_FRAGMENT));
+    gl.linkProgram(program);
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program));
+  } catch (err) {
+    console.warn("[lod]", err);
+    return false;
+  }
+  const tex = gl.createTexture();
+  gl.activeTexture(gl.TEXTURE1);
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, avgAtlas.size, avgAtlas.size, 0, gl.RGBA, gl.UNSIGNED_BYTE, avgAtlas.data);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.activeTexture(gl.TEXTURE0);
+  renderer.shaderProgram = program;
+  // 每次画之前把平均色图集挂到 1 号纹理单元
+  const prepare = renderer.prepareDraw.bind(renderer);
+  renderer.prepareDraw = (view) => {
+    prepare(view);
+    if (renderer.activeShader !== program) return;
+    gl.uniform1i(gl.getUniformLocation(program, "sampler"), 0);
+    gl.uniform1i(gl.getUniformLocation(program, "avgSampler"), 1);
+    gl.uniform1f(gl.getUniformLocation(program, "atlasSize"), avgAtlas.size);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.activeTexture(gl.TEXTURE0);
+  };
+  return true;
+}
+
 export async function loadResources() {
   iconIndex = await fetch("resource/icons.json").then((r) => r.json()).catch(() => ({}));
   atlasImage = await new Promise((resolve, reject) => {
@@ -316,6 +425,7 @@ export async function loadResources() {
   }
   const atlas = new deepslate.TextureAtlas(imageData, uv);
   const flags = computeFlags(imageData, size);
+  avgAtlas = buildAverageAtlas(imageData, size);
 
   // 贴图缺失的处理：
   //   新版（26.x）告示牌、床已经是普通方块模型，贴图都在图集里；但 deepslate 0.27 还会用「特殊渲染器」
@@ -420,6 +530,7 @@ export function blockIcon(id, px = 20) {
 const AIR_RE = /:(cave_|void_)?air$/;
 // deepslate 的特殊渲染器只注册了 16 种染色潜影盒，未染色的会整个不显示；画的时候借最接近的紫色
 const RENDER_AS = { "minecraft:shulker_box": "minecraft:purple_shulker_box" };
+const GIZMO_AXIS = 34;      // 轴向面板里轴的长度（viewBox 100 里的单位）
 const OUTLINE_MAX = 400000; // 高亮 / 隐藏的边框最多画多少条线，再多就截断（画不动）
 const BRIGHTEN = 1.35;      // 高亮的方块亮一档：顶点颜色乘这个数
 const LIT_COLOR = [1, 0.84, 0];       // 高亮边框：亮黄，和各套主题色都分得开
@@ -571,6 +682,9 @@ export class View {
     this.moveSpeed = 12;      // WASD 每秒走几格，界面上可以调
     this.held = new Set();    // 正按着的移动键
     this.highlight = new Set();       // 高亮的方块种类
+    this.ortho = false;               // 正交（等轴）投影；false = 透视
+    this.renderScale = 1;             // 动态分辨率的倍数（1 = 全分辨率）
+    this.slowFrames = 0;
     this.showHiddenOutline = true;    // 隐藏的方块留不留灰边框
     this.bindControls();
     this.bindKeys();
@@ -578,14 +692,37 @@ export class View {
     new ResizeObserver(() => this.resize()).observe(canvas);
   }
 
-  resize() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  // ---- 动态分辨率：转视角 / 移动的时候帧率掉下来（一帧超过 28 ms），就降低渲染分辨率（每次 ×0.75，最低一半）；
+  // 停下来 300 ms 后恢复全分辨率再画一张清楚的。呼吸灯那种自己刷新的不算「在动」
+  trackFrame() {
+    const now = performance.now();
+    const moving = now - (this.lastInput || 0) < 300;
+    if (moving && this.lastFrameAt && now - this.lastFrameAt > 28 && now - this.lastFrameAt < 500) {
+      if (++this.slowFrames >= 3 && this.renderScale > 0.5) {
+        this.slowFrames = 0;
+        this.renderScale = Math.max(0.5, this.renderScale * 0.75);
+        this.resize(true);
+      }
+    } else if (!moving) this.slowFrames = 0;
+    this.lastFrameAt = now;
+    clearTimeout(this.sharpTimer);
+    if (this.renderScale < 1) {
+      this.sharpTimer = setTimeout(() => {
+        if (performance.now() - (this.lastInput || 0) < 280) return this.trackFrame();
+        this.renderScale = 1;
+        this.resize();
+      }, 320);
+    }
+  }
+
+  resize(quiet = false) {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2) * (this.renderScale || 1);
     const w = Math.round(this.canvas.clientWidth * dpr), h = Math.round(this.canvas.clientHeight * dpr);
     if (!w || !h) return;
     this.canvas.width = w;
     this.canvas.height = h;
     if (this.renderer) this.renderer.setViewport(0, 0, w, h);
-    this.draw();
+    if (!quiet) this.draw();
   }
 
   setTheme(theme) {
@@ -668,11 +805,8 @@ export class View {
     this.gl.bindTexture(this.gl.TEXTURE_2D, this.renderer.atlasTexture);
     this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.NEAREST);
     // deepslate 0.27 的远平面写死 500 格，大结构拉远会被切掉；换成同样的透视、远平面放大
-    this.renderer.getPerspective = () => {
-      const m = mat4.create();
-      mat4.perspective(m, FOV, this.canvas.clientWidth / this.canvas.clientHeight, 0.1, 20000);
-      return m;
-    };
+    this.renderer.getPerspective = () => this.projection();
+    installLodShader(this.gl, this.renderer);
     this.renderer.setViewport(0, 0, this.canvas.width, this.canvas.height);
     this.selected = null;
     this.buildMarkers(structure, box);
@@ -968,7 +1102,7 @@ export class View {
     const R = mat4.create();
     mat4.rotateX(R, R, this.pitch);
     mat4.rotateY(R, R, this.yaw);
-    const C = 50, L = 34;
+    const C = 50, L = GIZMO_AXIS;
     const axes = [];
     for (const [a, name, color] of [[0, "X", "#ff3653"], [1, "Y", "#8adb00"], [2, "Z", "#2c8fff"]]) {
       for (const sign of [1, -1]) {
@@ -1007,8 +1141,12 @@ export class View {
       const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
       drag.x = e.clientX;
       drag.y = e.clientY;
-      this.yaw += dx * 0.012;
-      this.pitch = Math.max(-1.55, Math.min(1.55, this.pitch + dy * 0.012));
+      // 速度跟着面板实际显示的大小走：把一根轴的端点从一边拖到另一边（2 × 轴长）正好转半圈，
+      // 抓着哪个端点它就跟着鼠标走（面板在高分屏 / 缩放下变大变小都一样）
+      const axisPx = GIZMO_AXIS * (this.gizmo.getBoundingClientRect().width / 100);
+      const k = Math.PI / (2 * axisPx);
+      this.yaw += dx * k;
+      this.pitch = Math.max(-1.55, Math.min(1.55, this.pitch + dy * k));
       this.draw();
     });
     const end = (e) => {
@@ -1056,6 +1194,21 @@ export class View {
 
   // ---- 相机：绕 target 转，左键拖转、右键拖平移、滚轮缩放
 
+  // 透视：近大远小（默认）；正交：远近一样大，平行线不汇聚（等轴图那种）。正交的画面大小跟着缩放距离走，
+  // 和透视下在目标点那个深度看到的范围一样大，切换时画面不会突然变大变小
+  projection() {
+    const m = mat4.create(), aspect = this.canvas.clientWidth / Math.max(1, this.canvas.clientHeight);
+    if (!this.ortho) return mat4.perspective(m, FOV, aspect, 0.1, 20000);
+    const h = this.distance * Math.tan(FOV / 2), w = h * aspect;
+    return mat4.ortho(m, -w, w, -h, h, -20000, 20000);
+  }
+
+  setOrtho(on) {
+    this.ortho = !!on;
+    if (this.renderer) this.renderer.projMatrix = this.projection();
+    this.draw();
+  }
+
   viewMatrix() {
     const view = mat4.create();
     mat4.translate(view, view, [0, 0, -this.distance]);
@@ -1065,7 +1218,9 @@ export class View {
     return view;
   }
 
-  draw() {
+  // passive：自己刷新的（呼吸灯），不算用户在操作
+  draw(passive = false) {
+    if (!passive) this.lastInput = performance.now();
     if (!this.renderer || this.frame) return;
     this.frame = requestAnimationFrame(() => {
       this.frame = 0;
@@ -1075,6 +1230,8 @@ export class View {
 
   renderNow() {
     if (!this.renderer) return;
+    this.renderer.projMatrix = this.projection(); // 正交的大小跟着缩放变，每帧算一次（很便宜）
+    this.trackFrame();
     const view = this.viewMatrix();
     if (this.envMesh) {
       const r = this.renderer;
@@ -1115,7 +1272,7 @@ export class View {
       gl.enable(gl.DEPTH_TEST);
       // 下一口气：约 30 帧 / 秒就够看着顺，不用每帧都重画整个结构
       clearTimeout(this.breath);
-      this.breath = setTimeout(() => this.draw(), 33);
+      this.breath = setTimeout(() => this.draw(true), 33);
     }
     if (this.selected) this.renderer.drawOutline(view, this.selected);
     this.placeMarkers(view);
@@ -1339,11 +1496,13 @@ export class View {
     if (!this.scene) return null;
     const rect = this.canvas.getBoundingClientRect();
     const nx = ((clientX - rect.left) / rect.width) * 2 - 1, ny = 1 - ((clientY - rect.top) / rect.height) * 2;
-    const inv = mat4.invert(mat4.create(), this.viewMatrix());
-    const t = Math.tan(FOV / 2), aspect = rect.width / rect.height;
-    const origin = vec3.transformMat4(vec3.create(), [0, 0, 0], inv);
-    const far = vec3.transformMat4(vec3.create(), [nx * t * aspect, ny * t, -1], inv);
+    // 屏幕上这一点在近平面、远平面上各是哪，连起来就是射线（正交投影时射线互相平行，透视时从相机发散）
+    const inv = mat4.invert(mat4.create(), mat4.multiply(mat4.create(), this.projection(), this.viewMatrix()));
+    const unproject = (z) => { const p = vec4.transformMat4(vec4.create(), [nx, ny, z, 1], inv); return [p[0] / p[3], p[1] / p[3], p[2] / p[3]]; };
+    let origin = unproject(-1);
+    const far = unproject(1);
     const dir = vec3.normalize(vec3.create(), vec3.sub(vec3.create(), far, origin));
+    if (!this.ortho) origin = vec3.transformMat4(vec3.create(), [0, 0, 0], mat4.invert(mat4.create(), this.viewMatrix())); // 透视：从相机出发
     const size = this.scene.box.size;
 
     // 先把射线推到包围盒边上（相机在盒子外面时省掉前面那一大段空走）

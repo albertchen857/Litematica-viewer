@@ -1,7 +1,7 @@
 // 网页版查看器的界面层：读文件 → 统计 → 渲染 → 右侧信息栏 + 工具。
 // 算法都在别的模块里，这里只负责把它们接起来、把结果画到页面上。
 
-import { parse, bounds, EXTENSIONS, fromPayload, isAir, RAW_TAG } from "./formats.js";
+import { parse, bounds, EXTENSIONS, fromPayload, isAir, RAW_TAG, prepareFormat } from "./formats.js";
 import { analyse, totalRows, unitParts, materialOf } from "./analysis.js";
 import { SAVE_FORMATS, exportText, download, compoundWith, toTag, writeLitematic } from "./writers.js";
 import { exportWorld } from "./world.js";
@@ -97,6 +97,7 @@ function applyLang() {
   document.querySelectorAll("[data-ui]").forEach((el) => (el.textContent = ui(el.dataset.ui)));
   $("picker-search").placeholder = t("picker.search");
   $("url-input").placeholder = t("url.placeholder");
+  if (view) setOrtho(view.ortho); // 按钮提示跟着换语言
   renderBatch(); // 全面替换那几行的「原方块 / 换成」提示字
   $("lang").value = lang;
   document.title = t("pageTitle");
@@ -135,7 +136,10 @@ async function openFile(file) {
   progress(0, t("reading"));
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
-    load(parse(file.name, bytes), { pristine: true });
+    await prepareFormat(file.name);
+    const structure = parse(file.name, bytes);
+    load(structure, { pristine: true });
+    warnUnknownLegacy(structure);
     sourceUrl = null;
     syncUrl();
     window.LVRecent?.save(file).catch(() => {}); // 记成「上次的文件」，下次进来一键再开
@@ -173,7 +177,14 @@ function urlFileName(res, url) {
 }
 
 // 没有扩展名（或者扩展名不对）的：三种格式挨个试
-function parseAnyFormat(name, bytes) {
+// 老 .schematic 里对照表认不出的数字 ID（模组方块之类）：当空气处理，提示一下有哪些
+function warnUnknownLegacy(structure) {
+  const unknown = structure.unknownLegacy || [];
+  if (unknown.length) toast(t("legacy.unknown", unknown.length, unknown.slice(0, 8).join(", ")), { undo: false });
+}
+
+async function parseAnyFormat(name, bytes) {
+  await prepareFormat(".schematic"); // 挨个试的时候也可能是老格式
   const ext = name.slice(name.lastIndexOf(".")).toLowerCase();
   if (EXTENSIONS.includes(ext)) return { structure: parse(name, bytes), name };
   const stem = name.includes(".") ? name.slice(0, name.lastIndexOf(".")) : name;
@@ -217,9 +228,10 @@ async function openUrl(raw) {
     const bytes = new Uint8Array(got);
     let at = 0;
     for (const p of parts) { bytes.set(p, at); at += p.length; }
-    const { structure, name } = parseAnyFormat(urlFileName(res, url), bytes);
+    const { structure, name } = await parseAnyFormat(urlFileName(res, url), bytes);
     progress(0, t("reading"));
     load(structure, { pristine: true });
+    warnUnknownLegacy(structure);
     sourceUrl = url;
     syncUrl(); // 渲染的是网上的文件：地址栏带上 ?file=，这个链接分享出去别人打开就是同一个投影
     $("url-input").value = "";
@@ -287,6 +299,7 @@ async function draw(structure, resetCamera, label = t("building")) {
   progress(null);
   $("hint").hidden = false;
   $("gizmo").removeAttribute("hidden"); // SVG 没有 .hidden 属性，只能删特性
+  $("proj-toggle").hidden = false;
 }
 
 let layerMode = "all"; // all 全部 / range 范围 / single 单层
@@ -1324,7 +1337,17 @@ function rawNbtText(hit) {
   const r = at.region, raw = r.raw, p = r.blocks[at.index], parts = [];
   const ri = raw ? p - raw.offset : -1;
   const rawPalette = raw && ri >= 0 && ri < raw.palette.length && raw.palette[ri];
-  const name = { litematic: "BlockStatePalette", nbt: "palette", mcstructure: "block_palette" }[raw?.kind] || "block";
+  const name = { litematic: "BlockStatePalette", nbt: "palette", mcstructure: "block_palette", schem: "Palette" }[raw?.kind] || "block";
+  if (raw?.kind === "schematic") {
+    // 老格式：Blocks / Data 两个字节数组，下标 (y * Length + z) * Width + x
+    const [W, , L] = raw.size, [x, y, z] = at.local, i = (y * L + z) * W + x;
+    let id = raw.ids[i] & 0xff;
+    if (raw.add) id |= (i & 1 ? (raw.add[i >> 1] & 0xf0) << 4 : (raw.add[i >> 1] & 0x0f) << 8);
+    parts.push(`// Blocks[${i}] / Data[${i}]\n{ id: ${id}, data: ${raw.datas[i] & 0x0f} }  →  ${snbt({ Name: at.block.id, ...(Object.keys(at.block.props).length ? { Properties: at.block.props } : {}) })}`);
+    const be0 = r.blockEntities.get(at.local.join(","));
+    if (be0) parts.push(`// TileEntities\n${snbt(be0)}`);
+    return parts.join("\n\n");
+  }
   if (rawPalette) parts.push(`// ${name}[${ri}]\n${snbt(rawPalette)}`);
   else parts.push(`// ${t("nbt.edited")}\n${snbt({ Name: at.block.id, ...(Object.keys(at.block.props).length ? { Properties: at.block.props } : {}) })}`);
   const be = r.blockEntities.get(at.local.join(","));
@@ -1526,6 +1549,14 @@ async function saveWorld() {
   }
 }
 
+function setOrtho(on) {
+  view.setOrtho(on);
+  const b = $("proj-toggle");
+  b.classList.toggle("is-ortho", !!on);
+  b.title = t(on ? "proj.ortho" : "proj.persp");
+  b.setAttribute("aria-label", b.title);
+}
+
 function setMoveSpeed(v) {
   v = Math.max(2, Math.min(64, +v || 12));
   view.moveSpeed = v;
@@ -1626,6 +1657,7 @@ function bindTools() {
   $("batch-add").addEventListener("click", () => { batch.push(newRow()); renderBatch(); });
   $("batch-run").addEventListener("click", runBatch);
 
+  $("proj-toggle").addEventListener("click", () => { setOrtho(!view.ortho); setPref("ortho", view.ortho); });
   $("thumb-iso").addEventListener("click", () => { thumbMode = "iso"; runThumb(); });
   $("thumb-view").addEventListener("click", () => { thumbMode = "view"; runThumb(); });
   $("kind-outline").addEventListener("change", (e) => { setPref("hiddenOutline", e.target.checked); view.setHiddenOutline(e.target.checked); });
@@ -1745,6 +1777,7 @@ async function main() {
   restorePrefs();
   setMoveSpeed(loadPrefs().moveSpeed || 12);
   setEnvironment(loadPrefs().env || ""); // 默认关闭
+  setOrtho(!!loadPrefs().ortho); // 透视 / 正交：记住上次的
   const hiddenOutline = loadPrefs().hiddenOutline !== false; // 隐藏的方块留灰边框：默认留
   $("kind-outline").checked = hiddenOutline;
   view.setHiddenOutline(hiddenOutline);

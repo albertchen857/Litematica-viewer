@@ -1,8 +1,10 @@
-"""三种结构文件的读写，全部进出 model.Structure。
+"""结构文件的读写，全部进出 model.Structure。
 
     .litematic    Litematica 模组       gzip + 大端 NBT，方块用位压缩存，交给 litemapy 处理
     .nbt          Java 原版结构方块      gzip + 大端 NBT，一个方块一条记录
     .mcstructure  基岩版结构方块         不压缩 + 小端 NBT，索引数组按 ZYX 排
+    .schem        WorldEdit / Sponge v1–v3  gzip + 大端 NBT，调色板 + varint 字节流（能读能写，写 v2）
+    .schematic    MCEdit / 老 WorldEdit  1.12 及以前，数字 ID（只读，见 legacy.py）
 
 格式细节依据 minecraft.wiki 的 Structure file / Bedrock level format 条目。
 基岩版索引换算是 ``index = SZ*SY*X + SZ*Y + Z``，值 -1 表示结构空位（读进来当空气）。
@@ -13,20 +15,24 @@ import os
 import amulet_nbt as nbt
 import numpy as np
 
-from . import blockmap
+from . import blockmap, legacy
 from .model import AIR, Block, Region, Structure, region_from_indices
 
 LITEMATIC = "litematic"
 JAVA_NBT = "nbt"
 MCSTRUCTURE = "mcstructure"
+SCHEM = "schem"
+SCHEMATIC = "schematic"
 
-EXTENSIONS = {".litematic": LITEMATIC, ".nbt": JAVA_NBT, ".mcstructure": MCSTRUCTURE}
+EXTENSIONS = {".litematic": LITEMATIC, ".nbt": JAVA_NBT, ".mcstructure": MCSTRUCTURE,
+              ".schem": SCHEM, ".schematic": SCHEMATIC}
 
 FILE_TYPES = [
-    ("All supported", "*.litematic *.nbt *.mcstructure"),
+    ("All supported", "*.litematic *.nbt *.mcstructure *.schem *.schematic"),
     ("Litematica", "*.litematic"),
     ("Java structure", "*.nbt"),
     ("Bedrock structure", "*.mcstructure"),
+    ("WorldEdit", "*.schem *.schematic"),
     ("All files", "*.*"),
 ]
 
@@ -575,8 +581,219 @@ def flatten_regions(structure: Structure) -> Region:
     return merged
 
 
-_LOADERS = {LITEMATIC: _load_litematic, JAVA_NBT: _load_java_nbt, MCSTRUCTURE: _load_mcstructure}
-_SAVERS = {LITEMATIC: _save_litematic, JAVA_NBT: _save_java_nbt, MCSTRUCTURE: _save_mcstructure}
+# --------------------------------------------------------------------------- .schem（WorldEdit / Sponge v1–v3）
+
+def _varints(data, count: int) -> np.ndarray:
+    """varint 字节流 → 调色板下标（每个数 7 位一组，最高位 1 表示后面还有）。"""
+    raw = np.asarray(data, dtype=np.int16).astype(np.uint8)
+    if raw.size and not (raw & 0x80).any():          # 调色板不到 128 种：一个字节一个数，直接用
+        return raw[:count].astype(np.int32)
+    out = np.zeros(count, dtype=np.int32)
+    i = p = 0
+    n = raw.size
+    while i < count and p < n:
+        v = shift = 0
+        while True:
+            b = int(raw[p])
+            p += 1
+            v |= (b & 0x7F) << shift
+            shift += 7
+            if not b & 0x80 or p >= n:
+                break
+        out[i] = v
+        i += 1
+    return out
+
+
+def _relative_pos(pos, size, offsets):
+    """实体坐标：规范是相对结构；有的工具写的是世界坐标，落在结构外面就试着减掉 offset。"""
+    if pos is None or len(pos) < 3:
+        return None
+    pos = [float(v) for v in pos[:3]]
+
+    def inside(p):
+        return all(-1 <= v <= size[a] + 1 for a, v in enumerate(p))
+
+    if inside(pos):
+        return pos
+    for off in offsets:
+        if off is not None:
+            p = [v - off[a] for a, v in enumerate(pos)]
+            if inside(p):
+                return p
+    return pos
+
+
+def _load_schem(path: str) -> Structure:
+    root = to_python(_read_nbt(path, little_endian=False).tag)
+    s = root["Schematic"] if isinstance(root.get("Schematic"), dict) else root
+    version = int(s.get("Version", 1))
+    size = [int(s.get(k, 0)) & 0xFFFF for k in ("Width", "Height", "Length")]
+    w, h, l = size
+    box = s.get("Blocks", {}) if version >= 3 else s
+    palette_map = box.get("Palette", {})
+    ordered = [legacy.parse_state(name) for name, _ in sorted(palette_map.items(), key=lambda kv: int(kv[1]))]
+    data = box.get("Data", box.get("BlockData", s.get("BlockData", [])))
+    raw = _varints(data, w * h * l)
+    # 下标 (y * Length + z) * Width + x → numpy (x, y, z)
+    flat = np.zeros(w * h * l, dtype=np.int32)
+    flat[: raw.size] = raw
+    lookup = np.zeros(max(int(v) for v in palette_map.values()) + 1 if palette_map else 1, dtype=np.int32)
+    for name, i in palette_map.items():
+        lookup[int(i)] = int(i) + 1                       # +1：0 号让给空气
+    indices = lookup[np.clip(flat, 0, lookup.size - 1)].reshape(h, l, w).transpose(2, 0, 1)
+    palette = [AIR] + [None] * (lookup.size)
+    for name, i in palette_map.items():
+        palette[int(i) + 1] = legacy.parse_state(name)
+    palette = [b if b is not None else AIR for b in palette]
+
+    block_entities = {}
+    for be in box.get("BlockEntities", s.get("BlockEntities", s.get("TileEntities", []))):
+        pos = be.get("Pos")
+        if pos is None or len(pos) < 3:
+            continue
+        content = dict(be.get("Data", be))
+        content.pop("Pos", None)
+        content["id"] = be.get("Id", be.get("id"))
+        content.pop("Id", None)
+        block_entities[tuple(int(v) for v in pos[:3])] = content
+
+    meta = s.get("Metadata", {}) or {}
+    we = [meta.get(k) for k in ("WEOffsetX", "WEOffsetY", "WEOffsetZ")]
+    we = we if all(v is not None for v in we) else None
+    entities = []
+    for e in s.get("Entities", []):
+        nbt_data = dict(e.get("Data", e))
+        nbt_data["id"] = e.get("Id", e.get("id", "minecraft:unknown"))
+        entities.append({"id": str(nbt_data["id"]), "nbt": nbt_data,
+                         "pos": _relative_pos(e.get("Pos"), size, [s.get("Offset"), we])})
+
+    data_version = int(s.get("DataVersion", 3953) or 3953)
+    region = region_from_indices("schematic", indices, palette, block_entities=block_entities, entities=entities)
+    return Structure(
+        regions=[region], name=str(meta.get("Name") or os.path.splitext(os.path.basename(path))[0]),
+        author=str(meta.get("Author", "")), source_format=SCHEM, version_label=f"Sponge v{version}",
+        meta={"DataVersion": data_version},
+    )
+
+
+def _save_schem(structure: Structure, path: str, report=None) -> None:
+    """写 Sponge Schematic v2（WorldEdit / FAWE / Axiom 都能读）。"""
+    region = flatten_regions(structure)
+    indices = np.asarray(region.indices)
+    w, h, l = indices.shape
+    used = sorted(set(int(v) for v in np.unique(indices)) | {0})
+    remap = np.zeros(len(region.palette), dtype=np.int32)
+    names = []
+    for new, old in enumerate(used):
+        remap[old] = new
+        b = region.palette[old] if old else AIR
+        props = ",".join(f"{k}={v}" for k, v in sorted(b.properties.items()))
+        names.append(b.id + (f"[{props}]" if props else ""))
+    flat = remap[indices].transpose(1, 2, 0).reshape(-1)    # (x, y, z) → 下标 (y * Length + z) * Width + x
+    out = bytearray()
+    for v in flat.tolist():
+        while True:
+            b = v & 0x7F
+            v >>= 7
+            if v:
+                out.append(b | 0x80)
+            else:
+                out.append(b)
+                break
+
+    block_entities = []
+    for (x, y, z), data in region.block_entities.items():
+        content = {k: v for k, v in (data or {}).items() if k not in ("x", "y", "z", "id")}
+        tag = nbt.CompoundTag({k: _from_python(v) for k, v in content.items()})
+        tag["Pos"] = nbt.IntArrayTag([x, y, z])
+        tag["Id"] = nbt.StringTag(str((data or {}).get("id") or region.palette[int(indices[x, y, z])].id))
+        block_entities.append(tag)
+    entities = []
+    for entity in region.entities:
+        content = {k: v for k, v in (entity.get("nbt") or {}).items() if k not in ("id", "identifier")}
+        tag = nbt.CompoundTag({k: _from_python(v) for k, v in content.items()})
+        tag["Pos"] = nbt.ListTag([nbt.DoubleTag(float(v)) for v in _entity_position(entity)], 6)
+        tag["Id"] = nbt.StringTag(str((entity.get("nbt") or {}).get("id") or entity.get("id") or "minecraft:unknown"))
+        entities.append(tag)
+
+    root = nbt.CompoundTag({
+        "Version": nbt.IntTag(2),
+        "DataVersion": nbt.IntTag(int(structure.meta.get("DataVersion") or structure.meta.get("mc_version") or 3953)),
+        "Width": nbt.ShortTag(w), "Height": nbt.ShortTag(h), "Length": nbt.ShortTag(l),
+        "Offset": nbt.IntArrayTag([0, 0, 0]),
+        "Metadata": nbt.CompoundTag({"Name": nbt.StringTag(structure.name or ""), "Author": nbt.StringTag(structure.author or "")}),
+        "PaletteMax": nbt.IntTag(len(names)),
+        "Palette": nbt.CompoundTag({name: nbt.IntTag(i) for i, name in enumerate(names)}),
+        "BlockData": nbt.ByteArrayTag(np.frombuffer(bytes(out), dtype=np.int8)),
+        "BlockEntities": nbt.ListTag(block_entities, 10),
+        "Entities": nbt.ListTag(entities, 10),
+    })
+    nbt.NamedTag(root, "Schematic").save_to(path, compressed=True, little_endian=False)
+
+
+# --------------------------------------------------------------------------- .schematic（MCEdit / 老 WorldEdit，1.12 及以前）
+
+def _load_schematic(path: str) -> Structure:
+    s = to_python(_read_nbt(path, little_endian=False).tag)
+    if isinstance(s.get("Schematic"), dict):
+        s = s["Schematic"]
+    w, h, l = (int(s.get(k, 0)) & 0xFFFF for k in ("Width", "Height", "Length"))
+    ids = np.asarray(s.get("Blocks", []), dtype=np.int16).astype(np.int32) & 0xFF
+    datas = np.asarray(s.get("Data", []), dtype=np.int16).astype(np.int32) & 0x0F
+    add = s.get("AddBlocks")
+    if add:   # ID 超过 255 的高 4 位：两格共用一个字节，偶数格取低 4 位、奇数格取高 4 位
+        add = np.asarray(add, dtype=np.int16).astype(np.int32) & 0xFF
+        nib = np.zeros(ids.size, dtype=np.int32)
+        nib[0::2] = (add[: (ids.size + 1) // 2] & 0x0F)[: nib[0::2].size]
+        nib[1::2] = ((add >> 4) & 0x0F)[: nib[1::2].size]
+        ids = ids | (nib << 8)
+    keys = ids * 16 + datas
+    unique, inverse = np.unique(keys, return_inverse=True)
+    unknown = set()
+    palette = [legacy.legacy_block(int(k) // 16, int(k) % 16, unknown) for k in unique]
+    indices = inverse.astype(np.int32).reshape(h, l, w).transpose(2, 0, 1).copy()
+    # 空气挪到 0 号
+    air = next((i for i, b in enumerate(palette) if b.is_air), None)
+    if air is None:
+        palette = [AIR] + palette
+        indices += 1
+    elif air != 0:
+        palette[0], palette[air] = palette[air], palette[0]
+        a, z0 = indices == air, indices == 0
+        indices[a], indices[z0] = 0, air
+    palette = legacy.fix_neighbors(indices, palette)
+
+    def fix_items(items):
+        if not isinstance(items, list):
+            return items
+        return [{**it, "id": legacy.legacy_item(it.get("id"), it.get("Damage", 0))} for it in items if isinstance(it, dict)]
+
+    block_entities = {}
+    for te in s.get("TileEntities", []):
+        if all(k in te for k in ("x", "y", "z")):
+            x, y, z = int(te["x"]), int(te["y"]), int(te["z"])
+            if not (0 <= x < w and 0 <= y < h and 0 <= z < l):
+                continue
+            # 老版本的方块实体 id 是 "Chest"、"Trap" 这种，换成那一格方块的名字
+            block_entities[(x, y, z)] = {**te, "id": palette[int(indices[x, y, z])].id, "Items": fix_items(te.get("Items"))}
+    origin = [s.get(k) for k in ("WEOriginX", "WEOriginY", "WEOriginZ")]
+    origin = origin if all(v is not None for v in origin) else None
+    entities = [{"id": str(e.get("id", "minecraft:unknown")), "nbt": e, "pos": _relative_pos(e.get("Pos"), (w, h, l), [origin])}
+                for e in s.get("Entities", [])]
+    if unknown:
+        print(f"[schematic] 认不出的数字 ID（当空气）: {sorted(unknown)[:20]}")
+    region = region_from_indices("schematic", indices, palette, block_entities=block_entities, entities=entities)
+    return Structure(
+        regions=[region], name=os.path.splitext(os.path.basename(path))[0],
+        source_format=SCHEMATIC, version_label=f"MCEdit {s.get('Materials', 'Alpha')}",
+        meta={"DataVersion": 3953, "unknown_legacy": sorted(unknown)},   # 名字已经换成现在的了
+    )
+
+
+_LOADERS = {LITEMATIC: _load_litematic, JAVA_NBT: _load_java_nbt, MCSTRUCTURE: _load_mcstructure,
+            SCHEM: _load_schem, SCHEMATIC: _load_schematic}
+_SAVERS = {LITEMATIC: _save_litematic, JAVA_NBT: _save_java_nbt, MCSTRUCTURE: _save_mcstructure, SCHEM: _save_schem}
 
 
 def load(path: str) -> Structure:

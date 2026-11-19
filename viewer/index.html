@@ -55,7 +55,7 @@
   <span class="bar-file" id="bar-file"></span>
   <div class="bar-actions">
     <label class="btn btn-accent" id="open-btn">
-      <input type="file" id="file-input" accept=".litematic,.nbt,.mcstructure" hidden>
+      <input type="file" id="file-input" accept=".litematic,.nbt,.mcstructure,.schem,.schematic" hidden>
       <span data-t="open">打开文件</span>
     </label>
     <!-- 导出材料表 / 分类导出（同桌面版「数据分析」菜单），转换文件类型：鼠标放上去出下拉框。
@@ -76,6 +76,7 @@
           <button type="button" role="menuitem" data-ext=".litematic"><b>.litematic</b><span data-t="fmt.litematic">Litematica 投影</span></button>
           <button type="button" role="menuitem" data-ext=".nbt"><b>.nbt</b><span data-t="fmt.nbt">结构方块（Java 版）</span></button>
           <button type="button" role="menuitem" data-ext=".mcstructure"><b>.mcstructure</b><span data-t="fmt.mcstructure">结构（基岩版）</span></button>
+          <button type="button" role="menuitem" data-ext=".schem"><b>.schem</b><span data-t="fmt.schem">WorldEdit 剪贴板</span></button>
           <!-- 同桌面版「导出世界」（script/lv/world.py）：zip 里一个存档文件夹，解压进 .minecraft/saves 就能进 -->
           <button type="button" role="menuitem" data-ext="world"><b>.zip</b><span data-t="fmt.world">存档（虚空世界）</span></button>
           <!-- 换游戏版本：同桌面版「功能 → 转换到 …」，改 .litematic 的 Version，另存成 名字_vN.litematic -->
@@ -149,7 +150,7 @@
     <div class="empty" id="empty">
       <div class="empty-icon" aria-hidden="true">▼</div>
       <p class="empty-title" data-t="dropTitle">把投影文件拖到这里</p>
-      <p class="empty-sub"><span data-t="supports">支持</span> <code>.litematic</code> · <code>.nbt</code> · <code>.mcstructure</code></p>
+      <p class="empty-sub"><span data-t="supports">支持</span> <code>.litematic</code> · <code>.nbt</code> · <code>.mcstructure</code> · <code>.schem</code> · <code>.schematic</code></p>
       <!-- 中间这块也放一个打开按钮（和顶栏那个是同一个文件框） -->
       <label class="btn btn-accent empty-open" for="file-input"><span data-t="open">打开文件</span></label>
       <!-- 从网址打开：浏览器直接去下（对方网站要允许跨域），也可以把别的标签页里的链接拖进来 -->
@@ -192,6 +193,8 @@
 
     <!-- 右上角轴向面板（同 Blender）：跟着视角转，点端点转到从那一面看 -->
     <svg class="gizmo" id="gizmo" viewBox="0 0 100 100" aria-label="view axes" hidden></svg>
+    <!-- 透视 / 正交（等轴）切换：图标画的是现在的模式，点一下换成另一种 -->
+    <button class="proj-toggle" id="proj-toggle" type="button" hidden><svg class="proj-icon proj-persp" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10l3 12H4z"/><path d="M7 7l-3 12M17 7l3 12M9.5 11h5M8.5 15h7"/></svg><svg class="proj-icon proj-ortho" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/></svg></button>
 
     <!-- 隐藏 / 高亮了哪些种类方块，一键恢复；隐藏的方块要不要留灰边框 -->
     <div class="kind-bar" id="kind-bar" hidden>

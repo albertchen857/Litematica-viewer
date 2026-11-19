@@ -28,8 +28,10 @@ QQ Discussion Group：1044260630
 | `.litematic` | Litematica mod | ✅ | ✅ |
 | `.nbt` | Java Edition structure block | ✅ | ✅ |
 | `.mcstructure` | Bedrock Edition structure block | ✅ | ✅ |
+| `.schem` | WorldEdit / FAWE (Sponge v1–v3) | ✅ | ✅ (v2) |
+| `.schematic` | MCEdit / old WorldEdit (1.12 and earlier, numeric IDs) | ✅ | — |
 
-All three are converted to one internal model on import, so **every feature works on
+All of them are converted to one internal model on import, so **every feature works on
 every format**, and you can convert between them via `Data Analysis → Save as`.
 
 > A note on conversion: Java and Bedrock do not name blocks and block states

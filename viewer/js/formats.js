@@ -1,5 +1,7 @@
 // 三种结构文件 → 统一模型。和桌面版 script/lv/model.py + formats.py 是同一套思路：
 //
+// 支持 .litematic / .nbt / .mcstructure，以及 WorldEdit 的 .schem（Sponge v1–v3）和老 .schematic（MCEdit，数字 ID）。
+//
 //   Structure { name, author, description, source, version, declared, regions: [Region] }
 //   Region    { name, origin:[x,y,z], size:[sx,sy,sz], palette:[{id, props}], blocks, blockEntities, entities }
 //
@@ -9,6 +11,7 @@
 // NBT 解析用 deepslate 自带的 NbtFile.read（能自动认 gzip；基岩版要传 littleEndian）。
 
 import { bedrockToJava } from "./blockmap.js";
+import { loadLegacy, legacyBlock, legacyItem, parseState, fixLegacyNeighbors } from "./legacy.js";
 
 const AIR = { id: "minecraft:air", props: {} };
 const AIR_IDS = new Set(["minecraft:air", "minecraft:cave_air", "minecraft:void_air"]);
@@ -194,6 +197,122 @@ function stringify(states) {
   return out;
 }
 
+// ---------------------------------------------------------------- .schem（WorldEdit / Sponge Schematic v1–v3）
+//
+// v1 / v2：字段都在根上；v3：都在 Schematic 底下，方块在 Blocks { Palette, Data, BlockEntities } 里。
+// 方块数据是 varint 字节流，下标顺序 (y * Length + z) * Width + x。方块实体 Pos 是相对结构的格子坐标
+
+// varint 字节流 → 调色板下标数组（每个数 7 位一组，最高位 1 表示后面还有）
+function readVarints(bytes, count) {
+  const out = new Uint32Array(count);
+  let p = 0;
+  for (let i = 0; i < count && p < bytes.length; i++) {
+    let v = 0, shift = 0, b;
+    do { b = bytes[p++] & 0xff; v |= (b & 0x7f) << shift; shift += 7; } while (b & 0x80 && p < bytes.length);
+    out[i] = v >>> 0;
+  }
+  return out;
+}
+
+// 实体坐标：规范写的是相对结构，但有的工具写的是世界坐标；落在结构外面就试着减掉 offset
+function relativePos(pos, size, offsets) {
+  if (!Array.isArray(pos)) return null;
+  const inside = (p) => p.every((v, a) => v >= -1 && v <= size[a] + 1);
+  if (inside(pos)) return pos;
+  for (const o of offsets) {
+    if (!o) continue;
+    const p = pos.map((v, a) => v - o[a]);
+    if (inside(p)) return p;
+  }
+  return pos;
+}
+
+function readSchem(rootTag) {
+  const root = plain(rootTag);
+  const s = root.Schematic && typeof root.Schematic === "object" && !Array.isArray(root.Schematic) ? root.Schematic : root;
+  const version = s.Version || 1;
+  const size = [s.Width || 0, s.Height || 0, s.Length || 0].map((v) => v & 0xffff); // short：大于 32767 的会读成负数
+  const [W, H, L] = size;
+  const blockBox = version >= 3 ? s.Blocks || {} : s;
+  const paletteMap = blockBox.Palette || {};
+  const ordered = [];
+  for (const [state, i] of Object.entries(paletteMap)) ordered[i] = parseState(state);
+  const palette = [AIR, ...Array.from(ordered, (b) => b || AIR)];
+  const raw = readVarints(blockBox.Data || blockBox.BlockData || s.BlockData || [], W * H * L);
+  const blocks = new Uint32Array(W * H * L);
+  for (let y = 0, i = 0; y < H; y++) for (let z = 0; z < L; z++) for (let x = 0; x < W; x++, i++) {
+    blocks[x * H * L + y * L + z] = raw[i] + 1; // +1：0 号让给空气
+  }
+  const blockEntities = new Map();
+  for (const be of blockBox.BlockEntities || s.BlockEntities || s.TileEntities || []) {
+    const [x, y, z] = be.Pos || [];
+    if (x === undefined) continue;
+    // v3 的内容在 Data 里；v1 / v2 和 Pos、Id 平铺在一起
+    const data = { ...(be.Data || be), id: be.Id || be.id };
+    delete data.Pos; delete data.Id;
+    blockEntities.set(`${x},${y},${z}`, data);
+  }
+  const meta = s.Metadata || {};
+  const weOffset = ["WEOffsetX", "WEOffsetY", "WEOffsetZ"].every((k) => k in meta) ? [meta.WEOffsetX, meta.WEOffsetY, meta.WEOffsetZ] : null;
+  const entities = (s.Entities || []).map((e) => {
+    const nbt = { ...(e.Data || e), id: e.Id || e.id };
+    return { id: nbt.id || "minecraft:unknown", nbt, pos: relativePos(e.Pos, size, [s.Offset, weOffset]) };
+  });
+  return {
+    name: meta.Name || "", author: meta.Author || "", description: "", source: "schem", version: `v${version}`, declared: 0,
+    meta: { DataVersion: s.DataVersion || 3953, schem_version: version },
+    regions: [{ ...normalise({ name: "schematic", origin: [0, 0, 0], size, palette, blocks, blockEntities, entities }),
+      raw: { kind: "schem", palette: Object.keys(paletteMap).sort((a, b) => paletteMap[a] - paletteMap[b]), offset: 1 } }],
+  };
+}
+
+// ---------------------------------------------------------------- .schematic（MCEdit / WorldEdit 老格式，1.12 及以前）
+//
+// Blocks / Data 各一个字节一格（ID 超过 255 的高 4 位在 AddBlocks 里，两格共用一个字节），下标 (y * Length + z) * Width + x。
+// 数字 ID 用 resource/legacy.json 换成现在的名字，再按邻居补全楼梯拐角、栅栏连接这些（legacy.js）
+
+function readSchematic(rootTag, isOpaque) {
+  const s = plain(rootTag);
+  const size = [s.Width || 0, s.Height || 0, s.Length || 0].map((v) => v & 0xffff);
+  const [W, H, L] = size;
+  const ids = s.Blocks || [], datas = s.Data || [], add = s.AddBlocks || null;
+  const unknown = new Set();
+  const palette = [AIR], index = new Map([["0:0", 0]]);
+  const blocks = new Uint32Array(W * H * L);
+  for (let y = 0, i = 0; y < H; y++) for (let z = 0; z < L; z++) for (let x = 0; x < W; x++, i++) {
+    let id = ids[i] & 0xff;
+    if (add) id |= (i & 1 ? (add[i >> 1] & 0xf0) << 4 : (add[i >> 1] & 0x0f) << 8);
+    const key = `${id}:${datas[i] & 0x0f}`;
+    let p = index.get(key);
+    if (p === undefined) {
+      p = palette.length;
+      palette.push(legacyBlock(id, datas[i] & 0x0f, unknown));
+      index.set(key, p);
+    }
+    blocks[x * H * L + y * L + z] = p;
+  }
+  const region = normalise({ name: "schematic", origin: [0, 0, 0], size, palette, blocks, blockEntities: new Map(), entities: [] });
+  fixLegacyNeighbors(region, isOpaque);
+  // 原始 NBT 按钮：显示这一格原来的数字 ID 和数值
+  region.raw = { kind: "schematic", palette: [], offset: 0, ids, datas, add, size };
+  // 容器里的物品：老版本的物品 id 是数字（加 Damage 区分种类），换成名字
+  const fixItems = (list) => (Array.isArray(list) ? list.map((it) => ({ ...it, id: legacyItem(it.id, it.Damage || 0) })) : list);
+  for (const te of s.TileEntities || []) {
+    if (te.x < 0 || te.y < 0 || te.z < 0 || te.x >= W || te.y >= H || te.z >= L) continue;
+    // 老版本的方块实体 id 是 "Chest"、"Trap" 这种，换成那一格方块的名字
+    const block = region.palette[region.blocks[te.x * H * L + te.y * L + te.z]];
+    region.blockEntities.set(`${te.x},${te.y},${te.z}`, { ...te, id: block.id, Items: fixItems(te.Items) });
+  }
+  const origin = ["WEOriginX", "WEOriginY", "WEOriginZ"].every((k) => k in s) ? [s.WEOriginX, s.WEOriginY, s.WEOriginZ] : null;
+  region.entities = (s.Entities || []).map((e) => ({ id: e.id || "minecraft:unknown", nbt: e, pos: relativePos(e.Pos, size, [origin]) }));
+  return {
+    name: "", author: "", description: "", source: "schematic", version: s.Materials || "Alpha", declared: 0,
+    meta: { DataVersion: 3953 }, // 名字已经换成现在的了，按新版本写出去
+    unknownLegacy: [...unknown],
+    regions: [region],
+  };
+}
+
 // palette[0] 不是空气的话整体后移一位，保证「0 = 空气」这条约定
 function normalise(region) {
   if (!region.palette.length || !isAir(region.palette[0])) {
@@ -205,7 +324,14 @@ function normalise(region) {
 
 // ---------------------------------------------------------------- 入口
 
-export const EXTENSIONS = [".litematic", ".nbt", ".mcstructure"];
+export const EXTENSIONS = [".litematic", ".nbt", ".mcstructure", ".schem", ".schematic"];
+
+// 解析前要先准备的数据：老 .schematic 要数字 ID 对照表（异步加载一次）
+export async function prepareFormat(fileName) {
+  if (/\.schematic$/i.test(fileName)) await loadLegacy();
+}
+// 栅栏 / 玻璃板 / 墙会连上「完整不透明的方块」：用 opaque.js 那张表
+const isOpaqueBlock = (id) => typeof OPAQUE_BLOCKS !== "undefined" && OPAQUE_BLOCKS.has(id);
 
 export function parse(fileName, bytes) {
   const ext = fileName.slice(fileName.lastIndexOf(".")).toLowerCase();
@@ -215,6 +341,8 @@ export function parse(fileName, bytes) {
   if (ext === ".litematic") structure = readLitematic(read({}));
   else if (ext === ".nbt") structure = readJavaNbt(read({}));
   else if (ext === ".mcstructure") structure = readMcstructure(read({ littleEndian: true }));
+  else if (ext === ".schem") structure = readSchem(read({}));
+  else if (ext === ".schematic") structure = readSchematic(read({}), isOpaqueBlock);
   else throw new Error(`unsupported: ${ext}`);
   structure.name = structure.name || stem;
   structure.fileName = fileName;
