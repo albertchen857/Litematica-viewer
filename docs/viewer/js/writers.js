@@ -236,6 +236,54 @@ export function writeJavaNbt(structure) {
   return new NbtFile("", root, "gzip", false, undefined).write();
 }
 
+// ---------------------------------------------------------------- .schem（Sponge Schematic v2，同 _save_schem）
+//
+// WorldEdit / FAWE / Axiom 都能读 v2。方块数据是 varint 字节流，下标 (y * Length + z) * Width + x；
+// 尺寸是 short，单边超过 65535 格的结构写不进去（实际碰不到）
+
+export function writeSchem(structure) {
+  const { NbtInt, NbtShort, NbtString, NbtFile, NbtCompound, NbtByteArray, NbtIntArray } = D();
+  const region = flatten(structure);
+  const [W, H, L] = region.size;
+  const { palette, map } = compact(region);
+  // 调色板：「名字[属性]」→ 下标；0 号放空气（Sponge 习惯）
+  const name = (b) => b.id + (Object.keys(b.props).length ? `[${Object.entries(b.props).sort().map(([k, v]) => `${k}=${v}`).join(",")}]` : "");
+  const paletteTag = new NbtCompound();
+  palette.forEach((b, i) => paletteTag.set(name(b), new NbtInt(i)));
+  const bytes = [];
+  for (let y = 0; y < H; y++) for (let z = 0; z < L; z++) for (let x = 0; x < W; x++) {
+    let v = map[region.blocks[x * H * L + y * L + z]];
+    do { let b = v & 0x7f; v >>>= 7; if (v) b |= 0x80; bytes.push(b > 127 ? b - 256 : b); } while (v);
+  }
+  const blockEntities = [];
+  for (const [key, data] of region.blockEntities) {
+    const [x, y, z] = key.split(",").map(Number);
+    const block = region.palette[region.blocks[x * H * L + y * L + z]];
+    if (!block || isAir(block)) continue;
+    blockEntities.push(compoundWith(data, {
+      Pos: new NbtIntArray([x, y, z]), Id: new NbtString((data && data.id) || block.id),
+      id: undefined, x: undefined, y: undefined, z: undefined,
+    }));
+  }
+  const entities = region.entities.map((e) => compoundWith(e.nbt, {
+    Pos: doubles(entityPos(e)), Id: new NbtString((e.nbt && e.nbt.id) || e.id || "minecraft:unknown"), id: undefined, identifier: undefined,
+  }));
+  const meta = structure.meta || {};
+  const root = compoundWith(null, {
+    Version: new NbtInt(2),
+    DataVersion: new NbtInt(+meta.DataVersion || +meta.mc_version || 3953),
+    Width: new NbtShort(W), Height: new NbtShort(H), Length: new NbtShort(L),
+    Offset: new NbtIntArray([0, 0, 0]),
+    Metadata: compoundWith(null, { Name: new NbtString(structure.name || ""), Author: new NbtString(structure.author || "") }),
+    PaletteMax: new NbtInt(palette.length),
+    Palette: paletteTag,
+    BlockData: new NbtByteArray(bytes),
+    BlockEntities: compounds(blockEntities),
+    Entities: compounds(entities),
+  });
+  return new NbtFile("Schematic", root, "gzip", false, undefined).write();
+}
+
 // ---------------------------------------------------------------- .mcstructure（同 _save_mcstructure）
 
 // report：Set，收集状态没有对应规则的方块 id，界面上提示用户自查
@@ -330,6 +378,7 @@ export const SAVE_FORMATS = {
   ".litematic": (s) => ({ bytes: writeLitematic(s), report: new Set() }),
   ".nbt": (s) => ({ bytes: writeJavaNbt(s), report: new Set() }),
   ".mcstructure": (s) => { const report = new Set(); return { bytes: writeMcstructure(s, report), report }; },
+  ".schem": (s) => ({ bytes: writeSchem(s), report: new Set() }),
 };
 
 export function download(name, data, type = "application/octet-stream") {

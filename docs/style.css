@@ -417,6 +417,15 @@ html[data-lang="en"] .ba-en-main { display: block; }
 .drop-files li small { opacity: 0.8; }
 .drop-files li.is-bad { background: var(--tt); }
 .drop-note { margin: var(--s3) var(--s1) 0; color: var(--bg); font-size: 14px; }
+/* 从网址打开：拖拽框下面一行输入框 + 按钮 */
+.url-open { display: flex; gap: var(--s2); margin-top: var(--s3); }
+.url-open input {
+  flex: 1; min-width: 0; height: 44px; padding: 0 var(--s3); border: 0; border-radius: var(--r);
+  background: var(--bg); color: var(--tt); font: 15px/1 ui-monospace, Consolas, monospace;
+}
+.url-open input:focus-visible { outline: 3px solid var(--pc); outline-offset: 0; }
+.url-open .btn { flex: none; height: 44px; }
+.drop-card[data-disable="true"] .url-open { display: none; }
 @keyframes pop { from { opacity: 0; transform: scale(0.6); } }
 
 /* 关掉状态（data-disable="true"）：缩成一条灰色横条，不响应、不动、写「未开放」 */

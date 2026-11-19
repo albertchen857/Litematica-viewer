@@ -24,9 +24,9 @@ let lang = FROM_URL[new URLSearchParams(location.search).get("lang")] || "en";
 const t = (zh, en, tw = zh) => (lang === "en" ? en : lang === "tw" ? tw : zh);
 const SITE = "https://lite-viewer.com/";
 const DESCRIPTIONS = {
-  "en": "Free, open-source Minecraft schematic viewer: material lists in boxes and stacks, textured 3D view and format conversion for .litematic, .nbt and .mcstructure.",
-  "zh": "免费开源的 Minecraft 投影查看器：一秒算出材料清单（盒/组/个），贴图 3D 渲染，.litematic / .nbt / .mcstructure 互转。",
-  "tw": "免費開源的 Minecraft 投影檢視器：一秒算出材料清單（盒/組/個），貼圖 3D 渲染，.litematic / .nbt / .mcstructure 互轉。"
+  "en": "Free, open-source Minecraft schematic viewer: material lists in boxes and stacks, textured 3D view and conversion for .litematic, .nbt, .mcstructure and .schem.",
+  "zh": "免费开源的 Minecraft 投影查看器：一秒算出材料清单（盒/组/个），贴图 3D 渲染，.litematic / .nbt / .mcstructure / .schem 互转。",
+  "tw": "免費開源的 Minecraft 投影檢視器：一秒算出材料清單（盒/組/個），貼圖 3D 渲染，.litematic / .nbt / .mcstructure / .schem 互轉。"
 };
 
 function applyLang() {
@@ -36,6 +36,7 @@ function applyLang() {
     el.innerHTML = lang === "en" ? el.dataset.en : lang === "tw" ? (el.dataset.tw || el.dataset.zh) : el.dataset.zh;
   });
   $("lang-switch").value = URL_CODE[lang];
+  document.querySelectorAll("[data-ph-en]").forEach((el) => { el.placeholder = el.dataset[`ph${lang[0].toUpperCase()}${lang.slice(1)}`] || el.dataset.phEn; });
   // Banner 标题：简体 = 中文 + 英文，繁体 = 繁体中文 + 英文，英文 = 只有英文大标题（背景图固定 app_en.webp）
   document.querySelectorAll(".ba-zh .ch").forEach((ch) => {
     if (ch.dataset.zh === undefined) ch.dataset.zh = ch.textContent;
@@ -317,7 +318,7 @@ document.querySelectorAll(".tab").forEach((tab) =>
 
 const zone = $("dropzone");
 const input = $("file-input");
-const SUPPORTED = /\.(litematic|nbt|mcstructure)$/i;
+const SUPPORTED = /\.(litematic|nbt|mcstructure|schem|schematic)$/i;
 let dropped = []; // 记住拖进来的文件，切语言时按新语言重画
 
 function renderDrop() {
@@ -341,8 +342,8 @@ function renderDrop() {
     })
   );
   note.textContent = dropped.length
-    ? t("这个格式打不开，换一个 .litematic / .nbt / .mcstructure 试试。",
-        "That format can't be opened — try a .litematic / .nbt / .mcstructure.", "這個格式打不開，換一個 .litematic / .nbt / .mcstructure 試試。")
+    ? t("这个格式打不开，换一个 .litematic / .nbt / .mcstructure / .schem / .schematic 试试。",
+        "That format can't be opened — try a .litematic / .nbt / .mcstructure / .schem / .schematic.", "這個格式打不開，換一個 .litematic / .nbt / .mcstructure / .schem / .schematic 試試。")
     : t("文件只在你的浏览器里，不会上传到任何地方。", "Your file stays in your browser and is never uploaded.", "檔案只在你的瀏覽器裡，不會上傳到任何地方。");
 }
 
@@ -384,6 +385,16 @@ if (dropDisabled) {
     if (e.key === "Enter" || e.key === " ") { e.preventDefault(); input.click(); }
   });
   input.addEventListener("change", () => showFiles(input.files));
+  // 从网址打开：交给查看器的 ?file=（它负责下载、认格式、报错）
+  $("url-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const url = $("url-input").value.trim();
+    if (!/^https?:\/\//i.test(url)) {
+      $("drop-note").textContent = t("网址要以 http:// 或 https:// 开头。", "The link should start with http:// or https://.", "網址要以 http:// 或 https:// 開頭。");
+      return;
+    }
+    location.href = `viewer/?lang=${URL_CODE[lang]}&file=${encodeURIComponent(url)}`;
+  });
 }
 // 拖到页面别处松手时，浏览器默认会直接打开那个文件，这里拦掉
 window.addEventListener("dragover", (e) => e.preventDefault());

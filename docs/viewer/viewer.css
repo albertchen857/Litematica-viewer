@@ -169,6 +169,16 @@ code { font-family: var(--mono); }
 .gizmo text { font: 700 11px var(--sans); fill: #1b1b1b; text-anchor: middle; pointer-events: none; }
 .gizmo text.neg { opacity: 0; fill: #fff; font-size: 9px; }
 .gizmo-dot:hover text.neg { opacity: 1; }
+.proj-toggle {
+  position: absolute; right: 42px; top: 114px; z-index: 6; width: 32px; height: 32px; padding: 5px;
+  display: grid; place-items: center; border: 0; border-radius: 50%; cursor: pointer;
+  background: rgba(128, 128, 128, 0.22); color: var(--tt); transition: background 120ms;
+}
+.proj-toggle[hidden] { display: none; }
+.proj-toggle:hover { background: rgba(128, 128, 128, 0.38); }
+.proj-icon { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
+.proj-toggle .proj-ortho, .proj-toggle.is-ortho .proj-persp { display: none; }
+.proj-toggle.is-ortho .proj-ortho { display: block; }
 .kind-bar {
   position: absolute; right: 116px; top: 12px; z-index: 6; display: flex; align-items: center; gap: 8px;
   padding: 6px 6px 6px 12px; border-radius: var(--r); background: var(--card); font-size: 12px; color: var(--tt);

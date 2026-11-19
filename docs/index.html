@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title data-en="Litematica Viewer · Count your schematic's materials in a second" data-tw="投影檢視器 Litematica Viewer · 一秒算完投影材料" data-zh="投影查看器 Litematica Viewer · 一秒算完投影材料">Litematica Viewer · Count your schematic's materials in a second</title>
   <!-- 搜索结果里的简介：写死的是英文（默认语言），main.js 按 ?lang= 换成对应语言（DESCRIPTIONS） -->
-  <meta name="description" content="Free, open-source Minecraft schematic viewer: material lists in boxes and stacks, textured 3D view and format conversion for .litematic, .nbt and .mcstructure.">
+  <meta name="description" content="Free, open-source Minecraft schematic viewer: material lists in boxes and stacks, textured 3D view and conversion for .litematic, .nbt, .mcstructure and .schem.">
   <!-- 三种语言的网址互相标明：英文 = 首页，简体 / 繁体 = ?lang=cn / ?lang=tw。
        canonical（以哪个网址为准）由 main.js 按当前语言写，?lang=en 会归到首页 -->
   <link rel="alternate" hreflang="en" href="https://lite-viewer.com/">
@@ -18,7 +18,7 @@
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Litematica Viewer">
   <meta property="og:title" content="Litematica Viewer · Count your schematic's materials in a second">
-  <meta property="og:description" content="Free, open-source Minecraft schematic viewer: material lists in boxes and stacks, textured 3D view and format conversion for .litematic, .nbt and .mcstructure.">
+  <meta property="og:description" content="Free, open-source Minecraft schematic viewer: material lists in boxes and stacks, textured 3D view and conversion for .litematic, .nbt, .mcstructure and .schem.">
   <meta property="og:url" content="https://lite-viewer.com/">
   <meta property="og:image" content="https://lite-viewer.com/assets/app_en.webp">
   <meta name="twitter:card" content="summary_large_image">
@@ -36,7 +36,7 @@
   "url": "https://lite-viewer.com/",
   "applicationCategory": "UtilitiesApplication",
   "operatingSystem": "Windows, macOS, Linux, Web",
-  "description": "Free, open-source Minecraft schematic viewer: material lists in boxes and stacks, textured 3D view and format conversion for .litematic, .nbt and .mcstructure.",
+  "description": "Free, open-source Minecraft schematic viewer: material lists in boxes and stacks, textured 3D view and conversion for .litematic, .nbt, .mcstructure and .schem.",
   "image": "https://lite-viewer.com/assets/app_en.webp",
   "downloadUrl": "https://github.com/albertchen857/Litematica-viewer/releases/latest",
   "license": "https://www.gnu.org/licenses/agpl-3.0.html",
@@ -150,13 +150,19 @@
        现在是 false：收到文件就交给网页版查看器（viewer/）打开 -->
   <div class="drop-card" id="drop-card" data-disable="false" data-reveal>
     <label class="dropzone" id="dropzone" tabindex="0">
-      <input type="file" id="file-input" accept=".litematic,.nbt,.mcstructure" multiple hidden>
+      <input type="file" id="file-input" accept=".litematic,.nbt,.mcstructure,.schem,.schematic" multiple hidden>
       <span class="drop-arrow" aria-hidden="true">▼</span>
       <span class="drop-title" data-en="Drop your schematic here" data-tw="把投影檔案拖到這裡" data-zh="把投影文件拖到这里">Drop your schematic here</span>
-      <span class="drop-sub" data-en="Supports &lt;code&gt;.litematic&lt;/code&gt; · &lt;code&gt;.nbt&lt;/code&gt; · &lt;code&gt;.mcstructure&lt;/code&gt;" data-tw="支援 &lt;code&gt;.litematic&lt;/code&gt; · &lt;code&gt;.nbt&lt;/code&gt; · &lt;code&gt;.mcstructure&lt;/code&gt;" data-zh="支持 &lt;code&gt;.litematic&lt;/code&gt; · &lt;code&gt;.nbt&lt;/code&gt; · &lt;code&gt;.mcstructure&lt;/code&gt;">Supports <code>.litematic</code> · <code>.nbt</code> · <code>.mcstructure</code></span>
+      <span class="drop-sub" data-en="Supports &lt;code&gt;.litematic&lt;/code&gt; · &lt;code&gt;.nbt&lt;/code&gt; · &lt;code&gt;.mcstructure&lt;/code&gt; · &lt;code&gt;.schem&lt;/code&gt; · &lt;code&gt;.schematic&lt;/code&gt;" data-tw="支援 &lt;code&gt;.litematic&lt;/code&gt; · &lt;code&gt;.nbt&lt;/code&gt; · &lt;code&gt;.mcstructure&lt;/code&gt; · &lt;code&gt;.schem&lt;/code&gt; · &lt;code&gt;.schematic&lt;/code&gt;" data-zh="支持 &lt;code&gt;.litematic&lt;/code&gt; · &lt;code&gt;.nbt&lt;/code&gt; · &lt;code&gt;.mcstructure&lt;/code&gt; · &lt;code&gt;.schem&lt;/code&gt; · &lt;code&gt;.schematic&lt;/code&gt;">Supports <code>.litematic</code> · <code>.nbt</code> · <code>.mcstructure</code> · <code>.schem</code> · <code>.schematic</code></span>
       <span class="btn btn-accent drop-btn" data-en="Choose file" data-tw="選擇檔案" data-zh="选择文件">Choose file</span>
       <span data-nosnippet class="drop-closed" data-en="Not available yet" data-tw="未開放" data-zh="未开放">Not available yet</span>
     </label>
+    <!-- 从网址打开：直接跳到查看器的 ?file=<网址>（查看器自己去下，对方网站要允许跨域） -->
+    <form class="url-open" id="url-form">
+      <input type="url" id="url-input" required autocomplete="off" spellcheck="false" aria-label="URL"
+             placeholder="…or paste a link to a schematic file" data-ph-en="…or paste a link to a schematic file" data-ph-zh="或者粘贴投影文件的网址" data-ph-tw="或者貼上投影檔案的網址">
+      <button class="btn btn-ink" type="submit" data-en="Open link" data-tw="開啟網址" data-zh="打开网址">Open link</button>
+    </form>
     <ul class="drop-files" id="drop-files" aria-live="polite"></ul>
     <p class="drop-note" id="drop-note"></p>
   </div>
