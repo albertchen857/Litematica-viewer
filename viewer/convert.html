@@ -91,7 +91,14 @@
         <label><input type="radio" name="cv-version" value="7"><span><b>v7</b><small data-ui="menu.version.7">1.20.6+</small></span></label>
         <label><input type="radio" name="cv-version" value="6"><span><b>v6</b><small data-ui="menu.version.6">1.14 ~ 1.20.5</small></span></label>
         <label><input type="radio" name="cv-version" value="3"><span><b>v3</b><small data-ui="menu.version.3">1.13 (1.12 可能出错)</small></span></label>
+        <label><input type="radio" name="cv-version" value="1.12"><span><b>1.12</b><small data-t="ver112">1.12（扁平化之前的写法）</small></span></label>
       </div>
+    </div>
+    <!-- 1.12 的投影（扁平化之前的方块写法）读进来时要不要换成新写法 -->
+    <div class="cv-row">
+      <span class="cv-label" data-t="conv.flattenTitle">扁平化</span>
+      <label class="cv-check"><input type="checkbox" id="cv-flatten" checked> <span data-t="conv.flatten">1.12 的投影读进来时扁平化（换成 1.13 以后的写法）</span></label>
+      <small class="cv-hint" data-t="conv.flattenHint">关掉的话：1.12 的投影转成「1.12」时原样保留方块写法；转成别的格式会是旧写法，新版游戏认不出</small>
     </div>
     <div class="cv-row">
       <span class="cv-label" data-t="thumb.title">缩略图</span>

@@ -187,7 +187,8 @@ function warnUnknownLegacy(structure) {
 }
 
 async function parseAnyFormat(name, bytes) {
-  await prepareFormat(".schematic"); // 挨个试的时候也可能是老格式
+  // 要用到的对照表先加载：本身的扩展名（1.12 的 .litematic 要扁平化表）+ 挨个试时可能碰到的老 .schematic、1.12 .litematic
+  await Promise.all([prepareFormat(name), prepareFormat(".schematic"), prepareFormat(".litematic")]);
   const ext = name.slice(name.lastIndexOf(".")).toLowerCase();
   if (EXTENSIONS.includes(ext)) return { structure: parse(name, bytes), name };
   const stem = name.includes(".") ? name.slice(0, name.lastIndexOf(".")) : name;
@@ -678,10 +679,13 @@ async function saveAs(ext) {
 
 // 换游戏版本（同桌面版 convert_version）：写成 .litematic、Version 改成选的那个，存成 名字_vN.litematic。
 // 桌面版只认 .litematic 原文件；网页这里什么格式打开的都能转，存的是当前结构（含替换）
-function saveVersion(version) {
+async function saveVersion(version) {
   if (!state.structure) { alert(t("needFile")); return; }
   try {
-    download(`${stem()}_v${version}.litematic`, writeLitematic(state.structure, version));
+    if (version === "1.12") await prepareWrite(".litematic-1.12");
+    const report = new Set();
+    download(`${stem()}_${version === "1.12" ? "1.12" : `v${version}`}.litematic`, writeLitematic(state.structure, version, report));
+    if (report.size) alert(t("ver112.missing", report.size) + "\n\n" + [...report].map(short).join(", "));
   } catch (err) {
     console.error(err);
     alert(ui("app.save.fail", err.message || err));
@@ -900,7 +904,7 @@ function bindEditing() {
     const b = e.target.closest("[data-ext], [data-version]");
     if (!b) return;
     document.activeElement?.blur(); // 收起下拉框（键盘打开时靠 focus-within）
-    if (b.dataset.version) saveVersion(+b.dataset.version);
+    if (b.dataset.version) saveVersion(b.dataset.version === "1.12" ? "1.12" : +b.dataset.version);
     else saveAs(b.dataset.ext);
   });
   $("tutorial-btn").addEventListener("click", () => $("tutorial-dlg").showModal());

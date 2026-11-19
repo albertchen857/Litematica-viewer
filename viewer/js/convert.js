@@ -2,7 +2,7 @@
 // 读写全用查看器那套：formats.js 读、writers.js 写、world.js 导出存档、zip.js 打包。
 // 一个文件 → 直接存（支持 showSaveFilePicker 的浏览器点按钮时先问存哪）；好几个 → 打成一个 zip。
 
-import { parse, bounds, EXTENSIONS, prepareFormat } from "./formats.js";
+import { parse, bounds, EXTENSIONS, prepareFormat, FLATTEN_ON_READ } from "./formats.js";
 import { SAVE_FORMATS, writeLitematic, prepareWrite, download } from "./writers.js";
 import { exportWorld } from "./world.js";
 import { zip } from "./zip.js";
@@ -108,7 +108,7 @@ function renderFiles() {
 // ---------------------------------------------------------------- 选项
 
 const target = () => document.querySelector("input[name=cv-target]:checked").value;
-const version = () => +document.querySelector("input[name=cv-version]:checked").value || null;
+const version = () => { const v = document.querySelector("input[name=cv-version]:checked").value; return v === "1.12" ? "1.12" : +v || null; };
 // 能放缩略图的：.litematic（Metadata.PreviewImageData）、存档（icon.png）
 const THUMB_TARGETS = new Set([".litematic", ".bp", "world"]); // .bp 头里带一张 PNG
 function renderOptions() {
@@ -166,12 +166,13 @@ const setMsg = (text) => { $("cv-msg").textContent = text; };
 
 // 读：扩展名认不出来的（网址下来的）三种格式挨个试
 async function read(entry) {
+  FLATTEN_ON_READ.on = $("cv-flatten").checked;
   const ext = extOf(entry.name);
   if (EXTENSIONS.includes(ext)) {
     await prepareFormat(entry.name);
     return parse(entry.name, entry.bytes);
   }
-  await prepareFormat(".schematic");
+  await Promise.all([prepareFormat(".schematic"), prepareFormat(".litematic")]); // 挨个试时可能碰到老 .schematic、1.12 .litematic
   for (const guess of EXTENSIONS) { try { return parse(stemOf(entry.name) + guess, entry.bytes); } catch { /* 下一个 */ } }
   throw new Error(t("url.unknown"));
 }
@@ -196,7 +197,11 @@ async function convertOne(entry, opts) {
   }
   if (thumb) structure.preview = thumb.preview;
   if (opts.target === ".litematic" && opts.version) {
-    return { name: `${stem}_v${opts.version}.litematic`, bytes: writeLitematic(structure, opts.version), notes };
+    if (opts.version === "1.12") await prepareWrite(".litematic-1.12");
+    const report = new Set();
+    const bytes = writeLitematic(structure, opts.version, report);
+    if (report.size) notes.push(t("ver112.missing", report.size) + " " + [...report].slice(0, 6).map((id) => id.replace(/^minecraft:/, "")).join(", "));
+    return { name: `${stem}_${opts.version === "1.12" ? "1.12" : `v${opts.version}`}.litematic`, bytes, notes };
   }
   await prepareWrite(opts.target);
   const { bytes, report } = SAVE_FORMATS[opts.target](structure);
@@ -230,7 +235,7 @@ async function run() {
   const single = todo.length === 1;
   const guess = single
     ? (opts.target === "world" ? `${stemOf(todo[0].name)}_world.zip`
-      : opts.target === ".litematic" && opts.version ? `${stemOf(todo[0].name)}_v${opts.version}.litematic`
+      : opts.target === ".litematic" && opts.version ? `${stemOf(todo[0].name)}_${opts.version === "1.12" ? "1.12" : `v${opts.version}`}.litematic`
         : `${stemOf(todo[0].name)}${extOf(todo[0].name) === opts.target ? "_converted" : ""}${opts.target}`)
     : `converted_${todo.length}.zip`;
   let handle = null;

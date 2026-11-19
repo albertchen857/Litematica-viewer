@@ -25,6 +25,7 @@ notice, see [LICENSES/MIT-before-AGPL.txt](LICENSES/MIT-before-AGPL.txt).
 | [deepslate](https://github.com/misode/deepslate) 0.27.2 — Copyright (c) 2021 Misode | `viewer/vendor/deepslate-0.27.2.umd.js` | MIT，见 [viewer/vendor/LICENSE-deepslate.txt](viewer/vendor/LICENSE-deepslate.txt) |
 | [gl-matrix](https://github.com/toji/gl-matrix) 3.4.3 — Copyright (c) 2015-2021, Brandon Jones, Colin MacKenzie IV. | `viewer/vendor/gl-matrix-3.4.3.min.js` | MIT，见 [viewer/vendor/LICENSE-gl-matrix.txt](viewer/vendor/LICENSE-gl-matrix.txt) |
 | [minecraft-data](https://github.com/PrismarineJS/minecraft-data) 的 `legacy.json`（老 .schematic 数字 ID 对照表，经 `tools/build_legacy.py` 改成现在的方块名）— PrismarineJS | `viewer/resource/legacy.json` | MIT（见其 README） |
+| 1.12 扁平化对照（`flattening.json`）：方块名取自 minecraft-data 的 1.12 `blocks.json`，属性规则由本项目按 1.12 元数据规则编写（`tools/build_flattening.py`）— PrismarineJS / 本项目 | `viewer/resource/flattening.json` | 方块名 MIT；其余 AGPL-3.0 |
 | Minecraft 方块贴图、模型 / block textures and models | `viewer/resource/` | © Mojang Studios，**不属于本项目，不在 AGPL 授权范围内** / not part of this project and not covered by the AGPL |
 | Python 依赖（打包进 EXE 的库）/ Python dependencies bundled into the executable | `requirements.txt` | 各自的许可证 / their own licenses |
 
