@@ -7,7 +7,7 @@
 import { RAW_TAG, isAir } from "./formats.js";
 import { javaToBedrock, isWaterlogged } from "./blockmap.js";
 import { unitParts } from "./analysis.js";
-import { loadLegacy, toLegacy, toLegacyItem } from "./legacy.js";
+import { loadLegacy, toLegacy, toLegacyItem, loadFlattening, unflattenState } from "./legacy.js";
 import { crc32 } from "./zip.js";
 
 const D = () => globalThis.deepslate;
@@ -119,8 +119,11 @@ function packLitematic(values, bits) {
 }
 
 // version：Litematica 文件格式版本（Version 标签），不给就沿用原文件的，新建的写 6。
+// version = "1.12"：写成 1.12 的 Litematica 能读的样子（Version 4、DataVersion 1343、方块换回扁平化之前的写法；
+// 1.12 里还没有的方块写成空气，名字记进 report）。要先 await prepareWrite(".litematic-1.12") 加载对照表
 // 同桌面版「转换到 1.20.6+ / 1.14 ~ 1.20.5 / 1.13」（edit.change_litematic_version）：只改这个标签，内容照常写
-export function writeLitematic(structure, version = null) {
+export function writeLitematic(structure, version = null, report = new Set()) {
+  if (version === "1.12") structure = unflattenStructure(structure, report);
   const { NbtInt, NbtLong, NbtString, NbtFile } = D();
   const meta = structure.meta || {};
   const regions = new (D().NbtCompound)();
@@ -179,11 +182,12 @@ export function writeLitematic(structure, version = null) {
     // 缩略图（工具「缩略图」生成的 140×140 ARGB）：写进 Litematica 自己的预览图字段，游戏里的投影浏览界面能看到
     ...(structure.preview ? { PreviewImageData: new (D().NbtIntArray)(Array.from(structure.preview)) } : {}),
   });
-  const lm = +version || +meta.lm_version || 6;
+  const to112 = version === "1.12";
+  const lm = to112 ? 4 : +version || +meta.lm_version || 6;
   const root = compoundWith(null, {
     Version: new NbtInt(lm),
     SubVersion: lm >= 6 ? new NbtInt(+meta.sub_version || 1) : undefined,
-    MinecraftDataVersion: new NbtInt(+meta.mc_version || +meta.DataVersion || 3953),
+    MinecraftDataVersion: new NbtInt(to112 ? 1343 : +meta.mc_version || +meta.DataVersion || 3953),
     Metadata: metadata,
     Regions: regions,
   });
@@ -543,9 +547,27 @@ export function writeVschem(structure) {
   return concat([utfBytes("vschem"), utfBytes("net.spaceeye.vmod.schematic.VModShipSchematicV2"), nbt]);
 }
 
-// 写之前要准备的数据：.schematic 要数字 ID 对照表
+// 现在的写法 → 1.12 的写法（每个区域的调色板换一遍；读的时候本来就是 1.12、没扁平化的，原样不动）
+function unflattenStructure(structure, report) {
+  if (structure.pre113 && !structure.flattened) return structure;
+  return {
+    ...structure,
+    regions: structure.regions.map((r) => ({
+      ...r,
+      palette: r.palette.map((b) => {
+        if (isAir(b)) return b;
+        const old = unflattenState(b);
+        if (!old) { report.add(b.id); return { id: "minecraft:air", props: {} }; }
+        return old;
+      }),
+    })),
+  };
+}
+
+// 写之前要准备的数据：.schematic 要数字 ID 对照表；写成 1.12 的 .litematic 要扁平化对照表
 export async function prepareWrite(ext) {
   if (ext === ".schematic") await loadLegacy();
+  if (ext === ".litematic-1.12") await loadFlattening();
 }
 
 // ---------------------------------------------------------------- .mcstructure（同 _save_mcstructure）

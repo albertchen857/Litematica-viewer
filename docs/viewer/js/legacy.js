@@ -72,6 +72,58 @@ export function toLegacyItem(name) {
   return reverseTable().items.get(name) || null;
 }
 
+// ---------------------------------------------------------------- 1.12（扁平化之前）的方块写法
+//
+// resource/flattening.json（tools/build_flattening.py 生成）：「数字 ID:数值」→ 1.12 写法，比如 35:14 → minecraft:wool[color=red]。
+// 1.12 → 现在：按名字找、属性对得最多的那条 → 数字 ID → legacy.json 里现在的写法。现在 → 1.12：反过来走 toLegacy
+let flat = null;
+export async function loadFlattening() {
+  await loadLegacy();
+  if (!flat) {
+    const data = await fetch("resource/flattening.json").then((r) => r.json());
+    flat = { to112: data.to112, byName: new Map() };
+    for (const [key, state] of Object.entries(data.to112)) {
+      const s = parseState(state);
+      if (!flat.byName.has(s.id)) flat.byName.set(s.id, []);
+      flat.byName.get(s.id).push({ key, props: s.props });
+    }
+  }
+  return flat;
+}
+
+// 1.12 的一个方块状态 → 现在的写法；表里没有（模组方块）返回 null
+export function flattenState(block) {
+  const list = flat.byName.get(block.id);
+  if (!list) return null;
+  // 只看由数值决定的那几个属性（栅栏连接、楼梯拐角这些 1.12 现算的属性，存档里存的值不可靠，后面按邻居重算）
+  let best = null, bestScore = -Infinity;
+  for (const c of list) {
+    let score = 0;
+    for (const k in c.props) score += block.props[k] === c.props[k] ? 1 : block.props[k] === undefined ? 0 : -1;
+    if (score > bestScore) { best = c; bestScore = score; }
+  }
+  const [id, data] = best.key.split(":").map(Number);
+  return legacyBlock(id, data);
+}
+
+// 现在的写法 → 1.12 的写法；1.12 里还没有这个方块返回 null
+// 1.12 的床、旗帜、头颅只有一个方块（颜色 / 种类存在方块实体里），对照表里只记了一种（红床、白旗帜、骷髅头）；
+// 盆里的植物 1.12 没有的就是空花盆。查不到的先按这些退回到那一种
+const UNFLATTEN_ALIAS = [
+  [/_wall_banner$/, "minecraft:white_wall_banner"], [/_banner$/, "minecraft:white_banner"],
+  [/_wall_(skull|head)$/, "minecraft:skeleton_wall_skull"], [/_(skull|head)$/, "minecraft:skeleton_skull"],
+  [/_bed$/, "minecraft:red_bed"], [/^minecraft:potted_/, "minecraft:flower_pot"],
+];
+export function unflattenState(block) {
+  let hit = toLegacy(block);
+  if (!hit) {
+    const alias = UNFLATTEN_ALIAS.find(([re]) => re.test(block.id));
+    if (alias) hit = toLegacy({ id: alias[1], props: block.props });
+  }
+  const state = hit && flat.to112[`${hit.id}:${hit.data}`];
+  return state ? parseState(state) : null;
+}
+
 // ---------------------------------------------------------------- 按邻居补状态
 
 const DIRS = { north: [0, 0, -1], south: [0, 0, 1], west: [-1, 0, 0], east: [1, 0, 0] };

@@ -12,7 +12,7 @@
 // NBT 解析用 deepslate 自带的 NbtFile.read（能自动认 gzip；基岩版要传 littleEndian）。
 
 import { bedrockToJava } from "./blockmap.js";
-import { loadLegacy, legacyBlock, legacyItem, parseState, fixLegacyNeighbors } from "./legacy.js";
+import { loadLegacy, legacyBlock, legacyItem, parseState, fixLegacyNeighbors, loadFlattening, flattenState } from "./legacy.js";
 
 const AIR = { id: "minecraft:air", props: {} };
 const AIR_IDS = new Set(["minecraft:air", "minecraft:cave_air", "minecraft:void_air"]);
@@ -109,11 +109,22 @@ function readLitematic(rootTag) {
     region.raw = { kind: "litematic", palette: r.BlockStatePalette, offset: region.palette.length - r.BlockStatePalette.length };
     regions.push(region);
   }
-  // 和桌面版一样按 Litematica 自己的格式版本给出游戏版本范围
-  const lm = root.Version || 0;
+  // 游戏版本：看 MinecraftDataVersion（1.12 的 Litematica 也写 Version 4，光看格式版本分不出来）
+  const lm = root.Version || 0, dv = root.MinecraftDataVersion || 0;
+  // 1.12 及以前（DataVersion < 1451，1.13 的第一个快照）：方块是扁平化之前的写法，换成现在的
+  const pre113 = dv > 0 && dv < 1451;
+  let flattened = false;
+  if (pre113 && FLATTEN_ON_READ.on) {
+    for (const region of regions) {
+      region.palette = region.palette.map((b) => (isAir(b) ? b : flattenState(b) || b));
+      fixLegacyNeighbors(region, isOpaqueBlock); // 楼梯拐角、栅栏连接、门的上下半这些 1.12 现算的，按邻居补上
+    }
+    flattened = true;
+  }
+  const version = pre113 ? (flattened ? "1.12 → 1.13+" : "1.12") : dv && dv < 1952 ? "1.13" : lm <= 6 ? "1.14 ~ 1.20.5" : "1.20.6+";
   return {
     name: meta.Name || "", author: meta.Author || "", description: meta.Description || "",
-    source: "litematic", version: lm <= 3 ? "1.12 / 1.13" : lm <= 6 ? "1.14 ~ 1.20.5" : "1.20.6+",
+    source: "litematic", version, flattened, pre113,
     declared: meta.TotalBlocks || 0, regions, metadata: meta, // metadata 原样留着（预览图等），另存时只改名字作者简介
     // 写回 .litematic 时原样带上（同桌面版 structure.meta）
     meta: { lm_version: lm || 6, sub_version: root.SubVersion || 1, mc_version: root.MinecraftDataVersion || 3953 },
@@ -599,10 +610,14 @@ function normalise(region) {
 
 export const EXTENSIONS = [".litematic", ".nbt", ".mcstructure", ".schem", ".schematic", ".bp", ".vschem"];
 
-// 解析前要先准备的数据：老 .schematic 要数字 ID 对照表（异步加载一次）
+// 解析前要先准备的数据：老 .schematic 要数字 ID 对照表；.litematic 可能是 1.12 的，要扁平化对照表（都异步加载一次）
 export async function prepareFormat(fileName) {
   if (/\.schematic$/i.test(fileName)) await loadLegacy();
+  if (/\.litematic$/i.test(fileName)) await loadFlattening();
 }
+// 1.12 的 .litematic 读进来时要不要扁平化（换成 1.13 起的写法）。查看器里一直开着（不换贴图对不上）；
+// 转换页可以关掉：1.12 的投影原样转成 1.12 的投影
+export const FLATTEN_ON_READ = { on: true };
 // 栅栏 / 玻璃板 / 墙会连上「完整不透明的方块」：用 opaque.js 那张表
 const isOpaqueBlock = (id) => typeof OPAQUE_BLOCKS !== "undefined" && OPAQUE_BLOCKS.has(id);
 
