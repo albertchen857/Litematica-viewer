@@ -13,7 +13,7 @@ DataFixer 不认识也不会动它，所以 26.x 的投影照样能完整进 26.
 文件结构（minecraft.wiki: Java Edition level format / Region file format / Chunk format）::
 
     <world>/level.dat               gzip NBT，世界设置（虚空超平坦、游戏规则、玩家位置）
-    <world>/icon.png                存档列表里的小图，用等轴缩略图
+    <world>/icon.png                存档列表里的小图（64×64，游戏只认这个尺寸）：投影自带的缩略图或现生成的等轴图，导出前问用户
     <world>/region/r.X.Z.mca        方块和方块实体，32×32 个区块一个文件
     <world>/entities/r.X.Z.mca      1.17 起实体单独存一份
 """
@@ -43,7 +43,8 @@ _BLOCK_ENTITY_IDS = (
 )
 
 
-def export(structure, folder: str) -> dict:
+def export(structure, folder: str, icon="iso") -> dict:
+    """icon：存档图标。PIL 图像 = 用这张（缩到 64×64）；"iso" = 现生成等轴图；None = 不要图标。"""
     """写出存档，返回 {"chunks": 区块数, "entities": 实体数, "clipped": 是否超高被裁}。"""
     region = flatten_regions(structure)
     data_version = _data_version(structure)
@@ -95,7 +96,7 @@ def export(structure, folder: str) -> dict:
 
     name = os.path.basename(os.path.normpath(folder))
     _write_level(folder, name, data_version, (size_x, min(size_y, WORLD_TOP - base_y), size_z), base_y)
-    _write_icon(structure, folder)
+    _write_icon(structure, folder, icon)
     return {"chunks": sum(len(c) for c in chunk_files.values()), "entities": count, "clipped": clipped}
 
 
@@ -305,10 +306,15 @@ def _write_level(folder: str, name: str, data_version: int, size: tuple, base_y:
     )
 
 
-def _write_icon(structure, folder: str) -> None:
+def _write_icon(structure, folder: str, icon="iso") -> None:
+    if icon is None:
+        return
     try:
+        from PIL import Image
+
         from . import snapshot
 
-        snapshot.render(structure, 64).convert("RGB").save(os.path.join(folder, "icon.png"))
+        image = snapshot.render(structure, 64) if isinstance(icon, str) else icon.convert("RGBA").resize((64, 64), Image.LANCZOS)
+        image.convert("RGB").save(os.path.join(folder, "icon.png"))
     except Exception as exc:   # 图标可有可无
         print(f"[world] icon: {exc}")

@@ -141,6 +141,30 @@ def to_argb_ints(image: Image.Image) -> np.ndarray:
     return ((a << 24) | (r << 16) | (g << 8) | b).reshape(-1).astype(np.int32)
 
 
+def read_preview(path: str):
+    """读 .litematic 自带的缩略图（Metadata.PreviewImageData，ARGB 整数）→ RGBA 图像；没有 / 不是正方形就返回 None。"""
+    try:
+        import amulet_nbt as nbt
+
+        from .formats import LITEMATIC, detect_format
+
+        if not path or detect_format(path) != LITEMATIC:
+            return None
+        data = nbt.load(path, compressed=True).tag.get("Metadata", {}).get("PreviewImageData")
+        if data is None:
+            return None
+        ints = np.asarray(data.np_array if hasattr(data, "np_array") else list(data), dtype=np.int64) & 0xFFFFFFFF
+        side = int(round(len(ints) ** 0.5))
+        if not side or side * side != len(ints):
+            return None
+        argb = ints.reshape(side, side)
+        pixels = np.stack([(argb >> 16) & 255, (argb >> 8) & 255, argb & 255, (argb >> 24) & 255], axis=-1).astype(np.uint8)
+        return Image.fromarray(pixels, "RGBA")
+    except Exception as exc:
+        print(f"[snapshot] preview: {exc}")
+        return None
+
+
 def embed(structure, path: str) -> int:
     """把等轴缩略图写进 .litematic 的 Metadata.PreviewImageData，原地改文件。
 

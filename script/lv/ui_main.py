@@ -1007,12 +1007,17 @@ class App:
             n += 1
             folder = os.path.join(parent, f"{stem} ({n})")
 
+        # 存档图标：导出前问用哪张（投影自带的缩略图 / 现生成等轴图 / 自己的图片 / 不要）
+        icon = self._ask_world_icon()
+        if icon is False:   # 取消：不导出
+            return
+
         self.label_summary.config(text=_("app.busy"))
         structure = self.structure
 
         def work() -> None:
             try:
-                info = world.export(structure, folder)
+                info = world.export(structure, folder, icon)
                 self.root.after(0, done, info, None)
             except Exception as exc:
                 traceback.print_exc()
@@ -1035,6 +1040,50 @@ class App:
             config.reveal(folder)
 
         threading.Thread(target=work, daemon=True).start()
+
+    def _ask_world_icon(self):
+        """问存档图标用哪张。返回 PIL 图像 / "iso"（现生成等轴图）/ None（不要图标）/ False（取消导出）。"""
+        from PIL import Image
+
+        from . import snapshot
+
+        preview = snapshot.read_preview(self.file_path)
+        top = tk.Toplevel(self.root)
+        top.title(_("app.world.iconTitle"))
+        top.configure(bg=self.theme["MC"])
+        top.transient(self.root)
+        top.grab_set()
+        config.set_icon(top)
+        tk.Label(top, text=_("app.world.iconText"), font=font(1.15), wraplength=360, justify="left",
+                 bg=self.theme["MC"], fg=self.theme["BG"]).pack(padx=20, pady=(16, 8), anchor="w")
+        result = {"value": False}
+
+        def choose(value) -> None:
+            if value == "custom":
+                path = filedialog.askopenfilename(
+                    parent=top, title=_("app.world.iconCustom"),
+                    filetypes=[(_("app.world.iconCustom"), "*.png *.jpg *.jpeg *.gif *.bmp *.webp *.ico"), ("*", "*.*")])
+                if not path:
+                    return       # 没选：窗口留着，可以换别的
+                try:
+                    image = Image.open(path).convert("RGBA")
+                except Exception as exc:
+                    messagebox.showerror(_("litem.title"), _("app.save.fail", exc), parent=top)
+                    return
+                side = min(image.size)   # 不是正方形就从中间裁
+                left, upper = (image.width - side) // 2, (image.height - side) // 2
+                value = image.crop((left, upper, left + side, upper + side))
+            result["value"] = value
+            top.destroy()
+
+        if preview is not None:
+            button(top, _("app.world.iconThumb"), lambda: choose(preview), 1.2, accent=True).pack(padx=20, pady=3, fill=tk.X)
+        button(top, _("app.world.iconIso"), lambda: choose("iso"), 1.2, accent=preview is None).pack(padx=20, pady=3, fill=tk.X)
+        button(top, _("app.world.iconCustom"), lambda: choose("custom"), 1.2).pack(padx=20, pady=3, fill=tk.X)
+        button(top, _("app.world.iconNone"), lambda: choose(None), 1.2).pack(padx=20, pady=3, fill=tk.X)
+        button(top, _("app.world.iconCancel"), top.destroy, 1.1).pack(padx=20, pady=(10, 16), fill=tk.X)
+        self.root.wait_window(top)
+        return result["value"]
 
     def edit_description(self) -> None:
         """改简介。.litematic 可以直接写回原文件；另外两种格式没有简介字段，只改内存里的，

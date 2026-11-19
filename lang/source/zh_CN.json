@@ -20,6 +20,13 @@
   "app.update.fail": "检查更新失败：{}",
   "app.world.clipped": "结构高于 384 格，超出世界高度的部分没有导出。",
   "app.world.done": "已导出存档「{}」：{} 个区块，{} 个实体。\n把整个文件夹放进 .minecraft/saves 就能进入（创造模式，玩家在结构南侧上方）。",
+  "app.world.iconCancel": "取消（不导出）",
+  "app.world.iconCustom": "自定义图片…",
+  "app.world.iconIso": "生成等轴图",
+  "app.world.iconNone": "不要图标",
+  "app.world.iconText": "导出的存档在游戏的存档列表里显示哪张图？（64×64）",
+  "app.world.iconThumb": "用投影的缩略图",
+  "app.world.iconTitle": "存档图标",
   "assets.auto": "启动时自动更新方块资源",
   "cat.clay": "粘土类",
   "cat.concrete": "混凝土",
@@ -374,5 +381,13 @@
   "web.url.open": "打开网址",
   "web.url.placeholder": "或者粘贴投影文件的网址",
   "web.url.unknown": "认不出这个文件：不是 .litematic / .nbt / .mcstructure（可能是网页而不是文件本身的链接）",
-  "web.world.clipped": "结构比世界还高，超出高度上限的部分没有导出。"
+  "web.world.clipped": "结构比世界还高，超出高度上限的部分没有导出。",
+  "web.worldIcon.badImage": "这张图片读不出来，换一张试试",
+  "web.worldIcon.custom": "自定义图片",
+  "web.worldIcon.export": "导出",
+  "web.worldIcon.iso": "生成等轴图",
+  "web.worldIcon.none": "不要图标",
+  "web.worldIcon.text": "导出的存档在游戏的存档列表里显示哪张图？",
+  "web.worldIcon.thumb": "投影的缩略图",
+  "web.worldIcon.title": "存档图标"
 }

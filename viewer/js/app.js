@@ -1454,9 +1454,69 @@ function runThumb() {
 
 
 // 同桌面版「导出世界」：存档图标用 64px 缩略图
+// 存档图标：游戏只认 64×64 的 icon.png。导出前问一下用哪张：
+//   投影自带 / 刚生成写进去的缩略图（有才出现，默认选它）、现生成一张等轴图、不要图标
+// 缩到 size×size；不是正方形的从中间裁一块正方形（自定义图片可能是长方形）
+function scaledCanvas(src, size = 64) {
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const g = c.getContext("2d");
+  g.imageSmoothingQuality = "high";
+  const w = src.naturalWidth || src.width, h = src.naturalHeight || src.height, side = Math.min(w, h);
+  g.drawImage(src, (w - side) / 2, (h - side) / 2, side, side, 0, 0, size, size);
+  return c;
+}
+const loadImage = (url) => new Promise((resolve, reject) => { const i = new Image(); i.onload = () => resolve(i); i.onerror = reject; i.src = url; });
+
+// 选一张自己的图片：读进来、裁成正方形缩到 64×64。没选 / 读不出来返回 null
+function pickImageFile() {
+  return new Promise((resolve) => {
+    const input = $("world-icon-file");
+    input.value = "";
+    input.onchange = async () => {
+      const file = input.files[0];
+      if (!file) { resolve(null); return; }
+      const url = URL.createObjectURL(file);
+      try { resolve(scaledCanvas(await loadImage(url))); } catch { alert(t("worldIcon.badImage")); resolve(null); } finally { URL.revokeObjectURL(url); }
+    };
+    input.click();
+  });
+}
+async function chooseWorldIcon() {
+  const options = [];
+  const thumb = previewUrl(state.structure);
+  if (thumb) options.push({ value: "thumb", label: t("worldIcon.thumb"), canvas: scaledCanvas(await loadImage(thumb)) });
+  options.push({ value: "iso", label: t("worldIcon.iso"), canvas: view.snapshot(64, PREVIEW_BG) });
+  options.push({ value: "custom", label: t("worldIcon.custom"), canvas: null });
+  options.push({ value: "none", label: t("worldIcon.none"), canvas: null });
+  const tile = (o) => (o.canvas ? `<img src="${o.canvas.toDataURL()}" alt="">`
+    : `<span class="world-icon-none">${o.value === "custom" ? "＋" : "∅"}</span>`);
+  const paint = (checked) => {
+    $("world-icons").innerHTML = options.map((o) =>
+      `<label class="world-icon"><input type="radio" name="world-icon" value="${o.value}"${o.value === checked ? " checked" : ""}>${tile(o)}<span>${esc(o.label)}</span></label>`).join("");
+  };
+  paint(options[0].value);
+  // 点「自定义图片」：弹文件框，选好了把图换进这个选项；没选就退回原来选的那个
+  const onPick = async (e) => {
+    const input = e.target.closest("input[name=world-icon]");
+    if (!input || input.value !== "custom") return;
+    const prev = options.find((o) => o.value !== "custom" && o.canvas)?.value || "none";
+    const canvas = await pickImageFile();
+    if (canvas) options.find((o) => o.value === "custom").canvas = canvas;
+    paint(canvas ? "custom" : (options.find((o) => o.value === "custom").canvas ? "custom" : prev));
+  };
+  $("world-icons").addEventListener("change", onPick);
+  const answer = await askDialog($("world-dlg"));
+  $("world-icons").removeEventListener("change", onPick);
+  if (answer !== "ok") return undefined; // 取消：不导出
+  const picked = options.find((o) => o.value === $("world-icons").querySelector("input:checked")?.value) || options[0];
+  return picked.canvas ? canvasPng(picked.canvas) : null;
+}
+
 async function saveWorld() {
   try {
-    const icon = await canvasPng(view.snapshot(64, PREVIEW_BG));
+    const icon = await chooseWorldIcon();
+    if (icon === undefined) return;
     const result = exportWorld(state.structure, stem(), icon);
     download(`${stem()}_world.zip`, result.bytes, "application/zip");
     if (result.clipped) alert(t("world.clipped"));

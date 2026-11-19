@@ -20,6 +20,13 @@
   "app.update.fail": "Update check failed: {}",
   "app.world.clipped": "The structure is taller than 384 blocks; the part above the build limit was not exported.",
   "app.world.done": "Exported world \"{}\": {} chunks, {} entities.\nPut the whole folder into .minecraft/saves to play (creative mode, you spawn above the south side).",
+  "app.world.iconCancel": "Cancel (don’t export)",
+  "app.world.iconCustom": "Your own image…",
+  "app.world.iconIso": "New isometric picture",
+  "app.world.iconNone": "No icon",
+  "app.world.iconText": "Which picture should the world show in the game’s world list? (64×64)",
+  "app.world.iconThumb": "Schematic thumbnail",
+  "app.world.iconTitle": "World icon",
   "assets.auto": "Auto-update block assets on start",
   "cat.clay": "Clay",
   "cat.concrete": "Concrete",
@@ -374,5 +381,13 @@
   "web.url.open": "Open link",
   "web.url.placeholder": "…or paste a link to a schematic file",
   "web.url.unknown": "Not a schematic: it isn't .litematic / .nbt / .mcstructure (maybe the link points to a web page, not the file itself)",
-  "web.world.clipped": "The structure is taller than the world; the part above the height limit was left out."
+  "web.world.clipped": "The structure is taller than the world; the part above the height limit was left out.",
+  "web.worldIcon.badImage": "Couldn’t read that image — try another one",
+  "web.worldIcon.custom": "Your own image",
+  "web.worldIcon.export": "Export",
+  "web.worldIcon.iso": "New isometric",
+  "web.worldIcon.none": "No icon",
+  "web.worldIcon.text": "Which picture should the world show in the game’s world list?",
+  "web.worldIcon.thumb": "Schematic thumbnail",
+  "web.worldIcon.title": "World icon"
 }
