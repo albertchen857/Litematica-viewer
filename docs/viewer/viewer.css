@@ -98,6 +98,8 @@ code { font-family: var(--mono); }
 .empty-sub code { color: var(--pc); font-weight: 700; }
 .empty-open { margin: 8px 0 4px; height: 40px; padding: 0 24px; font-size: 15px; }
 .empty-note { margin: 0; color: var(--muted); font-size: 13px; }
+.tut-license { margin: 12px 0 0; color: var(--muted); font-size: 12px; }
+.tut-license a { color: var(--pc); }
 /* 从网址打开：一行输入框 + 按钮 */
 .url-open { display: flex; gap: 6px; width: min(440px, 90%); margin: 2px 0 6px; }
 .url-open input {

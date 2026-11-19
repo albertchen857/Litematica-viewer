@@ -16,3 +16,5 @@ docs/
     python tools/sync_site.py <这个分支的 docs 目录>
 
 再回到这个分支提交。
+
+许可证：[AGPL-3.0](LICENSE)，第三方组件和 Minecraft 贴图的版权见 [NOTICE.md](NOTICE.md)。
