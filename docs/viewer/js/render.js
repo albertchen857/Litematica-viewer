@@ -475,6 +475,29 @@ class LiveStructure {
   }
 }
 
+// 实体用哪个图标：掉落物、物品展示框显示里面装的物品（空的展示框才用它自己的图标）
+export function entityIconId(entity) {
+  const id = String(entity.id || ""), item = entity.nbt?.Item || entity.nbt?.item;
+  if (/(^|:)(item|item_frame|glow_item_frame)$/.test(id) && item && (item.id || item.Name)) return String(item.id || item.Name);
+  return id;
+}
+
+// 挂在墙上的实体（物品展示框、画）：坐标是那块板的中心，板贴着墙、朝 Facing 方向。
+// 返回碰撞箱 [x0, y0, z0, x1, y1, z1]；不是挂着的返回 null
+const FACING_3D = [[0, -1, 0], [0, 1, 0], [0, 0, -1], [0, 0, 1], [-1, 0, 0], [1, 0, 0]]; // 下 上 北 南 西 东
+const FACING_2D = [[0, 0, 1], [-1, 0, 0], [0, 0, -1], [1, 0, 0]];                     // 南 西 北 东（画用这个）
+function hangingBox(entity, pos) {
+  const name = String(entity.id).replace(/^minecraft:/, "");
+  const nbt = entity.nbt || {};
+  let dir = null, w = 0.75, h = 0.75;
+  if (name === "item_frame" || name === "glow_item_frame") dir = FACING_3D[+(nbt.Facing ?? nbt.facing ?? 3)];
+  else if (name === "painting") { dir = FACING_2D[+(nbt.facing ?? nbt.Facing ?? 0)]; w = h = 1; }
+  if (!dir) return null;
+  const half = [0, 1, 2].map((a) => (dir[a] !== 0 ? 1 / 32 : a === 1 ? h / 2 : w / 2));
+  if (dir[1] !== 0) { half[0] = w / 2; half[2] = h / 2; } // 贴在地板 / 天花板上：板是平躺的
+  return [pos[0] - half[0], pos[1] - half[1], pos[2] - half[2], pos[0] + half[0], pos[1] + half[1], pos[2] + half[2]];
+}
+
 // ---- 实体碰撞箱：按种类上色（用当前主题的五个颜色），尺寸取游戏里的碰撞箱（宽, 高）
 const ENTITY_SIZE = {
   villager: [0.6, 1.95], wandering_trader: [0.6, 1.95], zombie: [0.6, 1.95], zombie_villager: [0.6, 1.95],
@@ -955,20 +978,53 @@ export class View {
       }
     }
     axes.sort((u, v) => u.z - v.z); // 远的先画，近的压在上面
-    svg.innerHTML = `<circle class="gizmo-bg" cx="${C}" cy="${C}" r="48"/>` + axes.map((t) => {
+    // 轴线：正端到负端一整条，先画（压在所有端点下面）
+    const lines = [0, 1, 2].map((a) => {
+      const pos = axes.find((t) => t.a === a && t.sign > 0), neg = axes.find((t) => t.a === a && t.sign < 0);
+      return `<line x1="${neg.x.toFixed(1)}" y1="${neg.y.toFixed(1)}" x2="${pos.x.toFixed(1)}" y2="${pos.y.toFixed(1)}" stroke="${pos.color}" stroke-width="2.5" stroke-linecap="round"/>`;
+    }).join("");
+    svg.innerHTML = `<circle class="gizmo-bg" cx="${C}" cy="${C}" r="48"/>` + lines + axes.map((t) => {
       const dir = `${t.sign > 0 ? "" : "-"}${t.name}`;
-      const line = t.sign > 0 ? `<line x1="${C}" y1="${C}" x2="${t.x.toFixed(1)}" y2="${t.y.toFixed(1)}" stroke="${t.color}" stroke-width="3" stroke-linecap="round"/>` : "";
       const dot = t.sign > 0
         ? `<circle cx="${t.x.toFixed(1)}" cy="${t.y.toFixed(1)}" r="9" fill="${t.color}"/><text x="${t.x.toFixed(1)}" y="${(t.y + 4).toFixed(1)}">${t.name}</text>`
-        : `<circle cx="${t.x.toFixed(1)}" cy="${t.y.toFixed(1)}" r="8" fill="${t.color}" fill-opacity="0.35" stroke="${t.color}" stroke-width="1.5"/><text class="neg" x="${t.x.toFixed(1)}" y="${(t.y + 4).toFixed(1)}">${dir}</text>`;
-      return `${line}<g class="gizmo-dot" data-axis="${t.a}" data-sign="${t.sign}"><title>${dir}</title>${dot}</g>`;
+        : `<circle cx="${t.x.toFixed(1)}" cy="${t.y.toFixed(1)}" r="8" fill="#e9ebee"/><circle cx="${t.x.toFixed(1)}" cy="${t.y.toFixed(1)}" r="8" fill="${t.color}" fill-opacity="0.4" stroke="${t.color}" stroke-width="1.5"/><text class="neg" x="${t.x.toFixed(1)}" y="${(t.y + 4).toFixed(1)}">${dir}</text>`;
+      return `<g class="gizmo-dot" data-axis="${t.a}" data-sign="${t.sign}"><title>${dir}</title>${dot}</g>`;
     }).join("");
   }
 
   bindGizmo() {
     if (!this.gizmo) return;
+    // 在面板上按住拖 = 转视角（和在 3D 里左键拖一样）；没怎么动就松开、又点在端点上 = 转到那一面
+    let drag = null;
+    this.gizmo.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      drag = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY };
+      this.gizmo.setPointerCapture(e.pointerId);
+      this.gizmo.classList.add("is-dragging");
+    });
+    this.gizmo.addEventListener("pointermove", (e) => {
+      if (!drag) return;
+      const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      drag.x = e.clientX;
+      drag.y = e.clientY;
+      this.yaw += dx * 0.012;
+      this.pitch = Math.max(-1.55, Math.min(1.55, this.pitch + dy * 0.012));
+      this.draw();
+    });
+    const end = (e) => {
+      if (!drag) return;
+      const moved = Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > 4;
+      drag = null;
+      this.gizmo.classList.remove("is-dragging");
+      if (moved) this.gizmo.dataset.dragged = "1"; // 拖完松手不算点击
+    };
+    this.gizmo.addEventListener("pointerup", end);
+    this.gizmo.addEventListener("pointercancel", end);
     this.gizmo.addEventListener("click", (e) => {
-      const g = e.target.closest(".gizmo-dot");
+      if (this.gizmo.dataset.dragged) { delete this.gizmo.dataset.dragged; return; }
+      // 拖的时候指针被面板抓住了，click 的目标是面板本身：按坐标找端点
+      const hit = document.elementFromPoint(e.clientX, e.clientY);
+      const g = hit?.closest?.(".gizmo-dot");
       if (!g) return;
       const axis = +g.dataset.axis, sign = +g.dataset.sign;
       const quarter = Math.PI / 2;
@@ -1050,8 +1106,16 @@ export class View {
       this.renderer.setShader(this.renderer.gridShaderProgram);
       this.renderer.prepareDraw(view);
       gl.disable(gl.DEPTH_TEST); // 隔着墙也画出来
+      // 呼吸灯：只改透明度（常量透明度混合），颜色还是黄的
+      const alpha = 0.3 + 0.7 * (0.5 + 0.5 * Math.sin((performance.now() / 1600) * Math.PI * 2));
+      gl.blendColor(0, 0, 0, alpha);
+      gl.blendFuncSeparate(gl.CONSTANT_ALPHA, gl.ONE_MINUS_CONSTANT_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
       this.renderer.drawMesh(this.highlightMesh, { pos: true, color: true });
+      gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
       gl.enable(gl.DEPTH_TEST);
+      // 下一口气：约 30 帧 / 秒就够看着顺，不用每帧都重画整个结构
+      clearTimeout(this.breath);
+      this.breath = setTimeout(() => this.draw(), 33);
     }
     if (this.selected) this.renderer.drawOutline(view, this.selected);
     this.placeMarkers(view);
@@ -1205,14 +1269,17 @@ export class View {
         const name = String(entity.id).replace(/^minecraft:/, "");
         const size = ENTITY_SIZE[name] || [0.6, 1.8];
         const category = entityCategory(entity.id);
-        const m = { pos, entity, size, category, el: null };
+        // 碰撞箱：一般实体是脚底在坐标点、往上长；挂在墙上的是以坐标点为中心的一块薄板
+        const box = hangingBox(entity, pos) ||
+          [pos[0] - size[0] / 2, pos[1], pos[2] - size[0] / 2, pos[0] + size[0] / 2, pos[1] + size[1], pos[2] + size[0] / 2];
+        const m = { pos, entity, size, box, category, el: null };
         if (this.overlay) {
           const el = document.createElement("button");
           el.className = "entity-marker";
           el.dataset.cat = category;
           el.title = entity.id;
           el.style.setProperty("--cat", this.theme[CATEGORY_COLOR[category]]);
-          const icon = blockIcon(entity.id, 32);
+          const icon = blockIcon(entityIconId(entity), 32) || blockIcon(entity.id, 32);
           el.innerHTML = icon ? `<img src="${icon}" alt="">` : "<span>?</span>";
           el.addEventListener("click", (e) => { e.stopPropagation(); this.select(null); this.onPick({ kind: "entity", entity, pos }); });
           this.overlay.appendChild(el);
@@ -1231,8 +1298,7 @@ export class View {
     const layers = this.scene ? this.scene.filter.layers : [-Infinity, Infinity];
     for (const m of this.markers) {
       if (m.pos[1] < layers[0] || m.pos[1] > layers[1] + 1) continue;
-      const [w, h] = m.size, [x, y, z] = m.pos;
-      mesh.addLineCube(x - w / 2, y, z - w / 2, x + w / 2, y + h, z + w / 2, hexToRgb(this.theme[CATEGORY_COLOR[m.category]]));
+      mesh.addLineCube(...m.box, hexToRgb(this.theme[CATEGORY_COLOR[m.category]]));
     }
     this.hitboxMesh = mesh.rebuild(this.gl, { pos: true, color: true });
   }
@@ -1249,7 +1315,7 @@ export class View {
     const layers = this.scene ? this.scene.filter.layers : [-Infinity, Infinity];
     for (const m of this.markers) {
       if (!m.el) continue;
-      vec4.transformMat4(p, [m.pos[0], m.pos[1] + m.size[1] + 0.3, m.pos[2], 1], clip); // 图标贴在碰撞箱头顶
+      vec4.transformMat4(p, [(m.box[0] + m.box[3]) / 2, m.box[4] + 0.3, (m.box[2] + m.box[5]) / 2, 1], clip); // 图标贴在碰撞箱头顶
       const outOfLayers = m.pos[1] < layers[0] || m.pos[1] > layers[1] + 1;
       if (p[3] <= 0 || outOfLayers) { m.el.hidden = true; continue; }
       const x = (p[0] / p[3] * 0.5 + 0.5) * w, y = (1 - (p[1] / p[3] * 0.5 + 0.5)) * h;

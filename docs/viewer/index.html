@@ -206,9 +206,11 @@
 
   <!-- 右：信息 -->
   <aside class="side" id="side">
-    <div class="card file-card">
+    <div class="card file-card" id="file-card">
       <h1 class="file-name" id="file-name" data-t="noFile">还没有打开文件</h1>
       <p class="file-summary" id="file-summary"></p>
+      <!-- 投影自带的缩略图（.litematic 的预览图；工具里生成的也写在这） -->
+      <img class="file-thumb" id="file-thumb" alt="" hidden>
     </div>
 
     <div class="card stats" id="stats"></div>
@@ -247,7 +249,6 @@
         <img class="thumb-img" id="thumb-img" alt="" hidden>
         <div class="tool-actions" id="thumb-actions" hidden>
           <button class="btn btn-small btn-plain" id="thumb-png" type="button" data-t="thumb.png">下载 PNG</button>
-          <button class="btn btn-small edit-only" id="thumb-embed" type="button" data-t="thumb.embed">写入投影并下载 .litematic</button>
         </div>
       </details>
 
