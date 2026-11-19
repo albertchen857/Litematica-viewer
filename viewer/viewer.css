@@ -584,3 +584,71 @@ body.desktop .edit-only { display: none !important; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
 }
+
+
+/* ---------------------------------------------------------------- 格式转换页（convert.html） */
+
+html:has(body.cv-page), body.cv-page { height: auto; min-height: 100%; }
+body.cv-page { display: block; }
+.cv-nav { display: flex; gap: 4px; margin-left: 12px; }
+.cv-nav a { padding: 6px 12px; border-radius: 8px; color: var(--tt); text-decoration: none; font-weight: 600; }
+.cv-nav a:hover { background: var(--chip); }
+.cv-nav a.is-active { color: var(--pc); background: var(--chip); }
+.cv { max-width: 860px; margin: 0 auto; padding: 32px 20px 64px; }
+.cv-title { margin: 0; font-size: 28px; }
+.cv-sub { margin: 6px 0 20px; color: var(--muted); }
+.cv-drop-card { padding: 12px; border-radius: 14px; background: var(--mc); }
+.cv-drop {
+  display: grid; justify-items: center; gap: 8px; padding: 36px 16px; border-radius: 10px;
+  background: var(--card); text-align: center; cursor: pointer; outline: none;
+  transition: background-color 120ms, transform 240ms var(--ease-bounce);
+}
+.cv-drop:hover, .cv-drop:focus-visible { transform: scale(1.005); }
+.cv-drop:focus-visible { box-shadow: 0 0 0 3px var(--pc); }
+.cv-drop.is-over { background: var(--pc); color: var(--bg); }
+.cv-drop.is-over code { color: var(--bg); }
+.cv-drop b { font-size: 18px; }
+.cv-formats code { color: var(--pc); font-weight: 700; font-size: 13px; }
+.cv-drop-card .url-open { width: auto; margin: 10px 0 0; }
+.cv-drop-card .url-open input { height: 40px; background: var(--card); border: 0; }
+.cv-drop-card .url-open .btn { height: 40px; }
+.cv-files { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.cv-files:not(:empty) { margin-top: 10px; }
+.cv-files li {
+  display: grid; grid-template-columns: minmax(0, auto) auto 1fr auto; align-items: center; gap: 10px;
+  padding: 8px 8px 8px 12px; border-radius: 8px; background: var(--card); font-size: 14px;
+}
+.cv-files li b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cv-files li small { color: var(--muted); }
+.cv-status { color: var(--muted); font-size: 12.5px; overflow-wrap: anywhere; }
+.cv-files li.is-done .cv-status { color: #1a7f37; }
+.cv-files li.is-fail .cv-status, .cv-files li.is-bad .cv-status { color: #c62828; }
+.cv-files li.is-busy .cv-status { color: var(--pc); }
+.cv-remove { width: 26px; height: 26px; border: 0; border-radius: 50%; background: var(--chip); color: var(--muted); cursor: pointer; font-size: 16px; line-height: 1; }
+.cv-remove:hover:not(:disabled) { color: var(--tt); }
+.cv-opts { display: grid; gap: 14px; margin: 24px 0; }
+.cv-row { display: grid; grid-template-columns: 88px 1fr; align-items: start; gap: 12px; }
+.cv-row[hidden] { display: none; }
+.cv-label { padding-top: 9px; font-weight: 700; }
+.cv-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.cv-chips label { cursor: pointer; }
+.cv-chips input { position: absolute; opacity: 0; pointer-events: none; }
+.cv-chips label > span {
+  display: grid; gap: 1px; padding: 7px 12px; border-radius: 9px; background: var(--card);
+  box-shadow: 0 0 0 1px var(--line); transition: box-shadow 120ms, background-color 120ms;
+}
+.cv-chips label > span b { font: 700 14px var(--mono); color: var(--pc); }
+.cv-chips label > span small { color: var(--muted); font-size: 12px; }
+.cv-chips label:hover > span { background: var(--chip); }
+.cv-chips input:checked + span { box-shadow: 0 0 0 2px var(--pc); background: var(--chip); }
+.cv-chips input:focus-visible + span { outline: 2px solid var(--pc); outline-offset: 2px; }
+.cv-check { display: inline-flex; align-items: center; gap: 8px; padding-top: 7px; cursor: pointer; }
+.cv-check:has(input:disabled) { opacity: 0.5; cursor: not-allowed; }
+.cv-hint { grid-column: 2; margin-top: -6px; color: var(--muted); font-size: 12.5px; }
+.cv-hint:empty { display: none; }
+.cv-go { width: 100%; height: 48px; font-size: 17px; font-weight: 700; }
+.cv-go:disabled { opacity: 0.5; cursor: not-allowed; }
+.cv-msg { min-height: 1.5em; margin: 12px 0 0; color: var(--muted); text-align: center; }
+.cv-offscreen { position: fixed; left: -10000px; top: 0; width: 512px; height: 512px; overflow: hidden; }
+.cv-offscreen canvas { width: 512px; height: 512px; }
+@media (max-width: 640px) { .cv-row { grid-template-columns: 1fr; gap: 6px; } .cv-label { padding-top: 0; } .cv-hint { grid-column: 1; } }
