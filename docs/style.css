@@ -578,25 +578,11 @@ html[data-lang="en"] .ba-en-main { display: block; }
 .duo h3 { margin: 0 0 var(--s2); font-size: 20px; }
 .duo p { margin: 0 0 var(--s3); }
 
-/* ------------------------------------------------------------------ 下载带 */
-
-.download {
-  margin-top: 88px;
-  background: var(--band); color: #fff;
-  clip-path: polygon(0 18%, 100% 0, 100% 100%, 0 100%);   /* 封面底带上沿是斜的 */
-}
-.download-inner { max-width: 1180px; margin: 0 auto; padding: 96px clamp(20px, 4vw, 40px) 64px; }
-.download-title { margin: 0; font-size: clamp(40px, 6vw, 72px); font-weight: 700; line-height: 1.1; }
-.download-sub { margin: var(--s2) 0 var(--s5); color: var(--pr); }
-.download-actions { display: flex; flex-wrap: wrap; gap: var(--s3); }
-/* 下载带：四个平台直接下载（白底），下面一排 GitHub 下载 / Nova */
-.dl-btn { display: inline-grid; justify-items: start; gap: 2px; background: var(--bg); color: var(--tt); }
-.dl-btn small { font: 500 12px var(--mono, monospace); opacity: 0.6; }
-.dl-btn.is-mine { box-shadow: inset 0 0 0 3px var(--mc); }
-.download-more { margin-top: var(--s3); }
-
 /* 页脚：四列（简介 / 页面 / 下载 / 关于）+ 最底下一行版权 */
 .site-footer { background: var(--band); color: var(--pr); font-size: 14px; }
+/* 主页的页脚（有四列的那种）上沿斜切，接在正文后面（原来下载带的样子，下载带删了挪到这里） */
+.site-footer:has(.footer-cols) { margin-top: 88px; clip-path: polygon(0 72px, 100% 0, 100% 100%, 0 100%); }
+.site-footer:has(.footer-cols) .footer-cols { padding-top: 120px; }
 .footer-cols {
   display: grid; grid-template-columns: 1.6fr 1fr 1fr 1fr; gap: 32px;
   max-width: 1200px; margin: 0 auto; padding: 48px clamp(20px, 4vw, 40px) 32px;
