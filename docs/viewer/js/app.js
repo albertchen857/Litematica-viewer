@@ -28,8 +28,10 @@ const START_PARAMS = new URLSearchParams(location.search); // 地址栏会被改
 function pickLang() {
   return FROM_URL[new URLSearchParams(location.search).get("lang")] || "en_US";
 }
+let sourceUrl = null; // 现在显示的投影是从哪个网址打开的（本地文件就是 null）
 function syncUrl() {
-  history.replaceState(null, "", `${location.pathname}?lang=${URL_CODE[lang]}${location.hash}`);
+  const file = sourceUrl ? `&file=${encodeURIComponent(sourceUrl)}` : "";
+  history.replaceState(null, "", `${location.pathname}?lang=${URL_CODE[lang]}${file}${location.hash}`);
 }
 let lang = pickLang();
 
@@ -134,6 +136,8 @@ async function openFile(file) {
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
     load(parse(file.name, bytes), { pristine: true });
+    sourceUrl = null;
+    syncUrl();
     window.LVRecent?.save(file).catch(() => {}); // 记成「上次的文件」，下次进来一键再开
   } catch (err) {
     console.error(err);
@@ -216,6 +220,8 @@ async function openUrl(raw) {
     const { structure, name } = parseAnyFormat(urlFileName(res, url), bytes);
     progress(0, t("reading"));
     load(structure, { pristine: true });
+    sourceUrl = url;
+    syncUrl(); // 渲染的是网上的文件：地址栏带上 ?file=，这个链接分享出去别人打开就是同一个投影
     $("url-input").value = "";
     window.LVRecent?.save(new File([bytes], name)).catch(() => {});
   } catch (err) {
@@ -280,6 +286,7 @@ async function draw(structure, resetCamera, label = t("building")) {
   await view.show(structure, box, { resetCamera, region, ignore: state.ignored, onProgress: (r) => progress(r, label) });
   progress(null);
   $("hint").hidden = false;
+  $("gizmo").removeAttribute("hidden"); // SVG 没有 .hidden 属性，只能删特性
 }
 
 let layerMode = "all"; // all 全部 / range 范围 / single 单层
@@ -754,8 +761,8 @@ function toggleKind(set, ids) {
 
 function applyKinds() {
   view.setFilter({ ignore: state.ignored });
-  const { shown, total } = view.setHighlight(state.highlighted);
-  if (total > shown) toast(t("kind.tooMany", shown, total), { undo: false });
+  const { truncated } = view.setHighlight(state.highlighted);
+  if (truncated) toast(t("kind.tooMany"), { undo: false });
   renderKindBar();
   renderInfo(); // 材料表的行标记
   if (inspectHit?.kind === "block") renderKind(inspectHit);
@@ -782,6 +789,7 @@ function renderKindBar() {
   if (state.ignored.size) parts.push(t("kind.hiddenCount", state.ignored.size));
   if (state.highlighted.size) parts.push(t("kind.litCount", state.highlighted.size));
   $("kind-bar").hidden = !parts.length;
+  $("kind-outline-wrap").hidden = !state.ignored.size;
   $("kind-bar-text").textContent = parts.join(" · ");
 }
 
@@ -1400,8 +1408,9 @@ function previewInts(canvas) {
 }
 
 let thumbCanvas = null;
+let thumbMode = "iso"; // 上次生成用的视角，写进投影时也用这个
 function runThumb() {
-  thumbCanvas = view.snapshot(512);
+  thumbCanvas = view.snapshot(512, null, thumbMode);
   if (!thumbCanvas) return;
   $("thumb-img").src = thumbCanvas.toDataURL();
   $("thumb-img").hidden = false;
@@ -1410,7 +1419,7 @@ function runThumb() {
 
 // 写进 .litematic 的 Metadata.PreviewImageData（同桌面版 snapshot.embed），游戏里投影列表能看到
 function embedThumb() {
-  state.structure.preview = previewInts(view.snapshot(140, PREVIEW_BG));
+  state.structure.preview = previewInts(view.snapshot(140, PREVIEW_BG, thumbMode));
   saveAs(".litematic");
 }
 
@@ -1527,7 +1536,9 @@ function bindTools() {
   $("batch-add").addEventListener("click", () => { batch.push(newRow()); renderBatch(); });
   $("batch-run").addEventListener("click", runBatch);
 
-  $("thumb-run").addEventListener("click", runThumb);
+  $("thumb-iso").addEventListener("click", () => { thumbMode = "iso"; runThumb(); });
+  $("thumb-view").addEventListener("click", () => { thumbMode = "view"; runThumb(); });
+  $("kind-outline").addEventListener("change", (e) => { setPref("hiddenOutline", e.target.checked); view.setHiddenOutline(e.target.checked); });
   $("thumb-png").addEventListener("click", async () => download(`${stem()}.png`, await canvasPng(thumbCanvas), "image/png"));
   $("thumb-embed").addEventListener("click", embedThumb);
 
@@ -1640,10 +1651,13 @@ async function main() {
   ]);
   $("theme").innerHTML = Object.keys(gamedata.themes || {}).map((n) => `<option value="${n}">${n}</option>`).join("");
   applyLang();
-  view = new View($("canvas"), { overlay: $("markers"), onPick: showInspect, onContext: blockMenu });
+  view = new View($("canvas"), { overlay: $("markers"), onPick: showInspect, onContext: blockMenu, gizmo: $("gizmo") });
   restorePrefs();
   setMoveSpeed(loadPrefs().moveSpeed || 12);
   setEnvironment(loadPrefs().env || ""); // 默认关闭
+  const hiddenOutline = loadPrefs().hiddenOutline !== false; // 隐藏的方块留灰边框：默认留
+  $("kind-outline").checked = hiddenOutline;
+  view.setHiddenOutline(hiddenOutline);
   window.lvViewer = { view, state, showInspect, runRules }; // 方便在控制台里调试 / 以后扩展
   applyTheme(themeName);
 

@@ -149,8 +149,19 @@ code { font-family: var(--mono); }
 .inspect-kind-btns .btn { flex: 1; }
 .inspect-kind-btns .btn.is-on { background: #ffd600; color: #3a3000; }
 /* 3D 右上角：隐藏 / 高亮了几种 + 全部恢复 */
+/* 轴向面板：右上角，不挡别的；鼠标放上去才有底色 */
+.gizmo { position: absolute; right: 8px; top: 8px; z-index: 6; width: 100px; height: 100px; user-select: none; }
+.gizmo[hidden] { display: none; }
+.gizmo-bg { fill: transparent; transition: fill 120ms; }
+.gizmo:hover .gizmo-bg { fill: rgba(255, 255, 255, 0.35); }
+.gizmo-dot { cursor: pointer; }
+.gizmo-dot circle { transition: transform 120ms; transform-box: fill-box; transform-origin: center; }
+.gizmo-dot:hover circle { transform: scale(1.18); }
+.gizmo text { font: 700 11px var(--sans); fill: #1b1b1b; text-anchor: middle; pointer-events: none; }
+.gizmo text.neg { opacity: 0; fill: #fff; font-size: 9px; }
+.gizmo-dot:hover text.neg { opacity: 1; }
 .kind-bar {
-  position: absolute; right: 12px; top: 12px; z-index: 6; display: flex; align-items: center; gap: 8px;
+  position: absolute; right: 116px; top: 12px; z-index: 6; display: flex; align-items: center; gap: 8px;
   padding: 6px 6px 6px 12px; border-radius: var(--r); background: var(--card); font-size: 12px; color: var(--tt);
   box-shadow: 0 0 0 1px var(--line), 0 6px 18px rgba(0, 0, 0, 0.12);
 }
@@ -158,7 +169,8 @@ code { font-family: var(--mono); }
 .row.is-ignored { opacity: 0.45; }
 .row.is-lit { box-shadow: inset 4px 0 0 #ffd600; }
 /* 这几个自己写了 display，hidden 属性会被盖掉，要单独写一条 */
-.kind-bar[hidden], .inspect-kind[hidden], #toast-undo[hidden] { display: none; }
+.kind-bar[hidden], .inspect-kind[hidden], #toast-undo[hidden], .kind-outline[hidden] { display: none; }
+.kind-outline { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); cursor: pointer; white-space: nowrap; }
 .inspect-props { width: 100%; margin-top: 8px; border-collapse: collapse; font: 12px var(--mono); }
 .inspect-props:empty { display: none; }
 .inspect-props td { padding: 3px 0; box-shadow: inset 0 -1px 0 var(--line); }
