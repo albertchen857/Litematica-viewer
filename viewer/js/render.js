@@ -225,6 +225,14 @@ function patchChunkBuilder(builder) {
   const getMeshes = CB.getMeshes, update = CB.updateStructureBuffers;
   CB.getMeshes = function () { return this.meshList || (this.meshList = getMeshes.call(this)); };
   CB.updateStructureBuffers = function (chunks) { this.meshList = this.chunkList = null; return update.call(this, chunks); };
+  // 6. 高亮的方块亮一档：每个方块的网格做好后，顶点颜色乘 BRIGHTEN。
+  // 顶点颜色数组是网格缓存里共用的（见 cloneMesh），只能换成新数组，不能原地乘
+  const finish = CB.finishChunkMesh;
+  CB.finishChunkMesh = function (mesh, pos) {
+    finish.call(this, mesh, pos);
+    if (!this.brighten?.(pos)) return;
+    for (const q of mesh.quads) q.forEach((v) => { v.color = [v.color[0] * BRIGHTEN, v.color[1] * BRIGHTEN, v.color[2] * BRIGHTEN]; });
+  };
   // 5. 视锥剔除用：每个非空区块的网格 + 包围盒。deepslate 存区块的下标是 |c|*2 + (c<0 ? 1 : 0)，这里解回区块坐标
   CB.getChunkList = function () {
     if (this.chunkList) return this.chunkList;
@@ -412,7 +420,10 @@ export function blockIcon(id, px = 20) {
 const AIR_RE = /:(cave_|void_)?air$/;
 // deepslate 的特殊渲染器只注册了 16 种染色潜影盒，未染色的会整个不显示；画的时候借最接近的紫色
 const RENDER_AS = { "minecraft:shulker_box": "minecraft:purple_shulker_box" };
-const HIGHLIGHT_MAX = 30000; // 高亮框最多画多少个（每个 12 条线）
+const OUTLINE_MAX = 400000; // 高亮 / 隐藏的边框最多画多少条线，再多就截断（画不动）
+const BRIGHTEN = 1.35;      // 高亮的方块亮一档：顶点颜色乘这个数
+const LIT_COLOR = [1, 0.84, 0];       // 高亮边框：亮黄，和各套主题色都分得开
+const HIDDEN_COLOR = [0.55, 0.55, 0.58]; // 隐藏的方块留的边框：灰
 const CHUNK = 16; // deepslate 的区块边长（StructureRenderer 的 chunkSize）。每个区块两份网格、每份 7 个显卡缓冲区，
 // 边长 8 时几十万方块会切出几万个区块、几十万个缓冲区，显卡进程直接崩；16 是 deepslate 的默认值
 const stateOf = (b) => (b.id && !AIR_RE.test(b.id) ? new deepslate.BlockState(RENDER_AS[b.id] || b.id, b.props) : null);
@@ -499,8 +510,10 @@ function hexToRgb(hex) {
 export class View {
   // overlay：放实体标记的那层 div；onPick(命中信息 | null)：点了方块 / 实体 / 空白
   // onContext(命中信息, clientX, clientY)：右键点了一下（没拖动），给右键菜单用
-  constructor(canvas, { overlay = null, onPick = () => {}, onContext = () => {} } = {}) {
+  // gizmo：右上角的轴向面板（<svg>），点端点转到那个方向看
+  constructor(canvas, { overlay = null, onPick = () => {}, onContext = () => {}, gizmo = null } = {}) {
     this.canvas = canvas;
+    this.gizmo = gizmo;
     this.gl = canvas.getContext("webgl");
     // 混合方式：deepslate 用 blendFunc(SRC_ALPHA, ONE_MINUS_SRC_ALPHA)，透明度通道也这么混，
     // 玻璃挡在方块前面时画布在那里变成半透明，页面的浅色背景透出来，玻璃看着发白。
@@ -534,8 +547,11 @@ export class View {
     this.theme = { MC: "#3399ff", PC: "#0066cc", BG: "#f8f9fa", TT: "#343a40", PR: "#babcc2" };
     this.moveSpeed = 12;      // WASD 每秒走几格，界面上可以调
     this.held = new Set();    // 正按着的移动键
+    this.highlight = new Set();       // 高亮的方块种类
+    this.showHiddenOutline = true;    // 隐藏的方块留不留灰边框
     this.bindControls();
     this.bindKeys();
+    this.bindGizmo();
     new ResizeObserver(() => this.resize()).observe(canvas);
   }
 
@@ -622,6 +638,7 @@ export class View {
     this.renderer = new deepslate.StructureRenderer(this.gl, live, resources, { chunkSize: CHUNK, useInvisibleBlockBuffer: false });
     live.only = null;
     patchChunkBuilder(this.renderer.chunkBuilder);
+    this.renderer.chunkBuilder.brighten = (pos) => this.highlight.size > 0 && this.highlight.has(live.getBlock(pos)?.entry?.block.id);
     this.renderer.drawStructure = drawStructureCulled;
     // 图集不用多级纹理（mipmap）：缩小时多级纹理会把图集里相邻的贴图混在一起，
     // 远处方块边上出现杂色线（玻璃上的紫点就是隔壁贴图混进来的）。和游戏里关掉 mipmap 一样，只取最近的像素
@@ -638,7 +655,7 @@ export class View {
     this.buildMarkers(structure, box);
     this.buildEnvironment();
     this.buildRegionBoxes();
-    this.buildHighlight();
+    this.buildKindOutlines();
     if (resetCamera) {
       this.target = [sx / 2, sy / 2, sz / 2];
       this.distance = Math.max(sx, sy, sz) * 1.6 + 4;
@@ -706,7 +723,7 @@ export class View {
     }
     if (regionMap) for (const e of sc.entries) if (regionMap.has(e.region)) e.region = regionMap.get(e.region);
     sc.live.list = null;
-    this.buildHighlight(); // 换出来 / 换走的方块，高亮框跟着变
+    this.buildKindOutlines(); // 换出来 / 换走的方块，高亮框跟着变
     return this.queueChunks([...chunks.values()]);
   }
 
@@ -766,9 +783,13 @@ export class View {
   // 借主画面已经建好网格的渲染器：同一帧里临时换成等轴视角画一张、马上把像素取走，再换回来，
   // 用户看不到闪动（新建一个渲染器第一次做网格要好几秒，这样只要几十毫秒）。
   // 不管现在显示到哪层 / 哪步，画的都是整个结构。返回 size×size 的 canvas；background 为空就是透明底
-  snapshot(size = 512, background = null) {
+  // mode：
+  //   "iso"  等轴（正交投影），水平方向取离现在视角最近的 45°（四个斜角之一），从上往下 30°（现在是仰视就从下往上）
+  //   "view" 照现在的视角（透视，和屏幕上看到的一样，显示层 / 隐藏的种类也照现在的），取画面中间的正方形
+  snapshot(size = 512, background = null, mode = "iso") {
     const sc = this.scene;
     if (!sc || !this.renderer) return null;
+    if (mode === "view") return this.snapshotView(size, background);
     const full = { layers: [0, sc.box.size[1] - 1], step: sc.byStep.length ? sc.byStep.length - 1 : null, region: null };
     const before = sc.filter;
     const filtered = before.layers[0] !== full.layers[0] || before.layers[1] !== full.layers[1] || before.step !== full.step || before.region !== null;
@@ -776,8 +797,10 @@ export class View {
 
     const [sx, sy, sz] = sc.box.size;
     const view = mat4.create();
-    mat4.rotateX(view, view, Math.PI / 6);
-    mat4.rotateY(view, view, Math.PI / 4);
+    const quarter = Math.PI / 2;
+    const yaw = Math.round((this.yaw - Math.PI / 4) / quarter) * quarter + Math.PI / 4;
+    mat4.rotateX(view, view, this.pitch < 0 ? -Math.PI / 6 : Math.PI / 6);
+    mat4.rotateY(view, view, yaw);
     mat4.translate(view, view, [-sx / 2, -sy / 2, -sz / 2]);
     // 包围盒 8 个角投到视图里，算正交投影要框多大
     let lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
@@ -820,6 +843,24 @@ export class View {
     if (f.region != null && entry.ri !== f.region) return false;
     if (entry.pos[1] < f.layers[0] || entry.pos[1] > f.layers[1]) return false;
     return f.step === null || entry.step <= f.step;
+  }
+
+  snapshotView(size, background) {
+    const gl = this.gl, r = this.renderer;
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    r.drawStructure(this.viewMatrix()); // 只画结构：不带网格线、选中框、实体框、背景
+    const w = this.canvas.width, h = this.canvas.height, side = Math.min(w, h);
+    const out = document.createElement("canvas");
+    out.width = out.height = size;
+    const g = out.getContext("2d");
+    if (background) { g.fillStyle = background; g.fillRect(0, 0, size, size); }
+    g.imageSmoothingQuality = "high";
+    g.drawImage(this.canvas, (w - side) / 2, (h - side) / 2, side, side, 0, 0, size, size);
+    this.frame && cancelAnimationFrame(this.frame);
+    this.frame = 0;
+    this.renderNow(); // 同一帧里画回来，看不到闪
+    return out;
   }
 
   visible(entry, f) {
@@ -886,7 +927,7 @@ export class View {
     }
     sc.filter = next;
     if (next.region !== old.region) this.buildRegionBoxes();
-    this.buildHighlight();
+    this.buildKindOutlines();
     const dirty = [...chunks.values()].filter((c) => c.every((v) => v >= 0));
     // 动得少（拖层滑块）就当场重画；动得多（隐藏一整种方块、换子区域）交给后台分批画，不卡页面
     if (dirty.length > 48) this.queueChunks(dirty);
@@ -894,6 +935,67 @@ export class View {
     if (this.selected && !sc.live.getBlock(this.selected)) this.selected = null;
     this.placeMarkersVisibility();
     this.draw();
+  }
+
+  // ---- 右上角轴向面板（同 Blender 的导航小部件）：三根轴六个端点，跟着视角转；点端点转到从那一面看。
+  // 坐标轴按 Minecraft：X 东、Y 上、Z 南。实心带字母的是正方向，淡的是负方向（鼠标放上去显示 -X 这样的字）
+  drawGizmo() {
+    const svg = this.gizmo;
+    if (!svg) return;
+    const R = mat4.create();
+    mat4.rotateX(R, R, this.pitch);
+    mat4.rotateY(R, R, this.yaw);
+    const C = 50, L = 34;
+    const axes = [];
+    for (const [a, name, color] of [[0, "X", "#ff3653"], [1, "Y", "#8adb00"], [2, "Z", "#2c8fff"]]) {
+      for (const sign of [1, -1]) {
+        const v = [0, 0, 0]; v[a] = sign;
+        const p = vec3.transformMat4(vec3.create(), v, R);
+        axes.push({ a, sign, name, color, x: C + p[0] * L, y: C - p[1] * L, z: p[2] });
+      }
+    }
+    axes.sort((u, v) => u.z - v.z); // 远的先画，近的压在上面
+    svg.innerHTML = `<circle class="gizmo-bg" cx="${C}" cy="${C}" r="48"/>` + axes.map((t) => {
+      const dir = `${t.sign > 0 ? "" : "-"}${t.name}`;
+      const line = t.sign > 0 ? `<line x1="${C}" y1="${C}" x2="${t.x.toFixed(1)}" y2="${t.y.toFixed(1)}" stroke="${t.color}" stroke-width="3" stroke-linecap="round"/>` : "";
+      const dot = t.sign > 0
+        ? `<circle cx="${t.x.toFixed(1)}" cy="${t.y.toFixed(1)}" r="9" fill="${t.color}"/><text x="${t.x.toFixed(1)}" y="${(t.y + 4).toFixed(1)}">${t.name}</text>`
+        : `<circle cx="${t.x.toFixed(1)}" cy="${t.y.toFixed(1)}" r="8" fill="${t.color}" fill-opacity="0.35" stroke="${t.color}" stroke-width="1.5"/><text class="neg" x="${t.x.toFixed(1)}" y="${(t.y + 4).toFixed(1)}">${dir}</text>`;
+      return `${line}<g class="gizmo-dot" data-axis="${t.a}" data-sign="${t.sign}"><title>${dir}</title>${dot}</g>`;
+    }).join("");
+  }
+
+  bindGizmo() {
+    if (!this.gizmo) return;
+    this.gizmo.addEventListener("click", (e) => {
+      const g = e.target.closest(".gizmo-dot");
+      if (!g) return;
+      const axis = +g.dataset.axis, sign = +g.dataset.sign;
+      const quarter = Math.PI / 2;
+      // 相机在 target + (-sin(yaw)·cos(pitch), sin(pitch), cos(yaw)·cos(pitch))·distance
+      let yaw = this.yaw, pitch = 0;
+      if (axis === 0) yaw = sign > 0 ? -quarter : quarter;
+      else if (axis === 2) yaw = sign > 0 ? 0 : Math.PI;
+      else { pitch = sign > 0 ? 1.55 : -1.55; yaw = Math.round(this.yaw / quarter) * quarter; } // 正上 / 正下：朝向对齐到最近的正方向
+      this.animateTo(yaw, pitch);
+    });
+  }
+
+  // 转过去有个 250 ms 的过渡，走近的那边（不会绕一大圈）
+  animateTo(yaw, pitch) {
+    const from = { yaw: this.yaw, pitch: this.pitch };
+    let dy = (yaw - from.yaw) % (Math.PI * 2);
+    if (dy > Math.PI) dy -= Math.PI * 2;
+    if (dy < -Math.PI) dy += Math.PI * 2;
+    const t0 = performance.now(), T = 250;
+    const step = (now) => {
+      const k = Math.min(1, (now - t0) / T), e = 1 - (1 - k) ** 3;
+      this.yaw = from.yaw + dy * e;
+      this.pitch = from.pitch + (pitch - from.pitch) * e;
+      this.draw();
+      if (k < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
   }
 
   // ---- 相机：绕 target 转，左键拖转、右键拖平移、滚轮缩放
@@ -938,6 +1040,11 @@ export class View {
       this.renderer.prepareDraw(view);
       this.renderer.drawMesh(this.regionMesh, { pos: true, color: true });
     }
+    if (this.hiddenMesh) {
+      this.renderer.setShader(this.renderer.gridShaderProgram);
+      this.renderer.prepareDraw(view);
+      this.renderer.drawMesh(this.hiddenMesh, { pos: true, color: true });
+    }
     if (this.highlightMesh) {
       const gl = this.gl;
       this.renderer.setShader(this.renderer.gridShaderProgram);
@@ -948,6 +1055,7 @@ export class View {
     }
     if (this.selected) this.renderer.drawOutline(view, this.selected);
     this.placeMarkers(view);
+    this.drawGizmo();
   }
 
   // ---- 背景
@@ -981,31 +1089,92 @@ export class View {
     this.envMesh = mesh.rebuild(this.gl, { pos: true, color: true, texture: true, normal: true });
   }
 
-  // ---- 高亮某几种方块：每格画一个框，关掉深度测试画（隔着墙也看得到），方便找它们在哪。
-  // 框太多画不动，最多 HIGHLIGHT_MAX 个；返回 { shown, total } 给界面提示
+  // ---- 高亮 / 隐藏某几种方块：只画这些方块合起来的外轮廓（黄 = 高亮，隔着墙也看得到；灰 = 隐藏，可以关）。
+  // 不是整块框一个长方体：每个方块的 12 条棱挨个看，棱两边的格子（左、右、斜对角）里有没有同组的方块：
+  //   一边有、另一边和斜对角没有 → 这条棱在一个平面中间，不画；四格都有 → 在里面，不画；其余（外凸、内凹的拐角）画。
   setHighlight(ids) {
-    this.highlight = new Set(ids);
-    const result = this.buildHighlight();
+    const next = new Set(ids), old = this.highlight;
+    const changed = new Set([...old].filter((id) => !next.has(id)).concat([...next].filter((id) => !old.has(id))));
+    this.highlight = next;
+    const result = this.buildKindOutlines();
+    // 亮一档是做网格时乘进去的：这几种方块所在的区块要重画
+    const sc = this.scene;
+    if (sc && changed.size) {
+      const chunks = new Map();
+      for (const e of sc.entries) {
+        if (!changed.has(e.block.id)) continue;
+        const c = e.pos.map((v) => Math.floor(v / CHUNK));
+        chunks.set(c.join(","), c);
+      }
+      if (chunks.size) this.queueChunks([...chunks.values()]);
+    }
     this.draw();
     return result;
   }
 
-  buildHighlight() {
-    this.highlightMesh = null;
-    const sc = this.scene, ids = this.highlight;
-    if (!sc || !this.renderer || !ids?.size) return { shown: 0, total: 0 };
+  setHiddenOutline(on) {
+    this.showHiddenOutline = !!on;
+    this.buildKindOutlines();
+    this.draw();
+  }
+
+  buildKindOutlines() {
+    this.highlightMesh = this.hiddenMesh = null;
+    const sc = this.scene;
+    if (!sc || !this.renderer) return { truncated: false };
+    let truncated = false;
+    const build = (ids, color) => {
+      if (!ids?.size) return null;
+      const list = sc.entries.filter((e) => ids.has(e.block.id) && this.inView(e, sc.filter));
+      if (!list.length) return null;
+      const { mesh, cut } = this.outline(list, color);
+      truncated ||= cut;
+      return mesh;
+    };
+    this.highlightMesh = build(this.highlight, LIT_COLOR);
+    if (this.showHiddenOutline) this.hiddenMesh = build(sc.filter.ignore, HIDDEN_COLOR);
+    return { truncated };
+  }
+
+  // 一组格子的外轮廓线。棱往外挪一点点，不和旁边方块的面叠在一起闪
+  outline(list, color) {
+    const [sx, sy, sz] = this.scene.box.size;
+    const key = (x, y, z) => (x < 0 || y < 0 || z < 0 || x >= sx || y >= sy || z >= sz ? -1 : (x * sy + y) * sz + z);
+    const member = new Set(list.map((e) => e.key));
+    const has = (p) => member.has(key(p[0], p[1], p[2]));
     const Mesh = this.renderer.outlineMesh.constructor;
     const mesh = new Mesh();
-    const color = [1, 0.84, 0]; // 亮黄，和各套主题色都分得开
-    let total = 0;
-    for (const e of sc.entries) {
-      if (!ids.has(e.block.id) || !this.inView(e, sc.filter)) continue;
-      if (++total > HIGHLIGHT_MAX) continue;
-      const [x, y, z] = e.pos;
-      mesh.addLineCube(x - 0.02, y - 0.02, z - 0.02, x + 1.02, y + 1.02, z + 1.02, color);
+    const seen = new Set();
+    const E = 0.015;
+    let lines = 0, cut = false;
+    for (const e of list) {
+      const p = e.pos;
+      for (let k = 0; k < 3; k++) {          // 棱沿着哪根轴
+        const i = (k + 1) % 3, j = (k + 2) % 3;  // 另外两根轴
+        for (const si of [0, 1]) for (const sj of [0, 1]) {
+          const a = p.slice(); a[i] += si ? 1 : -1;
+          const b = p.slice(); b[j] += sj ? 1 : -1;
+          const d = a.slice(); d[j] += sj ? 1 : -1;
+          const A = has(a), B = has(b), D = has(d);
+          if ((A !== B && !D) || (A && B && D)) continue;
+          const from = p.slice(); from[i] += si; from[j] += sj;
+          const id = `${k},${from[0]},${from[1]},${from[2]}`;
+          if (seen.has(id)) continue;
+          seen.add(id);
+          if (++lines > OUTLINE_MAX) { cut = true; break; }
+          // 往空着的那几格挪（棱周围四格：自己、A、B、斜对角 D，按空格的方向加起来取正负）
+          const oi = (!A) - (!B) + (!D), oj = -(!A) + (!B) + (!D);
+          const off = [0, 0, 0];
+          off[i] = Math.sign(oi) * (si ? 1 : -1) * E;
+          off[j] = Math.sign(oj) * (sj ? 1 : -1) * E;
+          const to = from.slice(); to[k] += 1;
+          mesh.addLine(from[0] + off[0], from[1] + off[1], from[2] + off[2], to[0] + off[0], to[1] + off[1], to[2] + off[2], color);
+        }
+        if (cut) break;
+      }
+      if (cut) break;
     }
-    this.highlightMesh = total ? mesh.rebuild(this.gl, { pos: true, color: true }) : null;
-    return { shown: Math.min(total, HIGHLIGHT_MAX), total };
+    return { mesh: lines ? mesh.rebuild(this.gl, { pos: true, color: true }) : null, cut };
   }
 
   // ---- 多子区域：每个区域画一圈边框，选中的那个用主题深色，其他用浅色

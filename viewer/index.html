@@ -190,8 +190,15 @@
         <input type="range" id="move-speed" min="2" max="64" step="1" value="12"><b id="move-speed-val">12</b></label>
     </div>
 
-    <!-- 隐藏 / 高亮了哪些种类方块，一键恢复 -->
-    <div class="kind-bar" id="kind-bar" hidden><span id="kind-bar-text"></span><button class="btn btn-small" id="kind-reset" type="button" data-t="kind.reset">全部恢复</button></div>
+    <!-- 右上角轴向面板（同 Blender）：跟着视角转，点端点转到从那一面看 -->
+    <svg class="gizmo" id="gizmo" viewBox="0 0 100 100" aria-label="view axes" hidden></svg>
+
+    <!-- 隐藏 / 高亮了哪些种类方块，一键恢复；隐藏的方块要不要留灰边框 -->
+    <div class="kind-bar" id="kind-bar" hidden>
+      <span id="kind-bar-text"></span>
+      <label class="kind-outline" id="kind-outline-wrap"><input type="checkbox" id="kind-outline" checked> <span data-t="kind.hiddenOutline">隐藏的显示灰框</span></label>
+      <button class="btn btn-small" id="kind-reset" type="button" data-t="kind.reset">全部恢复</button>
+    </div>
 
     <!-- 替换完的提示 + 撤销 -->
     <div class="toast" id="toast" hidden><span id="toast-text"></span><button class="btn btn-small" id="toast-undo" type="button" data-t="replace.undo">撤销</button></div>
@@ -233,7 +240,10 @@
       <details class="tool" id="thumb-tool">
         <summary class="tool-head"><b data-t="thumb.title">缩略图</b></summary>
         <p class="tool-note" data-t="thumb.note">等轴视角的结构图</p>
-        <div class="tool-actions"><button class="btn btn-small" id="thumb-run" type="button" data-t="thumb.run">生成</button></div>
+        <div class="tool-actions">
+          <button class="btn btn-small" id="thumb-iso" type="button" data-t="thumb.iso">等轴生成</button>
+          <button class="btn btn-small btn-plain" id="thumb-view" type="button" data-t="thumb.view">当前视角生成</button>
+        </div>
         <img class="thumb-img" id="thumb-img" alt="" hidden>
         <div class="tool-actions" id="thumb-actions" hidden>
           <button class="btn btn-small btn-plain" id="thumb-png" type="button" data-t="thumb.png">下载 PNG</button>
@@ -339,6 +349,7 @@
       <li data-t="tut.view"></li>
       <li data-t="tut.inspect"></li>
       <li data-t="tut.kind"></li>
+      <li data-t="tut.gizmo"></li>
       <li data-t="tut.url"></li>
       <li data-t="tut.move"></li>
       <li data-t="tut.replace"></li>
