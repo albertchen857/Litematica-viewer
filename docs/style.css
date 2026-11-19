@@ -93,14 +93,33 @@ code, .mono { font-family: var(--mono); }
   background: var(--bg);
 }
 .brand { display: flex; align-items: center; gap: var(--s2); font-weight: 700; font-size: 18px; }
-.brand small { font-weight: 400; color: var(--pc); font-size: 14px; }
-.topbar nav { display: flex; align-items: center; gap: var(--s2); }
 .nav-link {
   padding: 6px var(--s3); color: var(--tt);
   transition: color var(--beat-1) var(--ease-settle);
 }
 .nav-link:hover { color: var(--pc); }
-.nav-main { font-weight: 700; }
+.topbar.site-head { padding: 0 20px; gap: 16px; justify-content: flex-start; }
+.topbar .lang-switch { margin-left: auto; }
+
+/* ---- 三个页面（主页 / 查看器 / 转换页）共用的顶栏规格：改这里要两边一起改
+   （主页 docs/style.css 和查看器 viewer/viewer.css 各一份，数值必须一样，切页面时按钮才不会跳） */
+@view-transition { navigation: auto; } /* 同站跳页时整页交叉溶解（Chrome / Edge；其他浏览器照常直接跳） */
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: 260ms; }
+.site-head { height: 56px; padding: 0 20px; gap: 16px; }
+.site-head .brand { gap: 10px; font: 700 18px/1 Arial, "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif; view-transition-name: site-brand; }
+.site-head .brand img { width: 32px; height: 32px; }
+/* 不许被挤：查看器顶栏按钮多，flex 会把名字和菜单压窄、折成两行，位置就和另外两页对不上了 */
+.site-head .brand, .site-nav { flex: none; white-space: nowrap; }
+.site-nav { display: flex; gap: 4px; margin-left: 12px; view-transition-name: site-nav; }
+.site-nav a {
+  padding: 8px 14px; border-radius: 8px; color: var(--tt); text-decoration: none;
+  font: 700 16px/1 Arial, "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+  transition: color 120ms, background-color 120ms;
+}
+.site-nav a:hover { color: var(--pc); }
+.site-nav a[aria-current="page"] { color: var(--pc); background: color-mix(in srgb, var(--tt) 8%, var(--bg)); }
+@media (max-width: 1000px) { .site-head .brand span { display: none; } } /* 窄屏三个页面都只留图标（查看器顶栏放不下），位置照样一致 */
+
 .footer a { color: inherit; }
 .footer a:hover { color: var(--mc); }
 .lang-switch { min-width: 64px; font-weight: 700; color: var(--pc); }
@@ -587,7 +606,7 @@ html[data-lang="en"] .ba-en-main { display: block; }
 /* ------------------------------------------------------------------ 窄屏 */
 
 @media (max-width: 900px) {
-  .topbar small { display: none; } /* 主菜单「查看 / 转换」窄屏也留着 */
+  /* 主菜单「查看 / 转换」窄屏也留着 */
   /* 窄屏上下叠：标题和按钮在上，图标在下 */
   .hero-inner { grid-template-columns: 1fr; padding-top: 40px; padding-bottom: 48px; }
   .ba-logo { font-size: clamp(44px, 15vw, 96px); }
@@ -602,7 +621,6 @@ html[data-lang="en"] .ba-en-main { display: block; }
   /* 手机上顶栏放不下五样东西：B 站入口让位，底部「去 Bilibili 留言」还在 */
   .btn-bilibili { display: none; }
   .topbar { padding: var(--s2) var(--s4); }
-  .topbar nav { gap: var(--s1); }
   .mrow { grid-template-columns: 28px 1.2fr 0.6fr 1fr; font-size: 14px; gap: var(--s2); }
 }
 

@@ -31,14 +31,15 @@
 </head>
 <body class="cv-page">
 
-<header class="bar">
+<header class="bar site-head">
   <a class="brand" href="../">
-    <img src="../assets/icon.ico" alt="" width="28" height="28">
+    <img src="../assets/icon.ico" alt="" width="32" height="32">
     <span>Litematica Viewer</span>
   </a>
-  <nav class="cv-nav">
-    <a href="./" id="cv-to-viewer" data-t="conv.toViewer">查看</a>
-    <a href="convert.html" class="is-active" data-t="conv.nav">转换</a>
+  <!-- 主菜单：三个页面同一个位置（规格见 viewer.css 的 .site-head / .site-nav） -->
+  <nav class="site-nav" aria-label="Main">
+    <a href="./" id="nav-view" data-t="conv.toViewer">查看</a>
+    <a href="convert.html" id="nav-convert" aria-current="page" data-t="conv.nav">转换</a>
   </nav>
   <span class="bar-file"></span>
   <select class="lang" id="lang" aria-label="Language">

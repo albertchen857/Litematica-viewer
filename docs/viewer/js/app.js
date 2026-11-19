@@ -32,6 +32,9 @@ let sourceUrl = null; // 现在显示的投影是从哪个网址打开的（本�
 function syncUrl() {
   const file = sourceUrl ? `&file=${encodeURIComponent(sourceUrl)}` : "";
   history.replaceState(null, "", `${location.pathname}?lang=${URL_CODE[lang]}${file}${location.hash}`);
+  // 主菜单带上语言；打开着网上的文件时「查看」也带 ?file=，点了还是这个投影
+  document.getElementById("nav-view").href = `./?lang=${URL_CODE[lang]}${file}`;
+  document.getElementById("nav-convert").href = `convert.html?lang=${URL_CODE[lang]}`;
 }
 let lang = pickLang();
 
