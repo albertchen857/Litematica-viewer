@@ -47,11 +47,16 @@
     js/app.js       界面：拖文件、页签、子区域、语言、导出、替换方块、工具
 -->
 
-<header class="bar">
+<header class="bar site-head">
   <a class="brand" href="../">
-    <img src="../assets/icon.ico" alt="" width="28" height="28">
+    <img src="../assets/icon.ico" alt="" width="32" height="32">
     <span>Litematica Viewer</span>
   </a>
+  <!-- 主菜单：三个页面同一个位置（规格见 viewer.css 的 .site-head / .site-nav） -->
+  <nav class="site-nav" aria-label="Main">
+    <a href="./" id="nav-view" aria-current="page" data-t="conv.toViewer">查看</a>
+    <a href="convert.html" id="nav-convert" data-t="conv.nav">转换</a>
+  </nav>
   <span class="bar-file" id="bar-file"></span>
   <div class="bar-actions">
     <label class="btn btn-accent" id="open-btn">

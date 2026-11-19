@@ -28,7 +28,8 @@ function applyLang() {
   document.querySelectorAll("[data-ui]").forEach((el) => (el.textContent = ui(el.dataset.ui)));
   $("cv-url").placeholder = t("url.placeholder");
   $("lang").value = lang;
-  $("cv-to-viewer").href = `./?lang=${URL_CODE[lang]}`;
+  $("nav-view").href = `./?lang=${URL_CODE[lang]}`;
+  $("nav-convert").href = `convert.html?lang=${URL_CODE[lang]}`;
   document.title = `${t("conv.title")} · Litematica Viewer`;
   history.replaceState(null, "", `${location.pathname}?lang=${URL_CODE[lang]}`);
   document.documentElement.classList.remove("i18n-wait");
