@@ -36,6 +36,8 @@ function applyLang() {
     el.innerHTML = lang === "en" ? el.dataset.en : lang === "tw" ? (el.dataset.tw || el.dataset.zh) : el.dataset.zh;
   });
   $("lang-switch").value = URL_CODE[lang];
+  $("nav-view").href = `viewer/?lang=${URL_CODE[lang]}`;
+  $("nav-convert").href = `viewer/convert.html?lang=${URL_CODE[lang]}`;
   document.querySelectorAll("[data-ph-en]").forEach((el) => { el.placeholder = el.dataset[`ph${lang[0].toUpperCase()}${lang.slice(1)}`] || el.dataset.phEn; });
   // Banner 标题：简体 = 中文 + 英文，繁体 = 繁体中文 + 英文，英文 = 只有英文大标题（背景图固定 app_en.webp）
   document.querySelectorAll(".ba-zh .ch").forEach((ch) => {
@@ -216,7 +218,7 @@ const dropDisabled = dropCard.dataset.disable === "true";
 if (dropDisabled) {
   dropCard.classList.add("is-disabled");
   dropCard.removeAttribute("data-reveal");
-  $("nav-try").hidden = true; // 入口还没开，顶栏就别引人过去扑空
+  // 入口还没开：顶栏的「查看 / 转换」照样能用（直接进查看器 / 转换页）
 }
 
 document.querySelectorAll("[data-reveal]").forEach((block) =>

@@ -100,6 +100,9 @@ code, .mono { font-family: var(--mono); }
   transition: color var(--beat-1) var(--ease-settle);
 }
 .nav-link:hover { color: var(--pc); }
+.nav-main { font-weight: 700; }
+.footer a { color: inherit; }
+.footer a:hover { color: var(--mc); }
 .lang-switch { min-width: 64px; font-weight: 700; color: var(--pc); }
 
 /* ------------------------------------------------------------------ Banner */
@@ -584,7 +587,7 @@ html[data-lang="en"] .ba-en-main { display: block; }
 /* ------------------------------------------------------------------ 窄屏 */
 
 @media (max-width: 900px) {
-  .topbar small, .nav-link { display: none; }
+  .topbar small { display: none; } /* 主菜单「查看 / 转换」窄屏也留着 */
   /* 窄屏上下叠：标题和按钮在上，图标在下 */
   .hero-inner { grid-template-columns: 1fr; padding-top: 40px; padding-bottom: 48px; }
   .ba-logo { font-size: clamp(44px, 15vw, 96px); }

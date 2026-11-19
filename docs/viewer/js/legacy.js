@@ -38,6 +38,40 @@ export function legacyItem(id, damage = 0) {
   return table.items[`${id}:${damage}`] || table.items[`${id}:0`] || "minecraft:air";
 }
 
+// ---------------------------------------------------------------- 反过来：现在的方块 → 数字 ID（写 .schematic 用）
+//
+// 同一个方块名在表里有好几条（不同朝向、半边……），挑属性对得上最多的那条；对得一样多取数值小的。
+// 1.13 以后才有的方块（铜、樱花木……）老版本里根本没有，返回 null，写的时候当空气并提示
+let reverse = null;
+function reverseTable() {
+  if (reverse) return reverse;
+  reverse = { blocks: new Map(), items: new Map() };
+  for (const [key, state] of Object.entries(table.blocks)) {
+    const { id, props } = parseState(state);
+    const [num, data] = key.split(":").map(Number);
+    if (!reverse.blocks.has(id)) reverse.blocks.set(id, []);
+    reverse.blocks.get(id).push({ id: num, data, props });
+  }
+  for (const [key, name] of Object.entries(table.items)) {
+    if (!reverse.items.has(name)) { const [id, damage] = key.split(":").map(Number); reverse.items.set(name, { id, damage }); }
+  }
+  return reverse;
+}
+export function toLegacy(block) {
+  const list = reverseTable().blocks.get(block.id);
+  if (!list) return null;
+  let best = null, bestScore = -1;
+  for (const c of list) {
+    let score = 0;
+    for (const k in c.props) if (block.props[k] === c.props[k]) score++;
+    if (score > bestScore || (score === bestScore && c.data < best.data)) { best = c; bestScore = score; }
+  }
+  return best;
+}
+export function toLegacyItem(name) {
+  return reverseTable().items.get(name) || null;
+}
+
 // ---------------------------------------------------------------- 按邻居补状态
 
 const DIRS = { north: [0, 0, -1], south: [0, 0, 1], west: [-1, 0, 0], east: [1, 0, 0] };

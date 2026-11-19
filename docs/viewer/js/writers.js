@@ -7,6 +7,7 @@
 import { RAW_TAG, isAir } from "./formats.js";
 import { javaToBedrock, isWaterlogged } from "./blockmap.js";
 import { unitParts } from "./analysis.js";
+import { loadLegacy, toLegacy, toLegacyItem } from "./legacy.js";
 
 const D = () => globalThis.deepslate;
 const LIST_COMPOUND = 10, LIST_INT = 3, LIST_LIST = 9;
@@ -284,6 +285,67 @@ export function writeSchem(structure) {
   return new NbtFile("Schematic", root, "gzip", false, undefined).write();
 }
 
+// ---------------------------------------------------------------- .schematic（MCEdit 老格式，1.12 及以前能读）
+//
+// 方块换回数字 ID + 数值（legacy.js 的 toLegacy，表要先 loadLegacy()）。老版本没有的方块写成空气，
+// 名字收进 report 提示用户。容器里的物品也换回数字 id + Damage。楼梯拐角、栅栏连接这些老格式本来就不存，游戏会自己算
+
+export function writeSchematic(structure, report = new Set()) {
+  const { NbtInt, NbtShort, NbtString, NbtByte, NbtFile, NbtByteArray } = D();
+  const region = flatten(structure);
+  const [W, H, L] = region.size;
+  const n = W * H * L;
+  const ids = new Int8Array(n), datas = new Int8Array(n);
+  let add = null;
+  const cache = new Map();
+  const legacyOf = (p) => {
+    if (!cache.has(p)) {
+      const b = region.palette[p];
+      const hit = isAir(b) ? { id: 0, data: 0 } : toLegacy(b);
+      if (!hit) report.add(b.id);
+      cache.set(p, hit || { id: 0, data: 0 });
+    }
+    return cache.get(p);
+  };
+  for (let y = 0, i = 0; y < H; y++) for (let z = 0; z < L; z++) for (let x = 0; x < W; x++, i++) {
+    const { id, data } = legacyOf(region.blocks[x * H * L + y * L + z]);
+    ids[i] = id & 0xff;
+    datas[i] = data & 0x0f;
+    if (id > 255) {   // ID 超过 255：高 4 位放 AddBlocks，两格共用一个字节
+      add ||= new Int8Array((n + 1) >> 1);
+      add[i >> 1] |= i & 1 ? ((id >> 8) & 0x0f) << 4 : (id >> 8) & 0x0f;
+    }
+  }
+  const item = (it) => {
+    const name = String(it.id || it.Name || "");
+    const hit = toLegacyItem(name);
+    return compoundWith(it, {
+      id: new NbtShort(hit ? hit.id : 0), Damage: new NbtShort(hit ? hit.damage : 0),
+      Count: new NbtByte(+(it.Count ?? it.count ?? 1)), count: undefined, components: undefined,
+    });
+  };
+  const tiles = [];
+  for (const [key, data] of region.blockEntities) {
+    const [x, y, z] = key.split(",").map(Number);
+    const items = Array.isArray(data?.Items) ? compounds(data.Items.map(item)) : undefined;
+    tiles.push(compoundWith(data, { x: new NbtInt(x), y: new NbtInt(y), z: new NbtInt(z), Items: items }));
+  }
+  const entities = region.entities.map((e) => compoundWith(e.nbt, { Pos: doubles(entityPos(e)), identifier: undefined }));
+  const root = compoundWith(null, {
+    Width: new NbtShort(W), Height: new NbtShort(H), Length: new NbtShort(L),
+    Materials: new NbtString("Alpha"),
+    Blocks: new NbtByteArray(Array.from(ids)), Data: new NbtByteArray(Array.from(datas)),
+    ...(add ? { AddBlocks: new NbtByteArray(Array.from(add)) } : {}),
+    TileEntities: compounds(tiles), Entities: compounds(entities),
+  });
+  return new NbtFile("Schematic", root, "gzip", false, undefined).write();
+}
+
+// 写之前要准备的数据：.schematic 要数字 ID 对照表
+export async function prepareWrite(ext) {
+  if (ext === ".schematic") await loadLegacy();
+}
+
 // ---------------------------------------------------------------- .mcstructure（同 _save_mcstructure）
 
 // report：Set，收集状态没有对应规则的方块 id，界面上提示用户自查
@@ -379,6 +441,7 @@ export const SAVE_FORMATS = {
   ".nbt": (s) => ({ bytes: writeJavaNbt(s), report: new Set() }),
   ".mcstructure": (s) => { const report = new Set(); return { bytes: writeMcstructure(s, report), report }; },
   ".schem": (s) => ({ bytes: writeSchem(s), report: new Set() }),
+  ".schematic": (s) => { const report = new Set(); return { bytes: writeSchematic(s, report), report }; },
 };
 
 export function download(name, data, type = "application/octet-stream") {

@@ -3,7 +3,7 @@
 
 import { parse, bounds, EXTENSIONS, fromPayload, isAir, RAW_TAG, prepareFormat } from "./formats.js";
 import { analyse, totalRows, unitParts, materialOf } from "./analysis.js";
-import { SAVE_FORMATS, exportText, download, compoundWith, toTag, writeLitematic } from "./writers.js";
+import { SAVE_FORMATS, exportText, download, compoundWith, toTag, writeLitematic, prepareWrite } from "./writers.js";
 import { exportWorld } from "./world.js";
 import { parseRules, replaceBlocks, RuleError } from "./edit.js";
 import { loadResources, View, blockIcon, hasIcon, entityIconId } from "./render.js";
@@ -661,9 +661,11 @@ async function saveAs(ext) {
   if (!state.structure) { alert(t("needFile")); return; }
   if (ext === "world") return saveWorld();
   try {
+    await prepareWrite(ext);
     const { bytes, report } = SAVE_FORMATS[ext](state.structure);
     download(stem() + ext, bytes);
-    if (report.size) alert(ui("app.save.report", report.size) + "\n\n" + [...report].map(short).join(", "));
+    // .schematic：老版本没有的方块写成了空气；其他格式：没有换算规则的状态原样写进去了
+    if (report.size) alert((ext === ".schematic" ? t("schematic.missing", report.size) : ui("app.save.report", report.size)) + "\n\n" + [...report].map(short).join(", "));
   } catch (err) {
     console.error(err);
     alert(ui("app.save.fail", err.message || err));

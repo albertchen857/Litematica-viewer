@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>投影格式转换 · Litematica Viewer</title>
+  <link rel="icon" href="../assets/icon.ico">
+  <!-- 同查看器：不是简体中文就先把字藏起来，翻译到了再显示（见 index.html 开头） -->
+  <script>
+    (function () {
+      var lang = new URLSearchParams(location.search).get("lang") || "";
+      if (!/^(cn|zh|zh_CN)$/.test(lang)) {
+        var root = document.documentElement;
+        root.classList.add("i18n-wait");
+        setTimeout(function () { root.classList.remove("i18n-wait"); }, 4000);
+      }
+    })();
+  </script>
+  <link rel="preload" href="data/gamedata.json" as="fetch" crossorigin>
+  <link rel="stylesheet" href="viewer.css">
+  <!-- 读写 NBT 要 deepslate；opaque.js 给老 .schematic 补栅栏连接用。
+       生成缩略图要的 resource/assets.js（2 MB）勾了「缩略图」才去加载 -->
+  <script src="vendor/deepslate-0.27.2.umd.js"></script>
+  <script src="vendor/gl-matrix-3.4.3.min.js"></script>
+  <script src="resource/opaque.js"></script>
+  <!--
+    格式转换页：一次放好几个投影，选好格式 / 游戏版本 / 要不要缩略图，点「转换」才开始。
+    读写全用查看器那套（js/formats.js、js/writers.js、js/world.js），逻辑在 js/convert.js。
+    只有一个文件就直接存（支持的浏览器先问存哪），好几个就打成一个 zip。
+  -->
+</head>
+<body class="cv-page">
+
+<header class="bar">
+  <a class="brand" href="../">
+    <img src="../assets/icon.ico" alt="" width="28" height="28">
+    <span>Litematica Viewer</span>
+  </a>
+  <nav class="cv-nav">
+    <a href="./" id="cv-to-viewer" data-t="conv.toViewer">查看</a>
+    <a href="convert.html" class="is-active" data-t="conv.nav">转换</a>
+  </nav>
+  <span class="bar-file"></span>
+  <select class="lang" id="lang" aria-label="Language">
+    <option value="zh_CN">简体中文</option>
+    <option value="zh_TW">繁體中文</option>
+    <option value="en_US">English</option>
+  </select>
+</header>
+
+<main class="cv">
+  <h1 class="cv-title" data-t="conv.title">投影格式转换</h1>
+  <p class="cv-sub" data-t="conv.sub">一次可以放好几个文件。全部在你的浏览器里转换，不会上传</p>
+
+  <!-- 拖入框 + 网址 -->
+  <div class="cv-drop-card">
+    <label class="cv-drop" id="cv-drop" tabindex="0">
+      <input type="file" id="cv-input" accept=".litematic,.nbt,.mcstructure,.schem,.schematic" multiple hidden>
+      <span class="empty-icon" aria-hidden="true">▼</span>
+      <b data-t="conv.drop">把投影文件拖到这里，或点一下选择</b>
+      <span class="cv-formats"><code>.litematic</code> · <code>.nbt</code> · <code>.mcstructure</code> · <code>.schem</code> · <code>.schematic</code></span>
+    </label>
+    <form class="url-open" id="cv-url-form">
+      <input type="url" id="cv-url" required autocomplete="off" spellcheck="false" aria-label="URL">
+      <button class="btn btn-plain" type="submit" data-t="conv.addUrl">添加网址</button>
+    </form>
+    <ul class="cv-files" id="cv-files"></ul>
+  </div>
+
+  <!-- 选项：一行一组，单选 -->
+  <section class="cv-opts">
+    <div class="cv-row">
+      <span class="cv-label" data-t="conv.target">转换成</span>
+      <div class="cv-chips" id="cv-target">
+        <label><input type="radio" name="cv-target" value=".litematic" checked><span><b>.litematic</b><small data-t="fmt.litematic">Litematica 投影</small></span></label>
+        <label><input type="radio" name="cv-target" value=".nbt"><span><b>.nbt</b><small data-t="fmt.nbt">结构方块（Java 版）</small></span></label>
+        <label><input type="radio" name="cv-target" value=".mcstructure"><span><b>.mcstructure</b><small data-t="fmt.mcstructure">结构（基岩版）</small></span></label>
+        <label><input type="radio" name="cv-target" value=".schem"><span><b>.schem</b><small data-t="fmt.schem">WorldEdit 剪贴板</small></span></label>
+        <label><input type="radio" name="cv-target" value=".schematic"><span><b>.schematic</b><small data-t="fmt.schematic">MCEdit 老格式（1.12 及以前）</small></span></label>
+        <label><input type="radio" name="cv-target" value="world"><span><b>.zip</b><small data-t="fmt.world">存档（虚空世界）</small></span></label>
+      </div>
+    </div>
+    <!-- 只有有版本可选的格式才出现（现在是 .litematic） -->
+    <div class="cv-row" id="cv-version-row">
+      <span class="cv-label" data-t="conv.version">游戏版本</span>
+      <div class="cv-chips" id="cv-version">
+        <label><input type="radio" name="cv-version" value="" checked><span><b data-t="conv.keep">不改</b><small data-t="conv.keepNote">沿用原文件的</small></span></label>
+        <label><input type="radio" name="cv-version" value="7"><span><b>v7</b><small data-ui="menu.version.7">1.20.6+</small></span></label>
+        <label><input type="radio" name="cv-version" value="6"><span><b>v6</b><small data-ui="menu.version.6">1.14 ~ 1.20.5</small></span></label>
+        <label><input type="radio" name="cv-version" value="3"><span><b>v3</b><small data-ui="menu.version.3">1.13 (1.12 可能出错)</small></span></label>
+      </div>
+    </div>
+    <div class="cv-row">
+      <span class="cv-label" data-t="thumb.title">缩略图</span>
+      <label class="cv-check"><input type="checkbox" id="cv-thumb"> <span data-t="conv.thumb">自动生成缩略图（等轴视角）</span></label>
+      <small class="cv-hint" id="cv-thumb-hint"></small>
+    </div>
+  </section>
+
+  <button class="btn btn-accent cv-go" id="cv-go" type="button" disabled data-t="conv.go">转换</button>
+  <p class="cv-msg" id="cv-msg" aria-live="polite"></p>
+</main>
+
+<!-- 生成缩略图用的离屏 3D 画布（看不见） -->
+<div class="cv-offscreen" aria-hidden="true"><canvas id="cv-canvas" width="512" height="512"></canvas></div>
+
+<script type="module" src="js/convert.js"></script>
+</body>
+</html>

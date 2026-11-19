@@ -729,7 +729,7 @@ export class View {
     this.theme = theme;
     this.rebuildHitboxes();
     this.buildRegionBoxes();
-    for (const m of this.markers) m.el.style.setProperty("--cat", theme[CATEGORY_COLOR[m.category]]);
+    for (const m of this.markers) m.el?.style.setProperty("--cat", theme[CATEGORY_COLOR[m.category]]);
     this.draw();
   }
 
@@ -1416,7 +1416,7 @@ export class View {
   // ---- 实体：deepslate 不画实体。画一个按种类上色的碰撞箱，再在头顶贴一个图标，点图标看信息
 
   buildMarkers(structure, box) {
-    for (const m of this.markers) m.el.remove();
+    for (const m of this.markers) m.el?.remove(); // 没有标记层（转换页的离屏视图）时 el 是空的
     this.markers = [];
     for (const region of structure.regions) {
       const off = region.origin.map((o, i) => o - box.origin[i]);
