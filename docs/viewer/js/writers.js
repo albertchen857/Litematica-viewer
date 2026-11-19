@@ -8,6 +8,7 @@ import { RAW_TAG, isAir } from "./formats.js";
 import { javaToBedrock, isWaterlogged } from "./blockmap.js";
 import { unitParts } from "./analysis.js";
 import { loadLegacy, toLegacy, toLegacyItem } from "./legacy.js";
+import { crc32 } from "./zip.js";
 
 const D = () => globalThis.deepslate;
 const LIST_COMPOUND = 10, LIST_INT = 3, LIST_LIST = 9;
@@ -341,6 +342,207 @@ export function writeSchematic(structure, report = new Set()) {
   return new NbtFile("Schematic", root, "gzip", false, undefined).write();
 }
 
+// ---------------------------------------------------------------- 最小 PNG 编码（ARGB 整数 → PNG 字节，同步）
+// 写 .bp 要带一张 PNG 缩略图，而另存是同步的（canvas.toBlob 是异步的），所以自己拼：zlib 用「不压缩」块
+function pngFromArgb(ints, w, h) {
+  const raw = new Uint8Array(h * (1 + w * 4));
+  for (let y = 0, p = 0; y < h; y++) {
+    raw[p++] = 0; // 每行开头的过滤类型：0 = 不过滤
+    for (let x = 0; x < w; x++) {
+      const v = ints[y * w + x];
+      raw[p++] = (v >> 16) & 255; raw[p++] = (v >> 8) & 255; raw[p++] = v & 255; raw[p++] = (v >>> 24) & 255;
+    }
+  }
+  const blocks = [];
+  for (let i = 0; i < raw.length; i += 65535) {
+    const part = raw.subarray(i, i + 65535), last = i + 65535 >= raw.length;
+    blocks.push(Uint8Array.of(last ? 1 : 0, part.length & 255, part.length >> 8, ~part.length & 255, (~part.length >> 8) & 255), part);
+  }
+  let a = 1, b = 0;
+  for (const v of raw) { a = (a + v) % 65521; b = (b + a) % 65521; }
+  const zlib = concat([Uint8Array.of(0x78, 0x01), ...blocks, u32((b << 16) | a)]);
+  const chunk = (type, data) => {
+    const body = concat([new TextEncoder().encode(type), data]);
+    return concat([u32(data.length), body, u32(crc32(body))]);
+  };
+  const ihdr = concat([u32(w), u32(h), Uint8Array.of(8, 6, 0, 0, 0)]); // 8 位 RGBA
+  return concat([Uint8Array.of(137, 80, 78, 71, 13, 10, 26, 10), chunk("IHDR", ihdr), chunk("IDAT", zlib), chunk("IEND", new Uint8Array(0))]);
+}
+const u32 = (v) => Uint8Array.of((v >>> 24) & 255, (v >>> 16) & 255, (v >>> 8) & 255, v & 255);
+function concat(parts) {
+  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  let at = 0;
+  for (const p of parts) { out.set(p, at); at += p.length; }
+  return out;
+}
+
+// ---------------------------------------------------------------- .bp（Axiom 蓝图，照 SchemConvert 的写法）
+//
+// 魔数 | NBT 头（不压缩）| PNG 缩略图 | gzip NBT 方块数据（16³ 区段，每段自己的调色板，按原版区块的方式压缩、不跨 long）。
+// 调色板每项同时写新旧两套键（id / properties 给 MC 26.3 起的 Axiom，Name / Properties 给老版本），新旧都能读。
+// 空格子写 structure_void（粘贴时不覆盖原有方块），对应头里的 ContainsAir = 0
+
+export function writeBp(structure) {
+  const { NbtInt, NbtLong, NbtFloat, NbtByte, NbtString, NbtFile, NbtList, NbtLongArray } = D();
+  const region = flatten(structure);
+  const [W, H, L] = region.size;
+  const stateTag = (b) => {
+    const props = Object.keys(b.props).length ? compoundWith(null, Object.fromEntries(Object.entries(b.props).map(([k, v]) => [k, new NbtString(String(v))]))) : undefined;
+    return compoundWith(null, { id: new NbtString(b.id), Name: new NbtString(b.id), properties: props, Properties: props });
+  };
+  const VOID = { id: "minecraft:structure_void", props: {} };
+  const sections = [];
+  let count = 0;
+  for (let sx = 0; sx * 16 < W; sx++) for (let sy = 0; sy * 16 < H; sy++) for (let sz = 0; sz * 16 < L; sz++) {
+    const pal = [VOID], index = new Map([[0, 0]]); // 结构调色板下标 → 区段调色板下标（0 = 空 → structure_void）
+    const vals = new Uint16Array(4096);
+    let any = false;
+    for (let y = 0, i = 0; y < 16; y++) for (let z = 0; z < 16; z++) for (let x = 0; x < 16; x++, i++) {
+      const gx = sx * 16 + x, gy = sy * 16 + y, gz = sz * 16 + z;
+      if (gx >= W || gy >= H || gz >= L) continue;
+      const p = region.blocks[gx * H * L + gy * L + gz];
+      if (!p || isAir(region.palette[p])) continue;
+      if (!index.has(p)) { index.set(p, pal.length); pal.push(region.palette[p]); }
+      vals[i] = index.get(p);
+      any = true;
+      count++;
+    }
+    if (!any) continue; // 整段都是空的就不写
+    const bits = Math.max(4, Math.ceil(Math.log2(pal.length)));
+    const per = Math.floor(64 / bits), longs = [];
+    for (let i = 0; i < 4096; i += per) {
+      let hi = 0, lo = 0;
+      for (let j = 0; j < per && i + j < 4096; j++) {
+        const v = vals[i + j], off = j * bits;
+        if (off + bits <= 32) lo |= v << off;
+        else if (off >= 32) hi |= v << (off - 32);
+        else { lo |= v << off; hi |= v >>> (32 - off); }
+      }
+      longs.push([hi | 0, lo | 0]);
+    }
+    sections.push(compoundWith(null, {
+      X: new NbtInt(sx), Y: new NbtInt(sy), Z: new NbtInt(sz),
+      BlockStates: compoundWith(null, { palette: compounds(pal.map(stateTag)), data: new NbtLongArray(longs.map(([h, l]) => new NbtLong([h, l]))) }),
+    }));
+  }
+  const blockEntities = [];
+  for (const [key, data] of region.blockEntities) {
+    const [x, y, z] = key.split(",").map(Number);
+    blockEntities.push(compoundWith(data, { x: new NbtInt(x), y: new NbtInt(y), z: new NbtInt(z) }));
+  }
+  const meta = structure.meta || {};
+  const blockData = compoundWith(null, {
+    BlockRegion: compounds(sections), BlockEntities: compounds(blockEntities),
+    DataVersion: new NbtInt(+meta.DataVersion || +meta.mc_version || 3953),
+  });
+  const header = compoundWith(null, {
+    Name: new NbtString(structure.name || "Unnamed"), Author: new NbtString(structure.author || ""),
+    Tags: new NbtList([]), BlockCount: new NbtInt(count), Version: new NbtLong([0, 1]),
+    ContainsAir: new NbtByte(0), LockedThumbnail: new NbtByte(0),
+    ThumbnailYaw: new NbtFloat(135), ThumbnailPitch: new NbtFloat(30),
+  });
+  // 缩略图：投影里的（生成的 / .litematic 自带的 140×140）> .bp 读进来时自带的 PNG > 一张浅灰的占位图
+  const preview = structure.preview || structure.metadata?.PreviewImageData;
+  const side = preview ? Math.round(Math.sqrt(preview.length)) : 0;
+  const png = side && side * side === preview.length ? pngFromArgb(Array.from(preview), side, side)
+    : structure.previewPngBytes || pngFromArgb(new Array(96 * 96).fill(0xfff0f3f7 | 0), 96, 96);
+  const headerBytes = new NbtFile("", header, "none", false, undefined).write();
+  const dataBytes = new NbtFile("", blockData, "gzip", false, undefined).write();
+  return concat([u32(0x0ae5bb36), u32(headerBytes.length), headerBytes, u32(png.length), png, u32(dataBytes.length), dataBytes]);
+}
+
+// ---------------------------------------------------------------- .vschem（VMod 船只蓝图）
+//
+// 每个子区域 = 一条船（不旋转），位置按子区域在整体里的位置。读 .vschem 时留下的物理连接原样写回
+// （绳长、刚度这些照旧，只把船 id 和锚点换成这里的坐标）。船坞坐标就用子区域自己的格子坐标：
+// 粘贴时 VMod 会把所有坐标按「旧船中心 → 新船中心」挪过去，所以只要这份文件自己前后一致就行
+
+function varintBytes(n) {
+  const out = [];
+  do { let b = n & 0x7f; n >>>= 7; if (n) b |= 0x80; out.push(b); } while (n);
+  return Uint8Array.from(out);
+}
+const utfBytes = (s) => { const b = new TextEncoder().encode(s); return concat([varintBytes(b.length), b]); };
+// 十进制字符串 → NbtLong（船 id 可能超过 2^53）
+const longTag = (str) => { const v = BigInt.asUintN(64, BigInt(str)); return new (D().NbtLong)([Number(BigInt.asIntN(32, v >> 32n)), Number(BigInt.asIntN(32, v & 0xffffffffn))]); };
+
+export function writeVschem(structure) {
+  const { NbtInt, NbtDouble, NbtString, NbtFile, NbtCompound, NbtByteArray, NbtByte } = D();
+  const lo = [0, 1, 2].map((a) => Math.min(...structure.regions.map((r) => r.origin[a])));
+  const hi = [0, 1, 2].map((a) => Math.max(...structure.regions.map((r) => r.origin[a] + r.size[a])));
+  const objCenter = hi.map((h, a) => (h - lo[a]) / 2);
+  const dbl = (prefix, v) => Object.fromEntries(["x", "y", "z"].map((k, a) => [prefix + k, new NbtDouble(v[a])]));
+  const palette = [], pIndex = new Map();
+  const pidOf = (b) => {
+    const k = b.id + JSON.stringify(Object.entries(b.props).sort());
+    if (!pIndex.has(k)) {
+      pIndex.set(k, palette.length);
+      palette.push(compoundWith(null, { Name: new NbtString(b.id),
+        Properties: Object.keys(b.props).length ? compoundWith(null, Object.fromEntries(Object.entries(b.props).map(([kk, v]) => [kk, new NbtString(String(v))]))) : undefined }));
+    }
+    return pIndex.get(k);
+  };
+  const extraBlocks = [];
+  const shipsInfo = [], grid = new NbtCompound(), entityData = new NbtCompound();
+  const shipIdOf = new Map(); // 原来的船 id（读 .vschem 时记在子区域上）→ 这里写的 id
+  const frames = new Map();   // 写出的船 id → { origin, centerInt, pcp }
+  structure.regions.forEach((r, n) => {
+    const id = r.shipId || String(n + 1);
+    shipIdOf.set(r.shipId || `#${n}`, id);
+    const [sx, sy, sz] = r.size;
+    const pcp = r.size.map((v) => v / 2);                 // 船坞里的中心（双精度）
+    const centerInt = r.size.map((v) => Math.trunc(v / 2)); // 存方块时用的整数中心
+    const round = pcp.map(Math.round);
+    const rel = r.origin.map((o, a) => o - lo[a] + pcp[a] - objCenter[a]);
+    frames.set(id, { origin: r.origin.map((o, a) => o - lo[a]), centerInt, pcp });
+    shipsInfo.push(compoundWith(null, {
+      id: longTag(id), ...dbl("rptc", rel),
+      csb_mx: new NbtInt(-round[0]), csb_my: new NbtInt(-round[1]), csb_mz: new NbtInt(-round[2]),
+      csb_Mx: new NbtInt(sx - round[0]), csb_My: new NbtInt(sy - round[1]), csb_Mz: new NbtInt(sz - round[2]),
+      ...dbl("pcp", pcp), ...dbl("pcomp", pcp), sc: new NbtDouble(1),
+      rotw: new NbtDouble(1), rotx: new NbtDouble(0), roty: new NbtDouble(0), rotz: new NbtDouble(0),
+    }));
+    const items = [];
+    for (let x = 0; x < sx; x++) for (let y = 0; y < sy; y++) for (let z = 0; z < sz; z++) {
+      const p = r.blocks[x * sy * sz + y * sz + z];
+      if (!p || isAir(r.palette[p])) continue;
+      const be = r.blockEntities.get(`${x},${y},${z}`);
+      let edi = -1;
+      if (be) { edi = extraBlocks.length; extraBlocks.push(compoundWith(be, { x: new NbtInt(x), y: new NbtInt(y), z: new NbtInt(z) })); }
+      items.push(compoundWith(null, { x: new NbtInt(x - centerInt[0]), y: new NbtInt(y - centerInt[1]), z: new NbtInt(z - centerInt[2]), pid: new NbtInt(pidOf(r.palette[p])), edi: new NbtInt(edi) }));
+    }
+    grid.set(id, compounds(items));
+    if (r.entities.length) {
+      entityData.set(id, compounds(r.entities.map((e) => compoundWith(null, {
+        ...dbl("pos", entityPos(e).map((v, a) => v - pcp[a])), entity: compoundWith(e.nbt, { id: new NbtString((e.nbt && e.nbt.id) || e.id || "minecraft:unknown") }),
+      }))));
+    }
+  });
+  // 物理连接：读 .vschem 时留下的原始数据，换上新的船 id 和锚点（锚点 = 连接点在这条船格子里的坐标）
+  const extra = new NbtCompound();
+  const links = (structure.links || []).filter((l) => l.raw && l.rawType);
+  if (links.length) {
+    const vents = links.flatMap((l) => {
+      const [id1, id2] = l.ships.map((s) => shipIdOf.get(s));
+      if (!id1 || !id2) return [];
+      const yard = (id, p) => { const f = frames.get(id); return p.map((v, a) => v - f.origin[a]); };
+      const vec = (v) => compoundWith(null, { x: new NbtDouble(v[0]), y: new NbtDouble(v[1]), z: new NbtDouble(v[2]) });
+      return [compoundWith(null, { VEntityType: new NbtString(l.rawType),
+        data: compoundWith(l.raw, { shipId1: longTag(id1), shipId2: longTag(id2), sPos1: vec(yard(id1, l.a)), sPos2: vec(yard(id2, l.b)) }) })];
+    });
+    const bytes = new NbtFile("", compoundWith(null, { vmod_VEntities: compounds(vents) }), "gzip", false, undefined).write();
+    extra.set(structure.vmodEvent || "net.spaceeye.vmod.vEntityManaging.VModVEntityManagerCopyPasteEvents",
+      new NbtByteArray(Array.from(bytes, (b) => (b > 127 ? b - 256 : b))));
+  }
+  const root = compoundWith(null, {
+    shipData: compoundWith(null, { ...dbl("maxObjectPos", objCenter), data: compounds(shipsInfo) }),
+    extraData: extra, blockPalette: compounds(palette), gridData: grid,
+    extraBlockData: compounds(extraBlocks), entityData,
+  });
+  const nbt = new NbtFile("", root, "gzip", false, undefined).write();
+  return concat([utfBytes("vschem"), utfBytes("net.spaceeye.vmod.schematic.VModShipSchematicV2"), nbt]);
+}
+
 // 写之前要准备的数据：.schematic 要数字 ID 对照表
 export async function prepareWrite(ext) {
   if (ext === ".schematic") await loadLegacy();
@@ -442,6 +644,8 @@ export const SAVE_FORMATS = {
   ".mcstructure": (s) => { const report = new Set(); return { bytes: writeMcstructure(s, report), report }; },
   ".schem": (s) => ({ bytes: writeSchem(s), report: new Set() }),
   ".schematic": (s) => { const report = new Set(); return { bytes: writeSchematic(s, report), report }; },
+  ".bp": (s) => ({ bytes: writeBp(s), report: new Set() }),
+  ".vschem": (s) => ({ bytes: writeVschem(s), report: new Set() }),
 };
 
 export function download(name, data, type = "application/octet-stream") {

@@ -50,6 +50,8 @@ function plain(tag) {
 }
 
 const xyz = (v) => [v.x, v.y, v.z];
+// 方块状态的 NBT：老写法 { Name, Properties }，MC 26.3 起是 { id, properties }（Axiom 新版蓝图就是这样）。两种都认
+const stateOfTag = (b) => ({ id: b.Name ?? b.id, props: b.Properties ?? b.properties ?? {} });
 
 // ---------------------------------------------------------------- .litematic
 
@@ -124,7 +126,7 @@ function readJavaNbt(root) {
   const data = plain(root);
   const size = data.size;
   const raw = data.palette || (data.palettes && data.palettes[0]) || [];
-  const palette = [AIR, ...raw.map((b) => ({ id: b.Name, props: b.Properties || {} }))];
+  const palette = [AIR, ...raw.map(stateOfTag)];
   const [sx, sy, sz] = size;
   const blocks = new Uint32Array(sx * sy * sz);
   const blockEntities = new Map();
@@ -358,16 +360,17 @@ function readBp(bytes) {
   const full = hi.map((h, i) => (h - lo[i] + 1) * 16);
   // 先铺进区段对齐的大格子，再裁到真正有方块的范围（区段是 16³，边上大多是空的）
   const palette = [AIR], index = new Map([["minecraft:air{}", 0]]);
-  const keyOf = (b) => b.Name + JSON.stringify(b.Properties || {});
+  const keyOf = (b) => { const s = stateOfTag(b); return s.id + JSON.stringify(s.props); };
   const grid = new Uint32Array(full[0] * full[1] * full[2]);
   const [FX, FY, FZ] = full;
   let min = [Infinity, Infinity, Infinity], max = [-1, -1, -1];
   for (const s of sections) {
     const raw = s.BlockStates?.palette || [];
     const map = raw.map((b) => {
-      if (VOID_IDS.has(b.Name) || AIR_IDS.has(b.Name)) return 0;
+      const st = stateOfTag(b);
+      if (VOID_IDS.has(st.id) || AIR_IDS.has(st.id)) return 0;
       const k = keyOf(b);
-      if (!index.has(k)) { index.set(k, palette.length); palette.push({ id: b.Name, props: b.Properties || {} }); }
+      if (!index.has(k)) { index.set(k, palette.length); palette.push(st); }
       return index.get(k);
     });
     const bits = Math.max(4, Math.ceil(Math.log2(Math.max(raw.length, 2))));
@@ -400,6 +403,7 @@ function readBp(bytes) {
     meta: { DataVersion: data.DataVersion || 3953 },
     // 蓝图自带的缩略图（PNG）：右边第一张卡片显示
     previewPng: png.length ? URL.createObjectURL(new Blob([png], { type: "image/png" })) : null,
+    previewPngBytes: png.length ? png.slice() : null, // 另存成 .bp 时原样带上
     regions: [{ name: "blueprint", origin: [0, 0, 0], size, palette, blocks, blockEntities, entities: [],
       raw: { kind: "bp", palette: palette.map((b) => ({ Name: b.id, ...(Object.keys(b.props).length ? { Properties: b.props } : {}) })), offset: 0 } }],
   };
@@ -505,7 +509,7 @@ function readVschem(bytes) {
   // 取整会让整条船错开半格），delta 就是这个错开量，跟着挪同样的量才和画出来的方块对得上
   const toWorld = (ship, yard) => rawWorld(ship, yard).map((v, a) => v + (ship.delta?.[a] || 0));
 
-  const paletteSrc = (root.blockPalette || []).map((b) => ({ id: b.Name, props: b.Properties || {} }));
+  const paletteSrc = (root.blockPalette || []).map(stateOfTag);
   const extraBlocks = root.extraBlockData || [];
   const gridTag = rootTag.getCompound("gridData");
   const built = [];
@@ -551,6 +555,7 @@ function readVschem(bytes) {
 
   // 物理连接：在 extraData 里找 VMod 的那份（gzip NBT，有 vmod_VEntities）
   const links = [], unplaced = {};
+  let vmodEvent = null; // VMod 存物理连接的那份 extraData 的名字（另存 .vschem 时用同一个名字）
   const extra = rootTag.get("extraData");
   extra?.forEach?.((name, tag) => {
     let entities;
@@ -559,6 +564,7 @@ function readVschem(bytes) {
       entities = nbt.get("vmod_VEntities");
     } catch { return; }
     if (!entities) return;
+    vmodEvent = name;
     for (const item of entities.getItems()) {
       const type = item.getString("VEntityType").replace(/^.*\./, "");
       const data = item.getCompound("data");
@@ -567,14 +573,15 @@ function readVschem(bytes) {
       const s1 = a && byId.get(longStr(a)), s2 = b && byId.get(longStr(b));
       if (!s1 || !s2 || !p1 || !p2) { unplaced[type] = (unplaced[type] || 0) + 1; continue; } // 连着地面（-1）或者单点的（推进器……）
       const pt = (t) => [t.getNumber("x"), t.getNumber("y"), t.getNumber("z")];
-      links.push({ type, a: toWorld(s1, pt(p1)).map((v, k) => v - lo[k]), b: toWorld(s2, pt(p2)).map((v, k) => v - lo[k]), ships: [s1.id, s2.id] });
+      links.push({ type, a: toWorld(s1, pt(p1)).map((v, k) => v - lo[k]), b: toWorld(s2, pt(p2)).map((v, k) => v - lo[k]), ships: [s1.id, s2.id],
+        rawType: item.getString("VEntityType"), raw: plain(data) });
     }
   });
 
   return {
     name: "", author: "", description: "", source: "vschem", version: type.replace(/^.*\./, ""), declared: 0,
     meta: { DataVersion: 3953 },
-    links, unplacedLinks: unplaced, shipCount: ships.length,
+    links, unplacedLinks: unplaced, shipCount: ships.length, vmodEvent,
     regions: regions.map((r) => normalise(r)),
   };
 }
