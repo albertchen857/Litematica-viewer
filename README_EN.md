@@ -30,6 +30,8 @@ QQ Discussion Group：1044260630
 | `.mcstructure` | Bedrock Edition structure block | ✅ | ✅ |
 | `.schem` | WorldEdit / FAWE (Sponge v1–v3) | ✅ | ✅ (v2) |
 | `.schematic` | MCEdit / old WorldEdit (1.12 and earlier, numeric IDs) | ✅ | — |
+| `.bp` | Axiom blueprint | ✅ (web) | — |
+| `.vschem` | Valkyrien Skies / VMod ship schematic (several ships + physics links) | ✅ (web) | — |
 
 All of them are converted to one internal model on import, so **every feature works on
 every format**, and you can convert between them via `Data Analysis → Save as`.

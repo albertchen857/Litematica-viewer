@@ -60,7 +60,7 @@
   <span class="bar-file" id="bar-file"></span>
   <div class="bar-actions">
     <label class="btn btn-accent" id="open-btn">
-      <input type="file" id="file-input" accept=".litematic,.nbt,.mcstructure,.schem,.schematic" hidden>
+      <input type="file" id="file-input" accept=".litematic,.nbt,.mcstructure,.schem,.schematic,.bp,.vschem" hidden>
       <span data-t="open">打开文件</span>
     </label>
     <!-- 导出材料表 / 分类导出（同桌面版「数据分析」菜单），转换文件类型：鼠标放上去出下拉框。
@@ -156,7 +156,7 @@
     <div class="empty" id="empty">
       <div class="empty-icon" aria-hidden="true">▼</div>
       <p class="empty-title" data-t="dropTitle">把投影文件拖到这里</p>
-      <p class="empty-sub"><span data-t="supports">支持</span> <code>.litematic</code> · <code>.nbt</code> · <code>.mcstructure</code> · <code>.schem</code> · <code>.schematic</code></p>
+      <p class="empty-sub"><span data-t="supports">支持</span> <code>.litematic</code> · <code>.nbt</code> · <code>.mcstructure</code> · <code>.schem</code> · <code>.schematic</code> · <code>.bp</code> · <code>.vschem</code></p>
       <!-- 中间这块也放一个打开按钮（和顶栏那个是同一个文件框） -->
       <label class="btn btn-accent empty-open" for="file-input"><span data-t="open">打开文件</span></label>
       <!-- 从网址打开：浏览器直接去下（对方网站要允许跨域），也可以把别的标签页里的链接拖进来 -->
@@ -185,6 +185,8 @@
     <div class="hint" id="hint" hidden>
       <span data-t="controls">左键拖动旋转 · 右键拖动平移 · 滚轮缩放 · WASD 移动</span>
       <!-- WASD 按世界方向走（W/S 北南、A/D 西东、空格/Shift 上下），速度每秒几格 -->
+      <!-- .vschem 才有：船和船之间的物理连接（绳子、铰链、滑轨……） -->
+      <label class="links-toggle" id="links-toggle" hidden><input type="checkbox" id="links-show" checked> <span id="links-label"></span></label>
       <!-- 背景：地板 + 天空，默认关闭 -->
       <label class="env-pick"><span data-t="env.title">背景</span>
         <select id="env">

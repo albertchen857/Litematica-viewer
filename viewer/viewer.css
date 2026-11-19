@@ -210,6 +210,8 @@ code { font-family: var(--mono); }
 .row.is-lit { box-shadow: inset 4px 0 0 #ffd600; }
 /* 这几个自己写了 display，hidden 属性会被盖掉，要单独写一条 */
 .kind-bar[hidden], .inspect-kind[hidden], #toast-undo[hidden], .kind-outline[hidden] { display: none; }
+.links-toggle { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; white-space: nowrap; }
+.links-toggle[hidden] { display: none; }
 .kind-outline { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); cursor: pointer; white-space: nowrap; }
 .inspect-props { width: 100%; margin-top: 8px; border-collapse: collapse; font: 12px var(--mono); }
 .inspect-props:empty { display: none; }

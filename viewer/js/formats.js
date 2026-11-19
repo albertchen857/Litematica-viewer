@@ -1,6 +1,7 @@
 // 三种结构文件 → 统一模型。和桌面版 script/lv/model.py + formats.py 是同一套思路：
 //
-// 支持 .litematic / .nbt / .mcstructure，以及 WorldEdit 的 .schem（Sponge v1–v3）和老 .schematic（MCEdit，数字 ID）。
+// 支持 .litematic / .nbt / .mcstructure，WorldEdit 的 .schem（Sponge v1–v3）和老 .schematic（MCEdit，数字 ID），
+// Axiom 的 .bp 蓝图，以及 Valkyrien Skies（VMod）的 .vschem 船只蓝图（带物理连接）。
 //
 //   Structure { name, author, description, source, version, declared, regions: [Region] }
 //   Region    { name, origin:[x,y,z], size:[sx,sy,sz], palette:[{id, props}], blocks, blockEntities, entities }
@@ -313,6 +314,271 @@ function readSchematic(rootTag, isOpaque) {
   };
 }
 
+// ---------------------------------------------------------------- .bp（Axiom 蓝图）
+//
+// 照 SchemConvert 的 AxiomSchematicFormat（开源）：
+//   int 魔数 0x0AE5BB36 | int 长度 + 不压缩的 NBT 头（Name、Author、Tags、BlockCount…）
+//   | int 长度 + PNG 缩略图 | int 长度 + gzip NBT 方块数据
+// 方块数据：BlockRegion 列表，每项一个 16³ 区段（X / Y / Z 是区段坐标），BlockStates { palette, data }，
+// data 和原版区块一样按位压缩、数值不跨 long（每个 long 放 floor(64 / 位数) 个，位数至少 4）。
+// 方块实体在 BlockEntities 里，坐标是蓝图里的绝对格子坐标。structure_void 表示「这格不归蓝图管」，当空气
+
+const BP_MAGIC = 0x0ae5bb36;
+const VOID_IDS = new Set(["minecraft:structure_void"]);
+
+// 原版区块那种「不跨 long」的按位压缩：longs 是 plain() 给的 Int32Array（高、低、高、低…）
+function unpackSection(longs, bits, count) {
+  const out = new Uint16Array(count);
+  const per = Math.floor(64 / bits), mask = (1 << bits) - 1;
+  for (let i = 0; i < count; i++) {
+    const li = Math.floor(i / per), off = (i % per) * bits;
+    const hi = longs[li * 2] >>> 0, lo = longs[li * 2 + 1] >>> 0;
+    let v;
+    if (off + bits <= 32) v = lo >>> off;
+    else if (off >= 32) v = hi >>> (off - 32);
+    else v = (lo >>> off) | (hi << (32 - off));
+    out[i] = v & mask;
+  }
+  return out;
+}
+
+function readBp(bytes) {
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (dv.getInt32(0) !== BP_MAGIC) throw new Error("not an Axiom blueprint (.bp)");
+  let p = 4;
+  const chunk = () => { const n = dv.getInt32(p); const part = bytes.subarray(p + 4, p + 4 + n); p += 4 + n; return part; };
+  const headerBytes = chunk(), png = chunk(), dataBytes = chunk();
+  const header = headerBytes.length ? plain(deepslate.NbtFile.read(headerBytes, { compression: "none" }).root) : {};
+  const data = plain(deepslate.NbtFile.read(dataBytes, {}).root);
+
+  const sections = data.BlockRegion || [];
+  if (!sections.length) throw new Error("empty blueprint");
+  const lo = ["X", "Y", "Z"].map((k) => Math.min(...sections.map((s) => s[k])));
+  const hi = ["X", "Y", "Z"].map((k) => Math.max(...sections.map((s) => s[k])));
+  const full = hi.map((h, i) => (h - lo[i] + 1) * 16);
+  // 先铺进区段对齐的大格子，再裁到真正有方块的范围（区段是 16³，边上大多是空的）
+  const palette = [AIR], index = new Map([["minecraft:air{}", 0]]);
+  const keyOf = (b) => b.Name + JSON.stringify(b.Properties || {});
+  const grid = new Uint32Array(full[0] * full[1] * full[2]);
+  const [FX, FY, FZ] = full;
+  let min = [Infinity, Infinity, Infinity], max = [-1, -1, -1];
+  for (const s of sections) {
+    const raw = s.BlockStates?.palette || [];
+    const map = raw.map((b) => {
+      if (VOID_IDS.has(b.Name) || AIR_IDS.has(b.Name)) return 0;
+      const k = keyOf(b);
+      if (!index.has(k)) { index.set(k, palette.length); palette.push({ id: b.Name, props: b.Properties || {} }); }
+      return index.get(k);
+    });
+    const bits = Math.max(4, Math.ceil(Math.log2(Math.max(raw.length, 2))));
+    const values = raw.length <= 1 ? new Uint16Array(4096) : unpackSection(s.BlockStates.data || new Int32Array(0), bits, 4096);
+    const ox = (s.X - lo[0]) * 16, oy = (s.Y - lo[1]) * 16, oz = (s.Z - lo[2]) * 16;
+    for (let y = 0, i = 0; y < 16; y++) for (let z = 0; z < 16; z++) for (let x = 0; x < 16; x++, i++) {
+      const v = map[values[i]] || 0;
+      if (!v) continue;
+      const gx = ox + x, gy = oy + y, gz = oz + z;
+      grid[gx * FY * FZ + gy * FZ + gz] = v;
+      if (gx < min[0]) min[0] = gx; if (gy < min[1]) min[1] = gy; if (gz < min[2]) min[2] = gz;
+      if (gx > max[0]) max[0] = gx; if (gy > max[1]) max[1] = gy; if (gz > max[2]) max[2] = gz;
+    }
+  }
+  if (max[0] < 0) min = [0, 0, 0], max = [0, 0, 0];
+  const size = max.map((m, i) => m - min[i] + 1);
+  const [sx, sy, sz] = size;
+  const blocks = new Uint32Array(sx * sy * sz);
+  for (let x = 0; x < sx; x++) for (let y = 0; y < sy; y++) for (let z = 0; z < sz; z++) {
+    blocks[x * sy * sz + y * sz + z] = grid[(x + min[0]) * FY * FZ + (y + min[1]) * FZ + (z + min[2])];
+  }
+  const blockEntities = new Map();
+  for (const be of data.BlockEntities || []) {
+    const x = (be.X ?? be.x) - lo[0] * 16 - min[0], y = (be.Y ?? be.y) - lo[1] * 16 - min[1], z = (be.Z ?? be.z) - lo[2] * 16 - min[2];
+    if (x >= 0 && y >= 0 && z >= 0 && x < sx && y < sy && z < sz) blockEntities.set(`${x},${y},${z}`, be);
+  }
+  return {
+    name: header.Name || "", author: header.Author || "", description: (header.Tags || []).join(", "),
+    source: "bp", version: `Axiom v${header.Version ?? 1}`, declared: header.BlockCount || 0,
+    meta: { DataVersion: data.DataVersion || 3953 },
+    // 蓝图自带的缩略图（PNG）：右边第一张卡片显示
+    previewPng: png.length ? URL.createObjectURL(new Blob([png], { type: "image/png" })) : null,
+    regions: [{ name: "blueprint", origin: [0, 0, 0], size, palette, blocks, blockEntities, entities: [],
+      raw: { kind: "bp", palette: palette.map((b) => ({ Name: b.id, ...(Object.keys(b.props).length ? { Properties: b.props } : {}) })), offset: 0 } }],
+  };
+}
+
+// ---------------------------------------------------------------- .vschem（Valkyrien Skies / VMod 的船只蓝图）
+//
+// 照 Valkyrien-Ship-Schematics（ShipSchematic.kt、SchemSerializeDataV1Impl.kt）和 VMod（VModShipSchematicV2.kt）：
+//   varint 长度 + "vschem" | varint 长度 + 类型名 | gzip NBT：
+//     shipData { maxObjectPos?, data: [ { id, rptc?(世界里相对整体中心), csb_m?/csb_M?(船体包围盒，相对船中心),
+//                                         pcp?(船在船坞里的中心), pcomp?, sc(缩放), rot?(四元数 w x y z) } ] }
+//     blockPalette: [方块状态]   gridData { "船 id": [ { x, y, z(相对船中心的整数格), pid, edi } ] }
+//     extraBlockData: [方块实体]   entityData { "船 id": [ { pos?, entity } ] }
+//     extraData { 名字: 字节 }：VMod 的物理连接（绳子、铰链、滑轨……）是其中一份 gzip NBT，里面 vmod_VEntities 列表，
+//       每项 { VEntityType, data { shipId1, shipId2, sPos1{x,y,z}, sPos2{x,y,z}, … } }（sPos 是船坞坐标）
+//
+// 船在世界里可以是任意角度，但这里是方块格子：每条船的旋转对齐到最近的 90°，各占一个子区域；
+// 只绕竖轴转的话方块朝向一起转。物理连接按同样的变换画成线
+
+function readVarInt(bytes, p) {
+  let v = 0, shift = 0, b;
+  do { b = bytes[p++]; v |= (b & 0x7f) << shift; shift += 7; } while (b & 0x80);
+  return [v, p];
+}
+function readUtf(bytes, p) {
+  const [n, q] = readVarInt(bytes, p);
+  return [new TextDecoder().decode(bytes.subarray(q, q + n)), q + n];
+}
+// long 原样转十进制字符串（船 id 可能超过 2^53，plain() 转 number 会丢精度）
+const longStr = (tag) => { const [h, l] = tag.getAsPair(); return (BigInt.asIntN(64, (BigInt(h) << 32n) | BigInt(l >>> 0))).toString(); };
+const vec = (o, p) => [o[p + "x"] || 0, o[p + "y"] || 0, o[p + "z"] || 0];
+
+// 四元数 → 3×3 矩阵，再对齐成最近的「轴对齐」旋转（每行取绝对值最大的那一列，带符号）
+function snappedRotation(q) {
+  const { x, y, z, w } = q;
+  const m = [
+    [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+    [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+    [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
+  ];
+  const out = [[0, 0, 0], [0, 0, 0], [0, 0, 0]], used = new Set();
+  // 按「最确定」的元素先选，保证三行选到三个不同的列
+  const cells = [];
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) cells.push([Math.abs(m[r][c]), r, c]);
+  cells.sort((a, b) => b[0] - a[0]);
+  const rowDone = new Set();
+  for (const [, r, c] of cells) {
+    if (rowDone.has(r) || used.has(c)) continue;
+    out[r][c] = Math.sign(m[r][c]) || 1;
+    rowDone.add(r); used.add(c);
+  }
+  return out;
+}
+const mulM = (m, v) => [0, 1, 2].map((r) => m[r][0] * v[0] + m[r][1] * v[1] + m[r][2] * v[2]);
+
+// 只绕竖轴转（第 2 行是 [0, 1, 0]）时，方块的朝向属性跟着转。turns：顺时针（从上往下看）转几个 90°
+const H = ["north", "east", "south", "west"];
+function yawTurns(m) {
+  if (m[1][1] !== 1) return null;
+  const north = mulM(m, [0, 0, -1]); // 本地的北转到了哪
+  const dir = north[2] === -1 ? "north" : north[0] === 1 ? "east" : north[2] === 1 ? "south" : "west";
+  return H.indexOf(dir);
+}
+function rotateProps(props, turns) {
+  if (!turns) return props;
+  const out = { ...props };
+  const turn = (d) => (H.includes(d) ? H[(H.indexOf(d) + turns) % 4] : d);
+  if ("facing" in props) out.facing = turn(props.facing);
+  if ("axis" in props && turns % 2) out.axis = props.axis === "x" ? "z" : props.axis === "z" ? "x" : props.axis;
+  if ("rotation" in props && /^\d+$/.test(props.rotation)) out.rotation = String((+props.rotation + turns * 4) % 16);
+  // 栅栏、墙、红石线这类四个方向的连接
+  if (H.every((d) => d in props)) for (const d of H) out[turn(d)] = props[d];
+  if ("shape" in props && /^(north_south|east_west)$/.test(props.shape) && turns % 2) out.shape = props.shape === "north_south" ? "east_west" : "north_south";
+  return out;
+}
+
+// 物理连接的中文 / 英文名在 app.js（按 VEntityType 查翻译），这里只认出类型
+function readVschem(bytes) {
+  let p = 0, kind, type;
+  [kind, p] = readUtf(bytes, p);
+  if (kind !== "vschem") throw new Error("not a VMod ship schematic (.vschem)");
+  [type, p] = readUtf(bytes, p);
+  const rootTag = deepslate.NbtFile.read(bytes.subarray(p), {}).root;
+  const root = plain(rootTag);
+  const rawShips = rootTag.getCompound("shipData").getList("data");
+  const ships = (root.shipData?.data || []).map((s, i) => {
+    const csbM = [s.csb_mx, s.csb_my, s.csb_mz], csbX = [s.csb_Mx, s.csb_My, s.csb_Mz];
+    const pcp = vec(s, "pcp");
+    // 船坞里的包围盒 = 相对中心的包围盒 + 中心取整；保存方块时的「船中心」是包围盒的整数中点
+    const minYard = csbM.map((v, a) => v + Math.round(pcp[a])), maxYard = csbX.map((v, a) => v + Math.round(pcp[a]));
+    const centerInt = minYard.map((v, a) => Math.trunc((maxYard[a] - v) / 2) + v);
+    const rot = s.rotw === undefined ? { x: 0, y: 0, z: 0, w: 1 } : { x: s.rotx, y: s.roty, z: s.rotz, w: s.rotw };
+    const m = snappedRotation(rot);
+    return { id: longStr(rawShips.get(i).get("id")), rel: vec(s, "rptc"), pcp, centerInt, scale: s.sc || 1, m, turns: yawTurns(m) };
+  });
+  const byId = new Map(ships.map((s) => [s.id, s]));
+  // 船坞坐标 → 整体坐标（相对整个蓝图的中心）
+  const rawWorld = (ship, yard) => {
+    const d = mulM(ship.m, yard.map((v, a) => (v - ship.pcp[a]) * ship.scale));
+    return d.map((v, a) => v + ship.rel[a]);
+  };
+  // 连接点 / 实体用这个：方块是按中心点向下取整进格子的（船的中心常在 .5 上，方块中心落在整数上，
+  // 取整会让整条船错开半格），delta 就是这个错开量，跟着挪同样的量才和画出来的方块对得上
+  const toWorld = (ship, yard) => rawWorld(ship, yard).map((v, a) => v + (ship.delta?.[a] || 0));
+
+  const paletteSrc = (root.blockPalette || []).map((b) => ({ id: b.Name, props: b.Properties || {} }));
+  const extraBlocks = root.extraBlockData || [];
+  const gridTag = rootTag.getCompound("gridData");
+  const built = [];
+  let lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  gridTag.forEach((key, listTag) => {
+    const ship = byId.get(key) || byId.get(String(BigInt(key)));
+    if (!ship) return;
+    const cells = [];
+    for (const item of listTag.getItems()) {
+      const o = plain(item);
+      const yard = [o.x + ship.centerInt[0] + 0.5, o.y + ship.centerInt[1] + 0.5, o.z + ship.centerInt[2] + 0.5];
+      const center = rawWorld(ship, yard);
+      ship.delta ||= center.map((c) => Math.floor(c) - (c - 0.5)); // 第一格定下这条船的取整偏移
+      const w = center.map(Math.floor);
+      cells.push({ w, pid: o.pid, edi: o.edi });
+      for (let a = 0; a < 3; a++) { if (w[a] < lo[a]) lo[a] = w[a]; if (w[a] > hi[a]) hi[a] = w[a]; }
+    }
+    built.push({ ship, cells });
+  });
+  if (!built.length) throw new Error("no ship blocks");
+
+  // 每条船一个子区域
+  const regions = built.map(({ ship, cells }, n) => {
+    const rlo = [Infinity, Infinity, Infinity], rhi = [-Infinity, -Infinity, -Infinity];
+    for (const c of cells) for (let a = 0; a < 3; a++) { rlo[a] = Math.min(rlo[a], c.w[a]); rhi[a] = Math.max(rhi[a], c.w[a]); }
+    const size = rhi.map((h, a) => h - rlo[a] + 1), [sx, sy, sz] = size;
+    const palette = [AIR], index = new Map();
+    const blocks = new Uint32Array(sx * sy * sz), blockEntities = new Map();
+    for (const c of cells) {
+      const src = paletteSrc[c.pid];
+      if (!src || AIR_IDS.has(src.id)) continue;
+      if (!index.has(c.pid)) { index.set(c.pid, palette.length); palette.push({ id: src.id, props: rotateProps(src.props, ship.turns) }); }
+      const [x, y, z] = c.w.map((v, a) => v - rlo[a]);
+      blocks[x * sy * sz + y * sz + z] = index.get(c.pid);
+      if (c.edi >= 0 && extraBlocks[c.edi]) blockEntities.set(`${x},${y},${z}`, extraBlocks[c.edi]);
+    }
+    const entities = (root.entityData?.[ship.id] || []).map((e) => {
+      const yard = vec(e, "pos").map((v, a) => v + ship.pcp[a]);
+      return { id: e.entity?.id || "minecraft:unknown", nbt: e.entity || {}, pos: toWorld(ship, yard).map((v, a) => v - rlo[a]) };
+    });
+    return { name: `Ship ${n + 1}`, origin: rlo.map((v, a) => v - lo[a]), size, palette, blocks, blockEntities, entities, shipId: ship.id };
+  });
+
+  // 物理连接：在 extraData 里找 VMod 的那份（gzip NBT，有 vmod_VEntities）
+  const links = [], unplaced = {};
+  const extra = rootTag.get("extraData");
+  extra?.forEach?.((name, tag) => {
+    let entities;
+    try {
+      const nbt = deepslate.NbtFile.read(new Uint8Array(tag.getItems().map((b) => b.getAsNumber() & 0xff)), {}).root;
+      entities = nbt.get("vmod_VEntities");
+    } catch { return; }
+    if (!entities) return;
+    for (const item of entities.getItems()) {
+      const type = item.getString("VEntityType").replace(/^.*\./, "");
+      const data = item.getCompound("data");
+      const a = data.get("shipId1"), b = data.get("shipId2");
+      const p1 = data.get("sPos1"), p2 = data.get("sPos2");
+      const s1 = a && byId.get(longStr(a)), s2 = b && byId.get(longStr(b));
+      if (!s1 || !s2 || !p1 || !p2) { unplaced[type] = (unplaced[type] || 0) + 1; continue; } // 连着地面（-1）或者单点的（推进器……）
+      const pt = (t) => [t.getNumber("x"), t.getNumber("y"), t.getNumber("z")];
+      links.push({ type, a: toWorld(s1, pt(p1)).map((v, k) => v - lo[k]), b: toWorld(s2, pt(p2)).map((v, k) => v - lo[k]), ships: [s1.id, s2.id] });
+    }
+  });
+
+  return {
+    name: "", author: "", description: "", source: "vschem", version: type.replace(/^.*\./, ""), declared: 0,
+    meta: { DataVersion: 3953 },
+    links, unplacedLinks: unplaced, shipCount: ships.length,
+    regions: regions.map((r) => normalise(r)),
+  };
+}
+
 // palette[0] 不是空气的话整体后移一位，保证「0 = 空气」这条约定
 function normalise(region) {
   if (!region.palette.length || !isAir(region.palette[0])) {
@@ -324,7 +590,7 @@ function normalise(region) {
 
 // ---------------------------------------------------------------- 入口
 
-export const EXTENSIONS = [".litematic", ".nbt", ".mcstructure", ".schem", ".schematic"];
+export const EXTENSIONS = [".litematic", ".nbt", ".mcstructure", ".schem", ".schematic", ".bp", ".vschem"];
 
 // 解析前要先准备的数据：老 .schematic 要数字 ID 对照表（异步加载一次）
 export async function prepareFormat(fileName) {
@@ -343,6 +609,8 @@ export function parse(fileName, bytes) {
   else if (ext === ".mcstructure") structure = readMcstructure(read({ littleEndian: true }));
   else if (ext === ".schem") structure = readSchem(read({}));
   else if (ext === ".schematic") structure = readSchematic(read({}), isOpaqueBlock);
+  else if (ext === ".bp") structure = readBp(bytes);
+  else if (ext === ".vschem") structure = readVschem(bytes);
   else throw new Error(`unsupported: ${ext}`);
   structure.name = structure.name || stem;
   structure.fileName = fileName;

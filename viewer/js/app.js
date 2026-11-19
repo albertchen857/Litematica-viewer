@@ -6,7 +6,7 @@ import { analyse, totalRows, unitParts, materialOf } from "./analysis.js";
 import { SAVE_FORMATS, exportText, download, compoundWith, toTag, writeLitematic, prepareWrite } from "./writers.js";
 import { exportWorld } from "./world.js";
 import { parseRules, replaceBlocks, RuleError } from "./edit.js";
-import { loadResources, View, blockIcon, hasIcon, entityIconId } from "./render.js";
+import { loadResources, View, blockIcon, hasIcon, entityIconId, LINK_COLORS } from "./render.js";
 import { splitSteps, structureWithSteps } from "./tools/steps.js";
 import { toContour } from "./tools/contour.js";
 
@@ -301,6 +301,7 @@ async function draw(structure, resetCamera, label = t("building")) {
   await view.show(structure, box, { resetCamera, region, ignore: state.ignored, onProgress: (r) => progress(r, label) });
   progress(null);
   $("hint").hidden = false;
+  renderLinksToggle(structure);
   $("gizmo").removeAttribute("hidden"); // SVG 没有 .hidden 属性，只能删特性
   $("proj-toggle").hidden = false;
 }
@@ -1443,6 +1444,7 @@ let thumbCanvas = null;
 let thumbMode = "iso"; // 上次生成用的视角，写进投影时也用这个
 // 右边第一张卡片右侧显示投影自带的缩略图（打开时文件里就有的，或者刚生成写进去的）
 function previewUrl(structure) {
+  if (!structure?.preview && structure?.previewPng) return structure.previewPng; // .bp 蓝图自带的 PNG
   const data = structure?.preview || structure?.metadata?.PreviewImageData;
   const ints = data ? Array.from(data) : [];
   const side = Math.round(Math.sqrt(ints.length));
@@ -1459,7 +1461,7 @@ function previewUrl(structure) {
 let fileThumbFor = null;
 function renderFileThumb() {
   const s = state.structure;
-  const data = s?.preview || s?.metadata?.PreviewImageData;
+  const data = s?.preview || s?.metadata?.PreviewImageData || s?.previewPng;
   if (fileThumbFor === data) return; // 没变就不重画
   fileThumbFor = data;
   const url = previewUrl(s);
@@ -1552,6 +1554,19 @@ async function saveWorld() {
     console.error(err);
     alert(ui("app.save.fail", err.message || err));
   }
+}
+
+// .vschem 的物理连接：提示条里一个开关，写着有几条；鼠标放上去按类型列出来
+function renderLinksToggle(structure) {
+  const links = structure === state.structure ? structure.links || [] : [];
+  $("links-toggle").hidden = !links.length;
+  if (!links.length) return;
+  const byType = {};
+  for (const l of links) byType[l.type] = (byType[l.type] || 0) + 1;
+  $("links-label").textContent = t("links.label", links.length);
+  const unplaced = Object.values(structure.unplacedLinks || {}).reduce((a, b) => a + b, 0);
+  $("links-toggle").title = Object.entries(byType).map(([k, n]) => `${t("links.type." + k) || k} × ${n}`).join("\n") +
+    (unplaced ? "\n" + t("links.unplaced", unplaced) : "");
 }
 
 function setOrtho(on) {
@@ -1663,6 +1678,7 @@ function bindTools() {
   $("batch-run").addEventListener("click", runBatch);
 
   $("proj-toggle").addEventListener("click", () => { setOrtho(!view.ortho); setPref("ortho", view.ortho); });
+  $("links-show").addEventListener("change", (e) => view.setLinksVisible(e.target.checked));
   $("thumb-iso").addEventListener("click", () => { thumbMode = "iso"; runThumb(); });
   $("thumb-view").addEventListener("click", () => { thumbMode = "view"; runThumb(); });
   $("kind-outline").addEventListener("change", (e) => { setPref("hiddenOutline", e.target.checked); view.setHiddenOutline(e.target.checked); });

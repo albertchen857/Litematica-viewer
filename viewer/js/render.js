@@ -530,6 +530,12 @@ export function blockIcon(id, px = 20) {
 const AIR_RE = /:(cave_|void_)?air$/;
 // deepslate 的特殊渲染器只注册了 16 种染色潜影盒，未染色的会整个不显示；画的时候借最接近的紫色
 const RENDER_AS = { "minecraft:shulker_box": "minecraft:purple_shulker_box" };
+// .vschem 的物理连接按类型上色（VMod 的 VEntity 类型名）
+export const LINK_COLORS = {
+  RopeConstraint: [1, 0.62, 0.18], PhysRopeConstraint: [1, 0.45, 0.1], HydraulicsConstraint: [0.2, 0.75, 1],
+  ConnectionConstraint: [1, 0.25, 0.35], SliderConstraint: [0.65, 0.4, 1], SyncRotationConstraint: [0.25, 0.9, 0.55],
+  GearConstraint: [0.95, 0.85, 0.2], DisabledCollisionConstraint: [0.6, 0.6, 0.6],
+};
 const GIZMO_AXIS = 34;      // 轴向面板里轴的长度（viewBox 100 里的单位）
 const OUTLINE_MAX = 400000; // 高亮 / 隐藏的边框最多画多少条线，再多就截断（画不动）
 const BRIGHTEN = 1.35;      // 高亮的方块亮一档：顶点颜色乘这个数
@@ -686,6 +692,8 @@ export class View {
     this.renderScale = 1;             // 动态分辨率的倍数（1 = 全分辨率）
     this.slowFrames = 0;
     this.showHiddenOutline = true;    // 隐藏的方块留不留灰边框
+    this.showLinks = true;            // .vschem 的物理连接线
+    this.links = [];
     this.bindControls();
     this.bindKeys();
     this.bindGizmo();
@@ -813,6 +821,8 @@ export class View {
     this.buildEnvironment();
     this.buildRegionBoxes();
     this.buildKindOutlines();
+    this.links = structure.links || [];
+    this.buildLinks();
     if (resetCamera) {
       this.target = [sx / 2, sy / 2, sz / 2];
       this.distance = Math.max(sx, sy, sz) * 1.6 + 4;
@@ -1253,6 +1263,14 @@ export class View {
       this.renderer.prepareDraw(view);
       this.renderer.drawMesh(this.regionMesh, { pos: true, color: true });
     }
+    if (this.linkMesh) {
+      const gl = this.gl;
+      this.renderer.setShader(this.renderer.gridShaderProgram);
+      this.renderer.prepareDraw(view);
+      gl.disable(gl.DEPTH_TEST);
+      this.renderer.drawMesh(this.linkMesh, { pos: true, color: true });
+      gl.enable(gl.DEPTH_TEST);
+    }
     if (this.hiddenMesh) {
       this.renderer.setShader(this.renderer.gridShaderProgram);
       this.renderer.prepareDraw(view);
@@ -1331,6 +1349,27 @@ export class View {
     }
     this.draw();
     return result;
+  }
+
+  // ---- 物理连接（.vschem）：两端点之间一根线，两头各一个小方框；隔着船体也看得到
+  setLinksVisible(on) {
+    this.showLinks = !!on;
+    this.buildLinks();
+    this.draw();
+  }
+
+  buildLinks() {
+    this.linkMesh = null;
+    if (!this.renderer || !this.showLinks || !this.links?.length) return;
+    const Mesh = this.renderer.outlineMesh.constructor;
+    const mesh = new Mesh();
+    const r = 0.18;
+    for (const l of this.links) {
+      const c = LINK_COLORS[l.type] || [1, 1, 1];
+      mesh.addLine(...l.a, ...l.b, c);
+      for (const p of [l.a, l.b]) mesh.addLineCube(p[0] - r, p[1] - r, p[2] - r, p[0] + r, p[1] + r, p[2] + r, c);
+    }
+    this.linkMesh = mesh.rebuild(this.gl, { pos: true, color: true });
   }
 
   setHiddenOutline(on) {

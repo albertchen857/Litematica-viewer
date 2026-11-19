@@ -24,6 +24,8 @@ QQ: 1044260630
 | `.mcstructure` | 基岩版結構方塊 | ✅ | ✅ |
 | `.schem` | WorldEdit / FAWE（Sponge v1–v3） | ✅ | ✅（v2） |
 | `.schematic` | MCEdit / 舊 WorldEdit（1.12 及以前，數字 ID） | ✅ | — |
+| `.bp` | Axiom 藍圖 | ✅（網頁版） | — |
+| `.vschem` | Valkyrien Skies / VMod 船隻藍圖（多條船 + 物理連接） | ✅（網頁版） | — |
 
 所有格式匯入後都會轉成同一套內部結構，所以**所有功能對三種格式一視同仁**，
 而且可以互相另存（`資料分析 → 另存為`）。
