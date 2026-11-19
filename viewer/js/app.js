@@ -6,7 +6,7 @@ import { analyse, totalRows, unitParts, materialOf } from "./analysis.js";
 import { SAVE_FORMATS, exportText, download, compoundWith, toTag, writeLitematic } from "./writers.js";
 import { exportWorld } from "./world.js";
 import { parseRules, replaceBlocks, RuleError } from "./edit.js";
-import { loadResources, View, blockIcon, hasIcon } from "./render.js";
+import { loadResources, View, blockIcon, hasIcon, entityIconId } from "./render.js";
 import { splitSteps, structureWithSteps } from "./tools/steps.js";
 import { toContour } from "./tools/contour.js";
 
@@ -372,7 +372,11 @@ function renderInfo() {
     ["ui.stat.l6", version],
     ["ui.stat.l7", (s.description || "-").slice(0, 120)],
   ];
-  $("stats").innerHTML = stats.map(([k, v]) => `<div class="stat" data-stat="${k}"${k === "ui.stat.l7" && !isDesktop() ? ` title="${esc(t("rename.tip"))}"` : ""}><b>${esc(ui(k))}</b><span>${esc(v)}</span></div>`).join("");
+  // 红石偏度、液体偏度不好懂：名字右上角放个灰色小「?」，鼠标放上去出解释
+  const TIPS = { "ui.stat.l1": "tip.redstone", "ui.stat.l3": "tip.fluid" };
+  $("stats").innerHTML = stats.map(([k, v]) => `<div class="stat" data-stat="${k}"${k === "ui.stat.l7" && !isDesktop() ? ` title="${esc(t("rename.tip"))}"` : ""}>` +
+    `<b>${esc(ui(k))}${TIPS[k] ? `<i class="stat-tip" tabindex="0" aria-label="${esc(t(TIPS[k]))}" data-tip="${esc(t(TIPS[k]))}">?</i>` : ""}</b><span>${esc(v)}</span></div>`).join("");
+  renderFileThumb();
   $("file-name").title = isDesktop() ? "" : t("rename.tip");
 
   // 子区域：总体 + 每个区域，单区域时不显示
@@ -483,7 +487,7 @@ function showInspect(hit) {
   $("inspect-edit").hidden = !at || isDesktop();
   if (at && !isDesktop()) renderEdit(hit);
   const id = hit.kind === "entity" ? hit.entity.id : hit.block.id;
-  const icon = blockIcon(id, 32);
+  const icon = (hit.kind === "entity" ? blockIcon(entityIconId(hit.entity), 32) : "") || blockIcon(id, 32);
   $("inspect-icon").src = icon || "";
   $("inspect-icon").hidden = !icon;
   $("inspect-name").textContent = (hit.kind === "entity" ? t("entity") + " · " : "") + nameOf(id);
@@ -1409,19 +1413,45 @@ function previewInts(canvas) {
 
 let thumbCanvas = null;
 let thumbMode = "iso"; // 上次生成用的视角，写进投影时也用这个
+// 右边第一张卡片右侧显示投影自带的缩略图（打开时文件里就有的，或者刚生成写进去的）
+function previewUrl(structure) {
+  const data = structure?.preview || structure?.metadata?.PreviewImageData;
+  const ints = data ? Array.from(data) : [];
+  const side = Math.round(Math.sqrt(ints.length));
+  if (!side || side * side !== ints.length) return "";
+  const c = document.createElement("canvas");
+  c.width = c.height = side;
+  const g = c.getContext("2d"), img = g.createImageData(side, side);
+  ints.forEach((v, i) => { // ARGB 整数 → RGBA
+    img.data[i * 4] = (v >> 16) & 255; img.data[i * 4 + 1] = (v >> 8) & 255; img.data[i * 4 + 2] = v & 255; img.data[i * 4 + 3] = (v >>> 24) & 255;
+  });
+  g.putImageData(img, 0, 0);
+  return c.toDataURL();
+}
+let fileThumbFor = null;
+function renderFileThumb() {
+  const s = state.structure;
+  const data = s?.preview || s?.metadata?.PreviewImageData;
+  if (fileThumbFor === data) return; // 没变就不重画
+  fileThumbFor = data;
+  const url = previewUrl(s);
+  $("file-thumb").src = url;
+  $("file-thumb").hidden = !url;
+  $("file-card").classList.toggle("has-thumb", !!url);
+}
+
 function runThumb() {
   thumbCanvas = view.snapshot(512, null, thumbMode);
   if (!thumbCanvas) return;
+  // 直接写进当前投影（.litematic 的 Metadata.PreviewImageData，140×140）：导出 .litematic 时带着，游戏里投影列表能看到
+  state.structure.preview = previewInts(view.snapshot(140, PREVIEW_BG, thumbMode));
+  renderFileThumb();
+  toast(t("thumb.done"), { undo: false });
   $("thumb-img").src = thumbCanvas.toDataURL();
   $("thumb-img").hidden = false;
   $("thumb-actions").hidden = false;
 }
 
-// 写进 .litematic 的 Metadata.PreviewImageData（同桌面版 snapshot.embed），游戏里投影列表能看到
-function embedThumb() {
-  state.structure.preview = previewInts(view.snapshot(140, PREVIEW_BG, thumbMode));
-  saveAs(".litematic");
-}
 
 // 同桌面版「导出世界」：存档图标用 64px 缩略图
 async function saveWorld() {
@@ -1540,7 +1570,7 @@ function bindTools() {
   $("thumb-view").addEventListener("click", () => { thumbMode = "view"; runThumb(); });
   $("kind-outline").addEventListener("change", (e) => { setPref("hiddenOutline", e.target.checked); view.setHiddenOutline(e.target.checked); });
   $("thumb-png").addEventListener("click", async () => download(`${stem()}.png`, await canvasPng(thumbCanvas), "image/png"));
-  $("thumb-embed").addEventListener("click", embedThumb);
+
 
   $("move-speed").addEventListener("input", (e) => { setMoveSpeed(e.target.value); setPref("moveSpeed", view.moveSpeed); });
   $("env").addEventListener("change", (e) => { setEnvironment(e.target.value); setPref("env", e.target.value); });

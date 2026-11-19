@@ -152,8 +152,10 @@ code { font-family: var(--mono); }
 /* 轴向面板：右上角，不挡别的；鼠标放上去才有底色 */
 .gizmo { position: absolute; right: 8px; top: 8px; z-index: 6; width: 100px; height: 100px; user-select: none; }
 .gizmo[hidden] { display: none; }
-.gizmo-bg { fill: transparent; transition: fill 120ms; }
-.gizmo:hover .gizmo-bg { fill: rgba(255, 255, 255, 0.35); }
+.gizmo { cursor: grab; touch-action: none; }
+.gizmo.is-dragging { cursor: grabbing; }
+.gizmo-bg { fill: rgba(128, 128, 128, 0.22); transition: fill 120ms; }
+.gizmo:hover .gizmo-bg { fill: rgba(128, 128, 128, 0.34); }
 .gizmo-dot { cursor: pointer; }
 .gizmo-dot circle { transition: transform 120ms; transform-box: fill-box; transform-origin: center; }
 .gizmo-dot:hover circle { transform: scale(1.18); }
@@ -286,6 +288,11 @@ code { font-family: var(--mono); }
 .card-title { margin: 0 0 12px; font-size: 16px; }
 
 .file-name { margin: 0; font-size: 20px; line-height: 1.25; word-break: break-all; }
+/* 卡片右侧的缩略图：正方形，比卡片矮一点（上下各留 8px），文字给它让出位置 */
+.file-card { position: relative; }
+.file-card.has-thumb { padding-right: calc(var(--thumb, 72px) + 28px); min-height: 88px; }
+.file-thumb { position: absolute; right: 12px; top: 8px; bottom: 8px; height: calc(100% - 16px); aspect-ratio: 1; border-radius: 6px; image-rendering: pixelated; background: var(--chip); }
+.file-thumb[hidden] { display: none; }
 .file-summary { margin: 8px 0 0; color: var(--pc); font: 700 13px/1.5 var(--sans); font-variant-numeric: tabular-nums; }
 /* 翻译还没到：字先藏起来（只是看不见，位置照占），见 index.html 开头 */
 html.i18n-wait [data-t], html.i18n-wait [data-ui], html.i18n-wait .file-summary, html.i18n-wait #file-name { visibility: hidden; }
@@ -295,7 +302,20 @@ html.i18n-wait [data-t], html.i18n-wait [data-ui], html.i18n-wait .file-summary,
 .stats { display: grid; gap: 4px; padding: 12px; }
 /* 没文件时是 7 行「-」的占位（js applyLang），打开文件只换文字，下面的卡片不会被挤动（CLS） */
 .stat { display: flex; justify-content: space-between; gap: 12px; padding: 6px 12px; border-radius: 8px; background: var(--pc); color: var(--bg); font-size: 14px; }
+.stat { position: relative; } /* 说明框按整行定位、和这一行一样宽（侧栏会裁掉超出去的部分） */
 .stat b { flex: none; }
+/* 指标说明：名字右上角的灰色小问号，鼠标放上去 / 键盘聚焦出解释 */
+.stat-tip {
+  display: inline-grid; place-items: center; width: 14px; height: 14px; margin-left: 3px; vertical-align: super;
+  border-radius: 50%; background: rgba(255, 255, 255, 0.35); color: var(--pc); font: 700 10px/1 var(--sans); font-style: normal; cursor: help;
+}
+.stat-tip::after {
+  content: attr(data-tip); position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 40; padding: 10px 12px;
+  border-radius: 8px; background: var(--bg); color: var(--tt); box-shadow: 0 0 0 1px var(--line), 0 10px 28px rgba(0, 0, 0, 0.16);
+  font: 400 12.5px/1.55 var(--sans); white-space: pre-line; text-align: left;
+  opacity: 0; visibility: hidden; transform: translateY(-4px); transition: opacity 120ms, transform 120ms, visibility 0s 120ms; pointer-events: none;
+}
+.stat-tip:hover::after, .stat-tip:focus-visible::after { opacity: 1; visibility: visible; transform: none; transition-delay: 0s; }
 .stat span { text-align: right; overflow-wrap: anywhere; }
 
 /* 子区域按钮：页签的八成大小 */
