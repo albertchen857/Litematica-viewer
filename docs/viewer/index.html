@@ -329,6 +329,21 @@
   </form>
 </dialog>
 
+<!-- 导出存档：存档图标用哪张（游戏的存档列表里显示，64×64 的 icon.png） -->
+<dialog class="dlg" id="world-dlg">
+  <form method="dialog">
+    <h2 data-t="worldIcon.title">存档图标</h2>
+    <p data-t="worldIcon.text">导出的存档在游戏的存档列表里显示哪张图？</p>
+    <div class="world-icons" id="world-icons"></div>
+    <!-- 「自定义图片」选项点开的文件框 -->
+    <input type="file" id="world-icon-file" accept="image/*" hidden>
+    <div class="dlg-actions">
+      <button class="btn btn-plain" value="cancel" data-t="cancel">取消</button>
+      <button class="btn btn-accent" value="ok" data-t="worldIcon.export">导出</button>
+    </div>
+  </form>
+</dialog>
+
 <!-- 原始 NBT -->
 <dialog class="dlg dlg-wide" id="nbt-dlg">
   <form method="dialog">
