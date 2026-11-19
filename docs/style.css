@@ -120,8 +120,6 @@ code, .mono { font-family: var(--mono); }
 .site-nav a[aria-current="page"] { color: var(--pc); background: color-mix(in srgb, var(--tt) 8%, var(--bg)); }
 @media (max-width: 1000px) { .site-head .brand span { display: none; } } /* 窄屏三个页面都只留图标（查看器顶栏放不下），位置照样一致 */
 
-.footer a { color: inherit; }
-.footer a:hover { color: var(--mc); }
 .lang-switch { min-width: 64px; font-weight: 700; color: var(--pc); }
 
 /* ------------------------------------------------------------------ Banner */
@@ -597,11 +595,29 @@ html[data-lang="en"] .ba-en-main { display: block; }
 .dl-btn.is-mine { box-shadow: inset 0 0 0 3px var(--mc); }
 .download-more { margin-top: var(--s3); }
 
-.footer {
-  display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--s2);
-  padding: var(--s4) clamp(20px, 4vw, 40px);
-  background: var(--band); color: var(--pr); font-size: 13px;
+/* 页脚：四列（简介 / 页面 / 下载 / 关于）+ 最底下一行版权 */
+.site-footer { background: var(--band); color: var(--pr); font-size: 14px; }
+.footer-cols {
+  display: grid; grid-template-columns: 1.6fr 1fr 1fr 1fr; gap: 32px;
+  max-width: 1200px; margin: 0 auto; padding: 48px clamp(20px, 4vw, 40px) 32px;
 }
+.footer-brand { display: flex; align-items: center; gap: 12px; }
+.footer-brand b { display: block; color: var(--bg); font-size: 18px; }
+.footer-brand span { color: var(--mc); font-size: 14px; }
+.footer-about p { margin: 14px 0 0; max-width: 360px; line-height: 1.65; }
+.footer-col { display: grid; align-content: start; gap: 9px; }
+.footer-col h3 { margin: 0 0 4px; color: var(--bg); font-size: 14px; letter-spacing: 0.02em; }
+.site-footer a { color: var(--pr); text-decoration: none; transition: color 120ms; }
+.site-footer a:hover { color: var(--bg); }
+.footer-col small { opacity: 0.7; }
+.footer-qq b { color: var(--bg); font-weight: 600; user-select: all; }
+.footer-bottom {
+  display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 24px;
+  max-width: 1200px; margin: 0 auto; padding: 16px clamp(20px, 4vw, 40px) 24px;
+  border-top: 1px solid color-mix(in srgb, var(--pr) 22%, transparent); font-size: 12.5px;
+}
+@media (max-width: 900px) { .footer-cols { grid-template-columns: 1fr 1fr; } .footer-about { grid-column: 1 / -1; } }
+@media (max-width: 480px) { .footer-cols { grid-template-columns: 1fr; } }
 
 /* ------------------------------------------------------------------ 窄屏 */
 
@@ -632,3 +648,14 @@ html[data-lang="en"] .ba-en-main { display: block; }
   [data-reveal], [data-stagger], .suspense-a, .suspense-sub { opacity: 1 !important; transform: none !important; }
   .hero-shot { transform: translate(-42%, -50%) !important; }
 }
+
+/* ------------------------------------------------------------------ 使用条款 / 隐私政策 */
+.legal { max-width: 760px; margin: 0 auto; padding: 40px clamp(20px, 4vw, 40px) 64px; line-height: 1.75; }
+.legal h1 { margin: 0; font-size: 32px; }
+.legal-date { margin: 4px 0 24px; color: var(--pr); font-size: 14px; }
+.legal h2 { margin: 32px 0 8px; font-size: 19px; }
+.legal p, .legal li { color: var(--tt); }
+.legal ul { padding-left: 1.3em; }
+.legal li + li { margin-top: 6px; }
+.legal a { color: var(--pc); }
+.legal code { padding: 1px 5px; border-radius: 4px; background: color-mix(in srgb, var(--tt) 8%, var(--bg)); font-size: 0.92em; }

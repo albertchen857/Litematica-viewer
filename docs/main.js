@@ -37,6 +37,8 @@ function applyLang() {
   });
   $("lang-switch").value = URL_CODE[lang];
   $("nav-view").href = `viewer/?lang=${URL_CODE[lang]}`;
+  // 页脚等处的站内链接带上语言（data-lang-href 写的是不带参数的地址）
+  document.querySelectorAll("[data-lang-href]").forEach((a) => { a.href = `${a.dataset.langHref}?lang=${URL_CODE[lang]}`; });
   $("nav-convert").href = `viewer/convert.html?lang=${URL_CODE[lang]}`;
   document.querySelectorAll("[data-ph-en]").forEach((el) => { el.placeholder = el.dataset[`ph${lang[0].toUpperCase()}${lang.slice(1)}`] || el.dataset.phEn; });
   // Banner 标题：简体 = 中文 + 英文，繁体 = 繁体中文 + 英文，英文 = 只有英文大标题（背景图固定 app_en.webp）

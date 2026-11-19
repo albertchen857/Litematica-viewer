@@ -22,4 +22,6 @@
     <xhtml:link rel="alternate" hreflang="zh-TW" href="https://lite-viewer.com/?lang=tw"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://lite-viewer.com/"/>
   </url>
+  <url><loc>https://lite-viewer.com/terms.html</loc><lastmod>2026-11-19</lastmod></url>
+  <url><loc>https://lite-viewer.com/privacy.html</loc><lastmod>2026-11-19</lastmod></url>
 </urlset>
