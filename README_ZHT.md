@@ -110,6 +110,11 @@ tools/
    |- 可收納側欄 / 主題色 / 字型 / 多語言
 ```
 
+## 授權條款
+
+[AGPL-3.0](LICENSE)（2026-11-19 起；v0.9.6 及更早的版本是 MIT）。可以免費使用、修改、再發布，但發布修改過的版本——包括放在網站上給別人用——必須公開完整原始碼。
+第三方元件（deepslate、gl-matrix）和 Minecraft 貼圖的版權見 [NOTICE.md](NOTICE.md)。
+
 ## Star History
 
 <a href="https://www.star-history.com/?repos=albertchen857%2FLitematica-viewer&type=date&legend=top-left">

@@ -168,6 +168,11 @@ LitematicaViewer
    |- collapsible sidebar / detachable panels / theme / font / i18n
 ```
 
+## License
+
+[AGPL-3.0](LICENSE) since 2026-11-19 (v0.9.6 and earlier were MIT). Free to use, modify and redistribute, but a modified version you distribute — including running it as a website — must publish its full source code.
+Third-party components (deepslate, gl-matrix) and Minecraft textures: see [NOTICE.md](NOTICE.md).
+
 ## Star History
 
 <a href="https://www.star-history.com/?repos=albertchen857%2FLitematica-viewer&type=date&legend=top-left">

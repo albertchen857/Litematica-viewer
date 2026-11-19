@@ -162,6 +162,11 @@ tools/
    |- 可收纳侧栏 / 面板独立开窗 / 主题色 / 字体 / 多语言
 ```
 
+## 许可证
+
+[AGPL-3.0](LICENSE)（2026-11-19 起；v0.9.6 及更早的版本是 MIT）。可以免费用、改、再发布，但发布改过的版本——包括放在网站上给别人用——必须公开完整源代码。
+第三方组件（deepslate、gl-matrix）和 Minecraft 贴图的版权见 [NOTICE.md](NOTICE.md)。
+
 ## Star History
 
 <a href="https://www.star-history.com/?repos=albertchen857%2FLitematica-viewer&type=date&legend=top-left">

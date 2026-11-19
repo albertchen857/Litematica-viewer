@@ -34,6 +34,8 @@ datas = [
     ("viewer/js/*.js", "viewer/js"),
     ("viewer/js/tools/*.js", "viewer/js/tools"),
     ("viewer/vendor/*.js", "viewer/vendor"),  # deepslate / gl-matrix，离线也能渲染
+    ("viewer/vendor/*.txt", "viewer/vendor"),  # 它们的 MIT 许可证（必须跟着一起发）
+    ("LICENSE", "."), ("NOTICE.md", "."),     # 本项目的 AGPL-3.0 + 第三方版权说明
     ("viewer/data/*.json", "viewer/data"),
     ("viewer/resource/*", "viewer/resource"),
 ]
