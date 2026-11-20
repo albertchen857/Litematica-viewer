@@ -60,7 +60,7 @@ code { font-family: var(--mono); }
 }
 .site-nav a:hover { color: var(--pc); }
 .site-nav a[aria-current="page"] { color: var(--pc); background: color-mix(in srgb, var(--tt) 8%, var(--bg)); }
-@media (max-width: 1000px) { .site-head .brand span { display: none; } } /* 窄屏三个页面都只留图标（查看器顶栏放不下），位置照样一致 */
+@media (max-width: 1080px) { .site-head .brand span { display: none; } } /* 窄屏三个页面都只留图标（查看器顶栏放不下），位置照样一致 */
 
 .bar-file { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 14px; }
 .bar-actions { display: flex; align-items: center; gap: 8px; flex: none; } /* 按钮不折行，挤的时候让中间的文件名去收缩 */
@@ -307,14 +307,11 @@ code { font-family: var(--mono); }
   display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: flex-end;
   background: color-mix(in srgb, var(--bg) 85%, transparent); color: var(--muted); font-size: 12px;
 }
-/* WASD 移动速度 */
-.move-speed, .env-pick { display: flex; align-items: center; gap: 6px; color: var(--tt); }
+.env-pick { display: flex; align-items: center; gap: 6px; color: var(--tt); }
 .env-pick select { height: 22px; border: 0; border-radius: 4px; background: var(--chip); color: var(--tt); font: 12px var(--sans); }
 /* 背景：天空（地板在 3D 里画） */
 .stage[data-env="ocean"], .stage[data-env="grass"] { background: linear-gradient(#78a7ff 0%, #b9d7ff 55%, #e3efff 100%); }
 .stage[data-env="end"] { background: radial-gradient(circle at 50% 30%, #2b1a3d 0%, #120a1c 60%, #07040b 100%); }
-.move-speed input { width: 90px; accent-color: var(--pc); }
-.move-speed b { min-width: 2ch; font: 700 12px var(--mono); text-align: right; }
 .hint[hidden] { display: none; }
 
 /* ---------------------------------------------------------------- 右侧信息栏 */
@@ -586,6 +583,58 @@ html.i18n-wait [data-t], html.i18n-wait [data-ui], html.i18n-wait .file-summary,
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16); font-size: 13px;
 }
 .toast[hidden] { display: none; }
+
+/* ---------------------------------------------------------------- 观光（js/tour.js）：右边换成观光面板，画面是第一人称 */
+
+.side[hidden] { display: none; }
+body.tour .gizmo, body.tour .proj-toggle, body.tour .hint, body.tour .kind-bar, body.tour .tour-toggle { display: none !important; }
+/* 实体的图标第一人称看满屏都是，观光时不贴（碰撞箱照画） */
+body.tour .markers { display: none; }
+/* 桌面版的 3D 窗口没有顶栏：右上角一个小人按钮进观光（位置在透视 / 正交按钮下面） */
+.tour-toggle {
+  position: absolute; right: 42px; top: 152px; z-index: 6; width: 32px; height: 32px; padding: 5px;
+  display: grid; place-items: center; border: 0; border-radius: 50%; cursor: pointer;
+  background: rgba(128, 128, 128, 0.22); color: var(--tt);
+}
+.tour-toggle[hidden] { display: none; }
+.tour-toggle:hover { background: rgba(128, 128, 128, 0.38); }
+.tour-toggle svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+/* 准星：画面正中一个小十字，和背后颜色反着来（亮处黑、暗处白） */
+.crosshair { display: none; position: absolute; left: 50%; top: 50%; z-index: 3; width: 18px; height: 18px; margin: -9px 0 0 -9px; pointer-events: none; mix-blend-mode: difference; }
+.crosshair::before, .crosshair::after { content: ""; position: absolute; background: #fff; }
+.crosshair::before { left: 8px; top: 0; width: 2px; height: 18px; }
+.crosshair::after { left: 0; top: 8px; width: 18px; height: 2px; }
+body.tour .crosshair { display: block; }
+.stage.is-locked { cursor: none; }
+.stage.is-locked.is-fake { cursor: crosshair; }
+/* 鼠标没锁定：画面中间提示「点击开始」（没打开文件时不出，让位给拖文件的框） */
+.tour-prompt {
+  display: none; position: absolute; left: 50%; top: 50%; z-index: 3; transform: translate(-50%, 28px);
+  padding: 10px 18px; border-radius: var(--r); pointer-events: none; text-align: center;
+  background: color-mix(in srgb, var(--tt) 82%, transparent); color: var(--bg); font-size: 14px;
+}
+.tour-prompt span { display: block; margin-top: 2px; font-size: 12px; opacity: 0.75; }
+body.tour .stage:has(.empty.is-hidden):not(.is-locked) .tour-prompt { display: block; }
+/* 天空：维度 + 时间（地板在 3D 里画） */
+.stage[data-env="overworld"] { background: linear-gradient(#78a7ff 0%, #b9d7ff 55%, #e3efff 100%); }
+.stage[data-env="overworld"][data-time="sunset"] { background: linear-gradient(#3b4d8c 0%, #c9707a 50%, #f5b56b 85%, #f8d49a 100%); }
+.stage[data-env="overworld"][data-time="night"] { background: linear-gradient(#02040b 0%, #0a1230 60%, #18244a 100%); }
+.stage[data-env="nether"] { background: radial-gradient(circle at 50% 40%, #6b1d12 0%, #3a0b07 60%, #1c0503 100%); }
+/* 面板 */
+.tour-status { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0 0 12px; font-size: 14px; }
+.tour-status dt { color: var(--muted); }
+.tour-status dd { margin: 0; font: 700 13px var(--mono); color: var(--pc); font-variant-numeric: tabular-nums; }
+.tour-opts { display: grid; gap: 10px; }
+.tour-opts .card-title { margin-bottom: 2px; }
+.tour-opts .tool-note { margin: 0; }
+.tour-row { display: grid; grid-template-columns: 5em 1fr 3.5em; align-items: center; gap: 10px; font-size: 14px; }
+.tour-row input[type="range"] { width: 100%; accent-color: var(--pc); }
+.tour-row b { font: 700 12px var(--mono); text-align: right; }
+.tour-row select { grid-column: 2 / 4; height: 30px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--tt); font: 13px var(--sans); }
+.tour-row select:disabled { opacity: 0.5; }
+.tour-keys { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; font-size: 13px; }
+.tour-keys li { display: grid; grid-template-columns: 6.5em 1fr; align-items: center; gap: 10px; }
+.tour-keys kbd { justify-self: start; padding: 2px 7px; border-radius: 5px; background: var(--chip); box-shadow: inset 0 -1px 0 var(--line); font: 600 12px var(--sans); white-space: nowrap; }
 
 /* 桌面版里打开（#desktop）：文件由主程序给，顶栏整条不要 */
 body.desktop .bar { display: none; }

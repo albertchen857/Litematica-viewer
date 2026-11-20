@@ -159,6 +159,7 @@ export const ENVIRONMENTS = {
   ocean: { texture: "minecraft:block/water_still", tint: [0.25, 0.46, 0.85] },
   grass: { texture: "minecraft:block/grass_block_top", tint: [0.49, 0.74, 0.34] },
   end: { texture: "minecraft:block/end_stone", tint: null },
+  nether: { texture: "minecraft:block/netherrack", tint: null }, // 观光面板选下界
 };
 
 // ---- 大结构：deepslate 默认的做法几十万方块就会卡死或者把标签页撑崩，这里打几个补丁
@@ -251,7 +252,7 @@ function patchChunkBuilder(builder) {
 }
 
 // ---- 视锥剔除：每帧从「投影 × 视图」矩阵取出 6 个裁剪面，整个区块的包围盒都在某个面外面就不画。
-// 拉近看大结构的一角、或者 WASD 飞进结构里时，画面外的区块（往往是大半）整块跳过，不再提交给显卡。
+// 拉近看大结构的一角、或者观光模式走进结构里时，画面外的区块（往往是大半）整块跳过，不再提交给显卡。
 // 透视和缩略图用的正交投影都适用（裁剪面是从合起来的矩阵里取的）
 function frustumPlanes(proj, view) {
   const m = mat4.multiply(mat4.create(), proj, view);
@@ -342,6 +343,8 @@ const LOD_FRAGMENT = `
   uniform sampler2D avgSampler;
   uniform highp float pixelSize;
   uniform highp float atlasSize;
+  uniform highp float gamma;
+  uniform highp vec3 light;
   void main(void) {
     vec4 texColor = texture2D(sampler, clamp(vTexCoord,
       vTexLimit.xy + vec2(0.5, 0.5) * pixelSize,
@@ -350,7 +353,8 @@ const LOD_FRAGMENT = `
     vec2 d = fwidth(vTexCoord) * atlasSize;
     float far = smoothstep(1.0, 3.0, max(d.x, d.y));
     vec3 avg = texture2D(avgSampler, (vTexLimit.xy + vTexLimit.zw) * 0.5).rgb;
-    gl_FragColor = vec4(mix(texColor.rgb, avg, far) * vTintColor * vLighting, texColor.a);
+    vec3 c = mix(texColor.rgb, avg, far) * vTintColor * vLighting * light;
+    gl_FragColor = vec4(pow(max(c, vec3(0.0)), vec3(1.0 / gamma)), texColor.a);
   }`;
 
 function installLodShader(gl, renderer) {
@@ -389,6 +393,10 @@ function installLodShader(gl, renderer) {
     gl.uniform1i(gl.getUniformLocation(program, "sampler"), 0);
     gl.uniform1i(gl.getUniformLocation(program, "avgSampler"), 1);
     gl.uniform1f(gl.getUniformLocation(program, "atlasSize"), avgAtlas.size);
+    // 亮度和光照颜色（观光面板调的；平时是 1 和白光，画出来和原来一样）
+    const lit = renderer.lvLight || { gamma: 1, tint: [1, 1, 1] };
+    gl.uniform1f(gl.getUniformLocation(program, "gamma"), lit.gamma);
+    gl.uniform3fv(gl.getUniformLocation(program, "light"), lit.tint);
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, tex);
     gl.activeTexture(gl.TEXTURE0);
@@ -544,12 +552,6 @@ const HIDDEN_COLOR = [0.55, 0.55, 0.58]; // 隐藏的方块留的边框：灰
 const CHUNK = 16; // deepslate 的区块边长（StructureRenderer 的 chunkSize）。每个区块两份网格、每份 7 个显卡缓冲区，
 // 边长 8 时几十万方块会切出几万个区块、几十万个缓冲区，显卡进程直接崩；16 是 deepslate 的默认值
 const stateOf = (b) => (b.id && !AIR_RE.test(b.id) ? new deepslate.BlockState(RENDER_AS[b.id] || b.id, b.props) : null);
-// WASD 移动：跟着视角走。W/S 沿视线前后（往上看就往上飞），A/D 左右平移，空格 / Shift 竖直上下。
-// 值是 [前后, 左右, 上下]
-const MOVE_KEYS = {
-  KeyW: [1, 0, 0], KeyS: [-1, 0, 0], KeyA: [0, -1, 0], KeyD: [0, 1, 0],
-  Space: [0, 0, 1], ShiftLeft: [0, 0, -1], ShiftRight: [0, 0, -1],
-};
 
 // 给 deepslate 用的「活」结构：可以随时加减方块。deepslate 自己的 Structure 只能加不能删，
 // 换步骤 / 换显示层时要整个重建；用这个只要改动那几格、重画受影响的区块。
@@ -685,8 +687,11 @@ export class View {
     this.markers = [];    // 实体：{el, pos, entity, size, category}
     this.hitboxMesh = null;
     this.theme = { MC: "#3399ff", PC: "#0066cc", BG: "#f8f9fa", TT: "#343a40", PR: "#babcc2" };
-    this.moveSpeed = 12;      // WASD 每秒走几格，界面上可以调
-    this.held = new Set();    // 正按着的移动键
+    // 观光模式（第一人称，见 tour.js）：mode = "tour" 时环绕相机的鼠标操作全部让给它，distance = 0（target 就是眼睛）
+    this.mode = "orbit";
+    this.fov = FOV;                   // 视野（观光面板可以调）
+    this.light = { gamma: 1, tint: [1, 1, 1] }; // 亮度 / 光照颜色，见 LOD_FRAGMENT
+    this.envMargin = 24;              // 地板往结构外多铺几格（观光时铺远一点）
     this.highlight = new Set();       // 高亮的方块种类
     this.ortho = false;               // 正交（等轴）投影；false = 透视
     this.renderScale = 1;             // 动态分辨率的倍数（1 = 全分辨率）
@@ -695,7 +700,6 @@ export class View {
     this.showLinks = true;            // .vschem 的物理连接线
     this.links = [];
     this.bindControls();
-    this.bindKeys();
     this.bindGizmo();
     new ResizeObserver(() => this.resize()).observe(canvas);
   }
@@ -815,6 +819,7 @@ export class View {
     // deepslate 0.27 的远平面写死 500 格，大结构拉远会被切掉；换成同样的透视、远平面放大
     this.renderer.getPerspective = () => this.projection();
     installLodShader(this.gl, this.renderer);
+    this.renderer.lvLight = this.light;
     this.renderer.setViewport(0, 0, this.canvas.width, this.canvas.height);
     this.selected = null;
     this.buildMarkers(structure, box);
@@ -829,6 +834,7 @@ export class View {
       this.yaw = 0.8;
       this.pitch = 0.6;
     }
+    this.onSceneReady?.(resetCamera); // 观光模式：相机放回眼睛上（tour.js）
     this.draw();
     // 网格分批做，边做边显示；做完前照样能转、能点
     const all = [...live.chunks.keys()].map((k) => k.split(",").map(Number));
@@ -1208,9 +1214,16 @@ export class View {
   // 和透视下在目标点那个深度看到的范围一样大，切换时画面不会突然变大变小
   projection() {
     const m = mat4.create(), aspect = this.canvas.clientWidth / Math.max(1, this.canvas.clientHeight);
-    if (!this.ortho) return mat4.perspective(m, FOV, aspect, 0.1, 20000);
-    const h = this.distance * Math.tan(FOV / 2), w = h * aspect;
+    if (!this.ortho) return mat4.perspective(m, this.fov, aspect, this.mode === "tour" ? 0.05 : 0.1, 20000);
+    const h = this.distance * Math.tan(this.fov / 2), w = h * aspect;
     return mat4.ortho(m, -w, w, -h, h, -20000, 20000);
+  }
+
+  // 亮度（伽马，1 = 原样）和光照颜色（白天白光、夜里偏暗偏蓝……）
+  setLight(gamma = 1, tint = [1, 1, 1]) {
+    this.light.gamma = gamma;
+    this.light.tint = tint;
+    this.draw();
   }
 
   setOrtho(on) {
@@ -1308,7 +1321,7 @@ export class View {
     this.envMesh = null;
     const sc = this.scene, cfg = ENVIRONMENTS[this.env];
     if (!sc || !cfg || !this.renderer) return;
-    const [sx, , sz] = sc.box.size, margin = 24;
+    const [sx, , sz] = sc.box.size, margin = this.envMargin;
     let tile = 1;
     while (((sx + 2 * margin) / tile) * ((sz + 2 * margin) / tile) > 20000) tile *= 2;
     const elements = [];
@@ -1575,44 +1588,12 @@ export class View {
     this.draw();
   }
 
-  // WASD 在世界里平移观察点（相机跟着走）。输入框里打字、弹窗开着的时候不算
-  bindKeys() {
-    const typing = (e) => e.target.closest?.("input, textarea, select, [contenteditable]") || document.querySelector("dialog[open]");
-    window.addEventListener("keydown", (e) => {
-      if (!MOVE_KEYS[e.code] || e.ctrlKey || e.metaKey || e.altKey || typing(e) || !this.scene) return;
-      e.preventDefault(); // 空格别滚页面
-      if (!this.held.size) { this.lastMove = performance.now(); requestAnimationFrame(() => this.moveTick()); }
-      this.held.add(e.code);
-    });
-    window.addEventListener("keyup", (e) => this.held.delete(e.code));
-    window.addEventListener("blur", () => this.held.clear());
-  }
-
-  moveTick() {
-    if (!this.held.size) return;
-    const now = performance.now(), dt = Math.min(0.25, (now - this.lastMove) / 1000); // 掉帧时也按真实时间走，最多补 0.25 秒
-    this.lastMove = now;
-    let [fwd, side, up] = [0, 0, 0];
-    for (const code of this.held) { const [f, s, u] = MOVE_KEYS[code]; fwd += f; side += s; up += u; }
-    // 视线方向 / 右手方向：把相机坐标系的 -Z、+X 转回世界坐标（只取旋转部分）
-    const rot = mat4.create();
-    mat4.rotateX(rot, rot, this.pitch);
-    mat4.rotateY(rot, rot, this.yaw);
-    mat4.invert(rot, rot);
-    const forward = vec3.transformMat4(vec3.create(), [0, 0, -1], rot);
-    const right = vec3.transformMat4(vec3.create(), [1, 0, 0], rot);
-    const dir = [0, 1, 2].map((i) => forward[i] * fwd + right[i] * side + (i === 1 ? up : 0));
-    const len = Math.hypot(...dir) || 1;
-    for (let i = 0; i < 3; i++) this.target[i] += (dir[i] / len) * this.moveSpeed * dt;
-    this.draw();
-    requestAnimationFrame(() => this.moveTick());
-  }
-
   bindControls() {
     const c = this.canvas;
     let drag = null;
     c.addEventListener("contextmenu", (e) => e.preventDefault()); // 右键留给平移
     c.addEventListener("pointerdown", (e) => {
+      if (this.mode !== "orbit") return; // 观光模式：鼠标归 tour.js
       drag = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, t0: performance.now(),
                pan: e.button === 2 || e.button === 1 || e.shiftKey, button: e.button };
       c.setPointerCapture(e.pointerId);
@@ -1653,6 +1634,7 @@ export class View {
     c.addEventListener("pointercancel", () => (drag = null));
     c.addEventListener("wheel", (e) => {
       e.preventDefault();
+      if (this.mode !== "orbit") return;
       this.distance = Math.max(2, Math.min(4000, this.distance * Math.pow(1.0015, e.deltaY)));
       this.draw();
     }, { passive: false });
