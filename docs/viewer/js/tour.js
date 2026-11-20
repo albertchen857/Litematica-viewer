@@ -257,11 +257,22 @@ export class Tour {
     // 中键别出浏览器的自动滚动
     c.addEventListener("mousedown", (e) => { if (this.active && e.button === 1) e.preventDefault(); });
     document.addEventListener("pointerlockchange", () => this.setLocked(this.active && document.pointerLockElement === c));
-    document.addEventListener("mousemove", (e) => {
+    // 用 pointermove 不用 mousemove：按下时 preventDefault 了，浏览器会停发 mousemove
+    document.addEventListener("pointermove", (e) => {
       if (!this.locked) return;
+      // 没锁住鼠标时：按住左键拖动才转（不然光标一碰窗口边就转不动了）。
+      // 移动量自己按光标位置算：有的内嵌窗口不给 movementX
+      let dx = e.movementX, dy = e.movementY;
+      if (this.fake) {
+        const last = this.dragAt;
+        this.dragAt = e.buttons & 1 ? [e.clientX, e.clientY] : null;
+        if (!last || !this.dragAt) return;
+        dx = e.clientX - last[0];
+        dy = e.clientY - last[1];
+      }
       const v = this.view;
-      v.yaw += e.movementX * SENSITIVITY;
-      v.pitch = Math.max(-1.5697, Math.min(1.5697, v.pitch + e.movementY * SENSITIVITY));
+      v.yaw += dx * SENSITIVITY;
+      v.pitch = Math.max(-1.5697, Math.min(1.5697, v.pitch + dy * SENSITIVITY));
       this.place();
     });
     window.addEventListener("keydown", (e) => {
@@ -286,7 +297,7 @@ export class Tour {
     window.addEventListener("blur", () => this.keys.clear());
   }
 
-  // 锁定鼠标。浏览器不给锁（内嵌的网页窗口不支持）就退一步：光标照常显示，鼠标移动照样转视角，Esc 退出。
+  // 锁定鼠标。浏览器不给锁（有些内嵌的网页窗口不支持）就退一步：光标照常显示，按住左键拖动转视角，键盘照常，Esc 退出。
   // Esc 刚退出来马上再点，浏览器会拒绝一下（SecurityError，要等约 1 秒），这种不算
   lock() {
     const fallback = (err) => { if (err?.name !== "SecurityError" && this.active) { this.fake = true; this.setLocked(true); } };
