@@ -447,7 +447,7 @@
   "web.tour.dir.west": "西（-X）",
   "web.tour.exit": "返回檢視",
   "web.tour.facing": "朝向",
-  "web.tour.fakeHint": "這個視窗鎖不住滑鼠：按住左鍵拖動轉視角 · WASD 移動 · Esc 退出",
+  "web.tour.fakeHint": "這個視窗不支援鎖定滑鼠：游標到畫面邊上會繼續轉 · Esc 退出 · 在 Chrome / Edge 裡打開是完整的手感",
   "web.tour.fov": "視野",
   "web.tour.hSpeed": "水平",
   "web.tour.k.click": "點畫面",

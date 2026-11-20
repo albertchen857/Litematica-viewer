@@ -80,15 +80,19 @@ function computeFlags(imageData, size) {
     const models = [];
     for (const v of Object.values(state.variants || {})) models.push(...(Array.isArray(v) ? v : [v]).map((x) => x.model));
     for (const part of state.multipart || []) models.push(...(Array.isArray(part.apply) ? part.apply : [part.apply]).map((x) => x.model));
-    let opaque = models.length > 0, semi = false;
+    let opaque = models.length > 0, semi = false, full = models.length > 0;
     for (const model of new Set(models)) {
       const { textures, elements, translucent } = chain(model);
       const alphas = Object.keys(textures).map((k) => resolve(textures, k)).filter(Boolean).map(texAlpha);
       if (translucent || alphas.some((a) => a.partial)) semi = true;
-      if (!fullCube(elements) || alphas.some((a) => a.cut || a.partial)) opaque = false;
+      if (!fullCube(elements)) full = false;
+      if (!full || alphas.some((a) => a.cut || a.partial)) opaque = false;
     }
-    if (/water|lava/.test(id)) { semi = id.includes("water"); opaque = false; }
-    flags["minecraft:" + id] = { opaque: opaque && !semi, semi_transparent: semi, self_culling: !NON_SELF_CULLING.has("minecraft:" + id) };
+    // 自剔除（挨着同一种方块就不画相邻的面）只给整方块（玻璃、树叶这种）。台阶、楼梯这些形状跟着状态变，
+    // 上半砖挨着下半砖、朝向不同的两个楼梯，相邻的面并不重合，剔掉了侧面就是个洞
+    let self = full && !NON_SELF_CULLING.has("minecraft:" + id);
+    if (/water|lava/.test(id)) { semi = id.includes("water"); opaque = false; self = true; }
+    flags["minecraft:" + id] = { opaque: opaque && !semi, semi_transparent: semi, self_culling: self };
   }
   return flags;
 }
@@ -227,6 +231,15 @@ function patchChunkBuilder(builder) {
   const getMeshes = CB.getMeshes, update = CB.updateStructureBuffers;
   CB.getMeshes = function () { return this.meshList || (this.meshList = getMeshes.call(this)); };
   CB.updateStructureBuffers = function (chunks) { this.meshList = this.chunkList = null; return update.call(this, chunks); };
+  // 7. 面剔除：deepslate 原来还有一条「两个含水方块挨着就剔掉相邻的面」，含水楼梯 / 台阶挨在一起侧面全没了，去掉。
+  // 其余照旧：挨着不透明整方块剔掉（含水方块的顶面除外）；挨着同一种、能自剔除的方块剔掉
+  CB.needsCull = function (block, dir) {
+    const near = this.structure.getBlock(deepslate.BlockPos.towards(block.pos, dir))?.state;
+    if (!near) return false;
+    const flags = this.resources.getBlockFlags(near.getName());
+    if (flags?.self_culling && block.state.getName().equals(near.getName())) return true;
+    return !!flags?.opaque && !(dir === deepslate.Direction.UP && block.state.isWaterlogged());
+  };
   // 6. 高亮的方块亮一档：每个方块的网格做好后，顶点颜色乘 BRIGHTEN。
   // 顶点颜色数组是网格缓存里共用的（见 cloneMesh），只能换成新数组，不能原地乘
   const finish = CB.finishChunkMesh;
@@ -357,6 +370,62 @@ const LOD_FRAGMENT = `
     gl_FragColor = vec4(pow(max(c, vec3(0.0)), vec3(1.0 / gamma)), texColor.a);
   }`;
 
+// ---- 背景地板：一整块大平面，着色器按世界坐标每 1 格贴一张方块贴图（和游戏里一格一格的地面一样），
+// 远处同样往平均色过渡。之前是拼贴片，铺大了贴片会变成 2×2、4×4… 格一张，贴图被拉大
+const FLOOR_VERTEX = `
+  attribute vec4 vertPos;
+  uniform mat4 mView;
+  uniform mat4 mProj;
+  varying highp vec2 vWorld;
+  void main(void) {
+    gl_Position = mProj * mView * vertPos;
+    vWorld = vertPos.xz;
+  }`;
+const FLOOR_FRAGMENT = `
+  #ifdef GL_OES_standard_derivatives
+  #extension GL_OES_standard_derivatives : enable
+  #endif
+  precision highp float;
+  varying highp vec2 vWorld;
+  uniform sampler2D sampler;
+  uniform sampler2D avgSampler;
+  uniform float useAvg;
+  uniform vec4 rect;
+  uniform float pixelSize;
+  uniform vec3 tint;
+  uniform vec3 light;
+  uniform float gamma;
+  void main(void) {
+    vec2 uv = mix(rect.xy, rect.zw, fract(vWorld));
+    uv = clamp(uv, rect.xy + vec2(0.5) * pixelSize, rect.zw - vec2(0.5) * pixelSize);
+    vec3 c = texture2D(sampler, uv).rgb;
+    float far = 0.0;
+  #ifdef GL_OES_standard_derivatives
+    vec2 d = fwidth(vWorld) * 16.0;
+    far = smoothstep(1.0, 3.0, max(d.x, d.y)) * useAvg;
+  #endif
+    vec3 avg = texture2D(avgSampler, (rect.xy + rect.zw) * 0.5).rgb;
+    c = mix(c, avg, far) * tint * light;
+    gl_FragColor = vec4(pow(max(c, vec3(0.0)), vec3(1.0 / gamma)), 1.0);
+  }`;
+
+function floorProgram(gl) {
+  gl.getExtension("OES_standard_derivatives");
+  const compile = (type, src) => {
+    const sh = gl.createShader(type);
+    gl.shaderSource(sh, src);
+    gl.compileShader(sh);
+    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh));
+    return sh;
+  };
+  const p = gl.createProgram();
+  gl.attachShader(p, compile(gl.VERTEX_SHADER, FLOOR_VERTEX));
+  gl.attachShader(p, compile(gl.FRAGMENT_SHADER, FLOOR_FRAGMENT));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  return p;
+}
+
 function installLodShader(gl, renderer) {
   if (!avgAtlas || !gl.getExtension("OES_standard_derivatives")) return false; // 不支持就用原来的着色器
   const compile = (type, src) => {
@@ -385,6 +454,7 @@ function installLodShader(gl, renderer) {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   gl.activeTexture(gl.TEXTURE0);
   renderer.shaderProgram = program;
+  renderer.lvAvgTex = tex; // 地板着色器也要用
   // 每次画之前把平均色图集挂到 1 号纹理单元
   const prepare = renderer.prepareDraw.bind(renderer);
   renderer.prepareDraw = (view) => {
@@ -1256,13 +1326,7 @@ export class View {
     this.renderer.projMatrix = this.projection(); // 正交的大小跟着缩放变，每帧算一次（很便宜）
     this.trackFrame();
     const view = this.viewMatrix();
-    if (this.envMesh) {
-      const r = this.renderer;
-      r.setShader(r.shaderProgram);
-      r.setTexture(r.atlasTexture, resources.getPixelSize?.());
-      r.prepareDraw(view);
-      r.drawMesh(this.envMesh, { pos: true, color: true, texture: true, normal: true });
-    }
+    if (this.envMesh) this.drawFloor(view);
     this.renderer.drawStructure(view);
     if (!this.envMesh) this.renderer.drawGrid(view); // 有地板时不画底下的网格线
     if (this.hitboxMesh) {
@@ -1321,24 +1385,39 @@ export class View {
     this.envMesh = null;
     const sc = this.scene, cfg = ENVIRONMENTS[this.env];
     if (!sc || !cfg || !this.renderer) return;
-    const [sx, , sz] = sc.box.size, margin = this.envMargin;
-    let tile = 1;
-    while (((sx + 2 * margin) / tile) * ((sz + 2 * margin) / tile) > 20000) tile *= 2;
-    const elements = [];
-    for (let x = -margin; x < sx + margin; x += tile) {
-      for (let z = -margin; z < sz + margin; z += tile) {
-        elements.push({ from: [x * 16, -16, z * 16], to: [(x + tile) * 16, 0, (z + tile) * 16],
-          faces: { up: { uv: [0, 0, 16, 16], texture: "#t", ...(cfg.tint ? { tintindex: 0 } : {}) } } });
-      }
+    if (this.floorProgram === undefined) {
+      try { this.floorProgram = floorProgram(this.gl); } catch (err) { console.warn("[floor]", err); this.floorProgram = null; }
     }
-    const model = new deepslate.BlockModel(undefined, { t: cfg.texture }, elements);
-    const mesh = model.getMesh(resources, deepslate.Cull.none(), cfg.tint ? () => cfg.tint : undefined);
-    const m = mat4.create();
-    mat4.translate(m, m, [0, -0.002, 0]); // 比结构底面低一点点，免得和方块底面打架
-    mat4.scale(m, m, [1 / 16, 1 / 16, 1 / 16]);
-    mesh.transform(m);
-    mesh.computeNormals(); // deepslate 的区块构建会补法线，自己做的网格要手动算
-    this.envMesh = mesh.rebuild(this.gl, { pos: true, color: true, texture: true, normal: true });
+    if (!this.floorProgram) return;
+    const [sx, , sz] = sc.box.size, m = this.envMargin, y = -0.002; // 比结构底面低一点点，免得和方块底面打架
+    const v = (x, z) => new deepslate.Vertex(new deepslate.Vector(x, y, z), [1, 1, 1], [0, 0], [0, 0, 0, 0], new deepslate.Vector(0, 1, 0));
+    const mesh = new deepslate.Mesh();
+    mesh.quads.push(new deepslate.Quad(v(-m, -m), v(-m, sz + m), v(sx + m, sz + m), v(sx + m, -m)));
+    this.envMesh = mesh.rebuild(this.gl, { pos: true });
+    this.floorRect = resources.getTextureUV(cfg.texture);
+    this.floorTint = cfg.tint || [1, 1, 1];
+  }
+
+  drawFloor(view) {
+    const r = this.renderer, gl = this.gl, p = this.floorProgram;
+    r.setShader(p);
+    r.setTexture(r.atlasTexture, resources.getPixelSize?.());
+    r.prepareDraw(view);
+    const u = (name) => gl.getUniformLocation(p, name);
+    gl.uniform1i(u("sampler"), 0);
+    gl.uniform1i(u("avgSampler"), 1);
+    gl.uniform1f(u("useAvg"), r.lvAvgTex ? 1 : 0);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, r.lvAvgTex || r.atlasTexture);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.uniform4fv(u("rect"), this.floorRect);
+    gl.uniform3fv(u("tint"), this.floorTint);
+    gl.uniform3fv(u("light"), this.light.tint);
+    gl.uniform1f(u("gamma"), this.light.gamma);
+    const cull = gl.isEnabled(gl.CULL_FACE);
+    gl.disable(gl.CULL_FACE);
+    r.drawMesh(this.envMesh, { pos: true });
+    if (cull) gl.enable(gl.CULL_FACE);
   }
 
   // ---- 高亮 / 隐藏某几种方块：只画这些方块合起来的外轮廓（黄 = 高亮，隔着墙也看得到；灰 = 隐藏，可以关）。

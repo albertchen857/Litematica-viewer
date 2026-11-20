@@ -228,9 +228,9 @@ export class Tour {
     const o = this.opts, v = this.view;
     if (!this.active) return;
     v.fov = (o.fov * Math.PI) / 180;
-    // 地板铺远一点：起点在结构外面，大结构起码要铺到起点脚下
+    // 地板铺远一点，看不到边
     const size = v.scene ? Math.max(v.scene.box.size[0], v.scene.box.size[2]) : 0;
-    v.envMargin = Math.max(96, Math.round(size * 1.5));
+    v.envMargin = Math.max(1024, Math.round(size * 4)); // 地板是一整块平面，铺多大都不费事
     if (o.noclip) this.player.flying = true;
     const dim = DIM_FLOOR[o.dim] ? o.dim : "";
     v.setEnvironment(DIM_FLOOR[dim] || null);
@@ -247,7 +247,7 @@ export class Tour {
     c.addEventListener("pointerdown", (e) => {
       if (!this.active) return;
       if (!this.locked) {
-        if (e.button === 0) this.lock();
+        if (e.button === 0) { this.clickAt = [e.clientX, e.clientY]; this.lock(); }
         return;
       }
       e.preventDefault();
@@ -260,13 +260,13 @@ export class Tour {
     // 用 pointermove 不用 mousemove：按下时 preventDefault 了，浏览器会停发 mousemove
     document.addEventListener("pointermove", (e) => {
       if (!this.locked) return;
-      // 没锁住鼠标时：按住左键拖动才转（不然光标一碰窗口边就转不动了）。
+      // 没锁住鼠标时（浏览器不让锁）：光标藏起来，照样是移动鼠标就转头；光标到画面边上会一直转（见 tick 的 edgeTurn）。
       // 移动量自己按光标位置算：有的内嵌窗口不给 movementX
       let dx = e.movementX, dy = e.movementY;
       if (this.fake) {
-        const last = this.dragAt;
-        this.dragAt = e.buttons & 1 ? [e.clientX, e.clientY] : null;
-        if (!last || !this.dragAt) return;
+        const last = this.cursor;
+        this.cursor = [e.clientX, e.clientY];
+        if (!last) return;
         dx = e.clientX - last[0];
         dy = e.clientY - last[1];
       }
@@ -300,7 +300,12 @@ export class Tour {
   // 锁定鼠标。浏览器不给锁（有些内嵌的网页窗口不支持）就退一步：光标照常显示，按住左键拖动转视角，键盘照常，Esc 退出。
   // Esc 刚退出来马上再点，浏览器会拒绝一下（SecurityError，要等约 1 秒），这种不算
   lock() {
-    const fallback = (err) => { if (err?.name !== "SecurityError" && this.active) { this.fake = true; this.setLocked(true); } };
+    const fallback = (err) => {
+      if (err?.name === "SecurityError" || !this.active) return;
+      this.fake = true;
+      this.setLocked(true);
+      this.cursor = this.clickAt || null; // 从点下去的位置开始算移动量
+    };
     try {
       const r = this.canvas.requestPointerLock();
       if (r?.catch) r.catch(fallback);
@@ -315,6 +320,7 @@ export class Tour {
 
   setLocked(on) {
     if (!on) this.fake = false;
+    this.cursor = null;
     this.locked = on;
     this.stage.classList.toggle("is-locked", on);
     this.stage.classList.toggle("is-fake", on && !!this.fake); // 没真锁住：光标还在，别藏
@@ -332,6 +338,13 @@ export class Tour {
     for (let left = dt; left > 1e-6; left -= 1 / 60) this.physics(Math.min(left, 1 / 60));
     const p = this.player;
     if (p.pos.some((x, i) => Math.abs(x - before[i]) > 1e-6)) this.place();
+    this.edgeTurn(dt);
+    // 上台阶：人一下子抬高了，镜头慢慢跟上去（约 0.1 秒），不是一下跳上去
+    if (this.stepOffset) {
+      this.stepOffset *= Math.exp(-dt * 18);
+      if (Math.abs(this.stepOffset) < 1e-3) this.stepOffset = 0;
+      this.place();
+    }
     // 准星指着哪格：一帧最多算一次（鼠标一秒能报上千次移动）
     if (this.dirty) {
       this.dirty = false;
@@ -341,6 +354,19 @@ export class Tour {
     }
     this.status();
     requestAnimationFrame((t) => this.tick(t));
+  }
+
+  // 锁不住鼠标时：光标在画面边上那一圈（宽度的 8%）就一直往那边转，越靠边转得越快
+  edgeTurn(dt) {
+    if (!this.fake || !this.cursor) return;
+    const r = this.canvas.getBoundingClientRect(), v = this.view;
+    const band = Math.max(24, Math.min(r.width, r.height) * 0.08);
+    const push = (x, lo, hi) => (x < lo + band ? -(1 - Math.max(0, x - lo) / band) : x > hi - band ? 1 - Math.max(0, hi - x) / band : 0);
+    const sx = push(this.cursor[0], r.left, r.right), sy = push(this.cursor[1], r.top, r.bottom);
+    if (!sx && !sy) return;
+    v.yaw += sx * 2.6 * dt;
+    v.pitch = Math.max(-1.5697, Math.min(1.5697, v.pitch + sy * 1.6 * dt));
+    this.place();
   }
 
   physics(dt) {
@@ -434,6 +460,7 @@ export class Tour {
       if (hx * hx + hz * hz > got[0] * got[0] + got[2] * got[2] + 1e-9) {
         b = b2;
         got = [hx, lift + drop, hz];
+        this.stepOffset = (this.stepOffset || 0) - (lift + drop); // 镜头先留在原来的高度，再慢慢跟上
       }
     }
     if (got[0] !== dx) p.vel[0] = 0;
@@ -449,7 +476,7 @@ export class Tour {
   place() {
     const v = this.view, p = this.player;
     v.distance = 0;
-    v.target = [p.pos[0], p.pos[1] + EYE, p.pos[2]];
+    v.target = [p.pos[0], p.pos[1] + EYE + (this.stepOffset || 0), p.pos[2]];
     this.dirty = true;
   }
 
