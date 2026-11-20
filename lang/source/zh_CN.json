@@ -447,6 +447,7 @@
   "web.tour.dir.west": "西（-X）",
   "web.tour.exit": "返回查看",
   "web.tour.facing": "朝向",
+  "web.tour.fakeHint": "这个窗口锁不住鼠标：按住左键拖动转视角 · WASD 移动 · Esc 退出",
   "web.tour.fov": "视野",
   "web.tour.hSpeed": "水平",
   "web.tour.k.click": "点画面",
