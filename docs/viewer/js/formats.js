@@ -495,7 +495,7 @@ function rotateProps(props, turns) {
 function readVschem(bytes) {
   let p = 0, kind, type;
   [kind, p] = readUtf(bytes, p);
-  if (kind !== "vschem") throw new Error("not a VMod ship schematic (.vschem)");
+  if (kind !== "vschem") throw new Error("not a VMod/Valkyrien schematic (.vschem)");
   [type, p] = readUtf(bytes, p);
   const rootTag = deepslate.NbtFile.read(bytes.subarray(p), {}).root;
   const root = plain(rootTag);
