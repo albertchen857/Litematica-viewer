@@ -159,6 +159,11 @@ class Api:
             pass
         return True
 
+    def start_query(self):
+        """主界面左下角搜索框带过来的关键词（只给一次）"""
+        q, os.environ["LV_QUERY"] = os.environ.get("LV_QUERY", ""), ""
+        return q
+
     def icon(self):
         """顶栏图标：pywebview 的本地服务以 viewer/ 为根，读不到仓库根目录的 icon.ico，所以从这里给 data URL"""
         import base64

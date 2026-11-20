@@ -199,6 +199,8 @@ async function main() {
   prefs = (await api().prefs()) || {};
   style = prefs.style || "grid";
   if (prefs.lang && !new URLSearchParams(location.search).get("lang")) lang = prefs.lang;
+  const q = await api().start_query(); // 主界面左下角搜索框输入的
+  if (q) $("sr-q").value = q;
   sites = await api().sites();
   applyLang();
   loadFacets();

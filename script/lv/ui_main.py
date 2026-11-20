@@ -9,12 +9,12 @@
     │ 3D缩略图 │                         │ 倍数输入  │栏│
     │ 7个指标  │                         │ 饼图×2    │◀ │
     │ 手动3D   │                         │ 进度条    │  │
-    │ REDENMC  │                         │ 对账/提示 │  │
+    │ 投影搜索 │                         │ 对账/提示 │  │
     └──────────┴─────────────────────────┴──────────┴──┘
 
 窗口拉窄时按「侧栏 → 饼图列 → 左列」的顺序让位，中间的表格留到最后。
 
-四块功能面板（生成投影 / 替换方块 / REDENMC / 信息显示）都能单独开窗口，
+四块功能面板（生成投影 / 替换方块 / 投影搜索 / 信息显示）都能单独开窗口，
 入口在功能菜单里，所以窗口再小也不会点不到。面板代码在 ui_panels.py，
 主窗口和独立窗口共用同一份。
 """
@@ -32,7 +32,7 @@ from customtkinter import CTkFrame, CTkScrollableFrame
 from . import analysis, assets, config, edit, formats, i18n, render, snapshot, thumbnail, tools, world
 from .config import APP_VERSION, colors, corner, font
 from .i18n import _
-from .ui_panels import ChartsPanel, CubePanel, RedenPanel, ReplacePanel, StatsPanel
+from .ui_panels import ChartsPanel, CubePanel, ReplacePanel, SearchPanel, StatsPanel
 from .ui_widgets import BlockPicker, SideCollapsible, button
 
 GITHUB_URL = "https://github.com/albertchen857/LitematicaViewer"
@@ -234,7 +234,7 @@ class App:
             ("litem.menuFunc.4", self.open_container),
             ("litem.menuFunc.5", self.open_3d),
             ("litem.menuFunc.6", self.open_step),
-            ("menu.search", self.open_search),
+            ("menu.search", lambda: self.open_search()),
         ):
             func_menu.add_command(label=_(key), command=command, font=item_font)
         func_menu.add_separator()
@@ -242,7 +242,7 @@ class App:
         for key, kind in (
             ("litem.funcNew.1", "cube"),
             ("litem.funcChange.1", "replace"),
-            ("litem.reden.title", "reden"),
+            ("search.title", "search"),
             ("menu.window.info", "info"),
         ):
             func_menu.add_command(
@@ -330,8 +330,8 @@ class App:
         button(row, _("menu.desc.edit"), self.edit_description, 1.4, accent=True).grid(
             row=0, column=1, sticky="ew", padx=(3, 0)
         )
-        # REDENMC 搜索钉在左下角
-        RedenPanel(self.left, self, bg="BG").pack(side=tk.BOTTOM, fill=tk.X, padx=8, pady=8)
+        # 投影搜索框钉在左下角（输入完打开投影搜索大窗口）
+        SearchPanel(self.left, self, bg="BG").pack(side=tk.BOTTOM, fill=tk.X, padx=8, pady=8)
 
     def _build_charts(self) -> None:
         self.charts_column = CTkFrame(self.root, fg_color=self.theme["MC"], corner_radius=corner())
@@ -518,7 +518,7 @@ class App:
         """把某块面板单独开一个窗口。布局和主界面里那份一样，代码也是同一份。"""
         titles = {
             "cube": _("litem.funcNew.1"), "replace": _("litem.funcChange.1"),
-            "reden": _("litem.reden.title"), "info": _("menu.window.info"),
+            "search": _("search.title"), "info": _("menu.window.info"),
         }
         window = tk.Toplevel(self.root)
         window.title(f'{titles.get(kind, "")} - {_("litem.title")}')
@@ -529,8 +529,8 @@ class App:
             CubePanel(window, self).pack(fill=tk.BOTH, expand=True, padx=16, pady=16)
         elif kind == "replace":
             ReplacePanel(window, self).pack(fill=tk.BOTH, expand=True, padx=16, pady=16)
-        elif kind == "reden":
-            RedenPanel(window, self).pack(fill=tk.BOTH, expand=True, padx=16, pady=16)
+        elif kind == "search":
+            SearchPanel(window, self).pack(fill=tk.BOTH, expand=True, padx=16, pady=16)
         else:
             # 信息显示：左边 7 个指标，右边 2 张饼图，和主界面的摆法一致
             window.geometry("980x760")
@@ -1148,10 +1148,10 @@ class App:
             traceback.print_exc()
             messagebox.showerror(_("litem.title"), _("app.render.fail", exc))
 
-    def open_search(self) -> None:
-        """投影搜索：多个投影网站的本地索引，结果只跳转原站（见 lv/search/）。"""
+    def open_search(self, query: str = "") -> None:
+        """投影搜索：多个投影网站的本地索引，结果只跳转原站（见 lv/search/）。query：打开后直接搜这个"""
         try:
-            render.open_search(i18n.current())
+            render.open_search(i18n.current(), query)
         except Exception as exc:
             traceback.print_exc()
             messagebox.showerror(_("litem.title"), _("app.render.fail", exc))
@@ -1169,16 +1169,6 @@ class App:
         from .ui_container import ContainerWindow
 
         ContainerWindow(self.root, self.structure)
-
-    def open_reden(self, panel) -> None:
-        query, mode = panel.values()
-        if mode == _("litem.reden.select.2") and query:
-            webbrowser.open(f"https://redenmc.com/litematica/{query}")
-        elif mode == _("litem.reden.select.3") and query:
-            name, _sep, index = query.partition("/")
-            webbrowser.open(f"https://redenmc.com/api/mc-services/yisibite/{name}/download/{index or 1}")
-        else:
-            webbrowser.open(f"https://redenmc.com/litematica?q={query}")
 
     def check_update(self) -> None:
         import requests

@@ -173,34 +173,33 @@ class ReplacePanel(_Panel):
         }
 
 
-# --------------------------------------------------------------------------- REDENMC 搜索
+# --------------------------------------------------------------------------- 投影搜索（多站点）
 
-class RedenPanel(_Panel):
+class SearchPanel(_Panel):
+    """左下角的投影搜索框：输入关键词回车 / 点按钮，打开投影搜索大窗口并直接搜（见 lv/search/）。
+    原来这里是 REDENMC 搜索，RedenMC 现在是投影搜索里的一个站。"""
+
     def __init__(self, parent, app, bg: str = "MC"):
         super().__init__(parent, app, bg)
         holder = CTkFrame(self.frame, fg_color=self.theme["MC"], corner_radius=corner())
         holder.pack(fill=tk.BOTH, expand=True)
 
         CTkLabel(
-            holder, text=_("litem.reden.title"), font=font(1.4),
+            holder, text=_("search.title"), font=font(1.4),
             fg_color=self.theme["MC"], text_color=self.theme["BG"],
         ).pack(padx=6, pady=(10, 4))
         self.query = CTkEntry(
-            holder, font=font(1.3), fg_color=self.theme["BG"], text_color=self.theme["MC"]
+            holder, font=font(1.3), fg_color=self.theme["BG"], text_color=self.theme["MC"],
+            placeholder_text=_("search.hint"),
         )
         self.query.pack(padx=10, pady=4, fill=tk.X)
-        self.mode = CTkComboBox(
-            holder,
-            values=[_("litem.reden.select.1"), _("litem.reden.select.2"), _("litem.reden.select.3")],
-            font=font(1.2), fg_color=self.theme["MC"], text_color=self.theme["BG"],
-        )
-        self.mode.pack(padx=10, pady=4, fill=tk.X)
-        button(holder, _("litem.reden.btn"), lambda: app.open_reden(self), 1.3, accent=True).pack(
+        self.query.bind("<Return>", lambda _e: self.submit())
+        button(holder, _("search.btn"), self.submit, 1.3, accent=True).pack(
             padx=10, pady=(4, 12), fill=tk.X
         )
 
-    def values(self) -> tuple:
-        return self.query.get().strip(), str(self.mode.get())
+    def submit(self) -> None:
+        self.app.open_search(self.query.get().strip())
 
 
 # --------------------------------------------------------------------------- 信息：7 个指标
