@@ -25,7 +25,7 @@ sys.path.insert(0, os.path.join(ROOT, "script"))
 from lv import atlas  # noqa: E402
 
 VIEWER = os.path.join(ROOT, "viewer")
-SKIP = {"payload.json", "_tmp"}  # payload.json：桌面版「手动3D渲染」运行时写的；_tmp：本地测试文件。都不是网站的东西
+SKIP = {"payload.json", "_tmp", "search.html", "search.js"}  # payload.json：桌面版「手动3D渲染」运行时写的；_tmp：本地测试文件；search：投影搜索只在桌面版里用。都不是网站的东西
 
 
 def sync_viewer(site: str) -> int:

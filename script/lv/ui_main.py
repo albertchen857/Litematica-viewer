@@ -234,6 +234,7 @@ class App:
             ("litem.menuFunc.4", self.open_container),
             ("litem.menuFunc.5", self.open_3d),
             ("litem.menuFunc.6", self.open_step),
+            ("menu.search", self.open_search),
         ):
             func_menu.add_command(label=_(key), command=command, font=item_font)
         func_menu.add_separator()
@@ -1143,6 +1144,14 @@ class App:
             return
         try:
             render.open_viewer(self.structure, os.path.basename(self.file_path))
+        except Exception as exc:
+            traceback.print_exc()
+            messagebox.showerror(_("litem.title"), _("app.render.fail", exc))
+
+    def open_search(self) -> None:
+        """投影搜索：多个投影网站的本地索引，结果只跳转原站（见 lv/search/）。"""
+        try:
+            render.open_search(i18n.current())
         except Exception as exc:
             traceback.print_exc()
             messagebox.showerror(_("litem.title"), _("app.render.fail", exc))

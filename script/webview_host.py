@@ -3,6 +3,7 @@
 由 script/lv/render.py 启动，命令行是::
 
     python script/webview_host.py <viewer/index.html 路径> <窗口标题>
+    python script/webview_host.py --search <viewer/search.html 路径> <窗口标题>   （投影搜索）
 
 单独跑一个进程是有意为之：pywebview 要独占主线程，和 tkinter 的 mainloop
 放一起必然打架。这里 http_server=True 让 pywebview 自己起一个本地 http 服务，
@@ -18,6 +19,9 @@ def main(argv: list) -> int:
         print("用法: webview_host.py <viewer.html> [标题]")
         return 2
 
+    search = argv[0] == "--search"
+    if search:
+        argv = argv[1:]
     html_path, title = argv[0], (argv[1] if len(argv) > 1 else "LitematicaViewer 3D")
     if not os.path.exists(html_path):
         print(f"找不到页面: {html_path}")
@@ -28,6 +32,16 @@ def main(argv: list) -> int:
     except ImportError:
         print("没装 pywebview，3D 渲染用不了。执行: pip install pywebview")
         return 1
+
+    if search:
+        # 投影搜索：页面通过 js_api 调本地索引；勾选的网站、样式这些偏好也存在 Python 那边（search_prefs.json），
+        # 所以照样 private_mode=True，不怕缓存住旧脚本
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from lv.search import Api
+
+        webview.create_window(title, url=html_path, js_api=Api(), width=1280, height=860, background_color="#f8f9fa")
+        webview.start(http_server=True, private_mode=True)
+        return 0
 
     # #desktop：告诉网页版查看器「数据在 payload.json，别等用户拖文件」。
     # pywebview 算 http 服务根目录时会去掉 # 后面的部分，所以加在这里不影响找文件

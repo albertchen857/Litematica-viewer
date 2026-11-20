@@ -29,3 +29,7 @@ local_tests/
 # wrangler（上传 R2 时生成的缓存）、本地测试用的临时投影
 .wrangler/
 viewer/_tmp/
+
+# 投影搜索的本地索引和偏好（桌面版运行时生成）
+search_index.sqlite
+search_prefs.json

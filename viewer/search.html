@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>投影搜索 · Litematica Viewer</title>
+  <link rel="stylesheet" href="viewer.css">
+  <!--
+    投影搜索（只在桌面版里用：桌面版开一个窗口显示这页，通过 pywebview 的 window.pywebview.api 调 Python）。
+    数据来自用户电脑上的本地索引（script/lv/search/），抓取只读各站 robots.txt 允许的页面；
+    结果只给跳转链接，不下载投影。逻辑在 js/search.js。网站上不放这页（tools/sync_site.py 跳过）。
+  -->
+</head>
+<body class="sr-page">
+
+<header class="bar site-head">
+  <span class="brand"><img alt="" width="32" height="32"><span>Litematica Viewer</span></span>
+  <b class="sr-title" data-t="sr.title">投影搜索</b>
+  <span class="bar-file"></span>
+  <select class="lang" id="lang" aria-label="Language">
+    <option value="zh_CN">简体中文</option>
+    <option value="zh_TW">繁體中文</option>
+    <option value="en_US">English</option>
+  </select>
+</header>
+
+<main class="sr">
+  <!-- 搜索框 + 排序 + 样式 -->
+  <form class="sr-bar" id="sr-form">
+    <input type="search" id="sr-q" autocomplete="off" spellcheck="false" placeholder="搜索投影：名字、作者、标签……">
+    <button class="btn btn-accent" type="submit" data-t="sr.go">搜索</button>
+    <select id="sr-sort" aria-label="sort">
+      <option value="mixed" data-t="sr.sort.mixed">综合</option>
+      <option value="relevance" data-t="sr.sort.relevance">相关度</option>
+      <option value="downloads" data-t="sr.sort.downloads">下载量</option>
+      <option value="likes" data-t="sr.sort.likes">点赞量</option>
+      <option value="newest" data-t="sr.sort.newest">最新</option>
+    </select>
+    <div class="sr-style" role="group" aria-label="layout">
+      <button type="button" class="is-on" data-style="grid" title="图片" data-t-title="sr.styleGrid">▦</button>
+      <button type="button" data-style="list" title="详细" data-t-title="sr.styleList">☰</button>
+    </div>
+  </form>
+
+  <!-- 网站（可单独勾选）+ 更新索引 -->
+  <section class="sr-sites">
+    <div class="sr-sites-head">
+      <b data-t="sr.sites">网站</b>
+      <button type="button" class="sr-link" id="sr-all" data-t="sr.all">全选</button>
+      <button type="button" class="sr-link" id="sr-none" data-t="sr.none">全不选</button>
+      <span class="sr-crawl-status" id="sr-crawl-status"></span>
+      <button type="button" class="btn btn-small" id="sr-crawl" data-t="sr.crawl">更新索引</button>
+    </div>
+    <div class="sr-site-list" id="sr-site-list"></div>
+  </section>
+
+  <!-- 过滤 -->
+  <details class="sr-filters">
+    <summary data-t="sr.filters">筛选</summary>
+    <div class="sr-filter-grid">
+      <label><span data-t="sr.f.tag">标签</span><input id="f-tag" list="tag-list"></label>
+      <label><span data-t="sr.f.version">版本</span><input id="f-version" list="version-list" placeholder="1.20"></label>
+      <label><span data-t="sr.f.after">上传晚于</span><input id="f-after" type="date"></label>
+      <label><span data-t="sr.f.minDownloads">下载量 ≥</span><input id="f-minDownloads" type="number" min="0"></label>
+      <label><span data-t="sr.f.minLikes">点赞量 ≥</span><input id="f-minLikes" type="number" min="0"></label>
+      <label><span data-t="sr.f.author">作者</span><input id="f-author"></label>
+    </div>
+    <datalist id="tag-list"></datalist>
+    <datalist id="version-list"></datalist>
+  </details>
+
+  <p class="sr-count" id="sr-count"></p>
+
+  <!-- 结果：样式 1 图片网格 + 右侧详情；样式 2 一行一条 -->
+  <div class="sr-results" id="sr-results">
+    <div class="sr-grid" id="sr-grid"></div>
+    <aside class="sr-detail" id="sr-detail" hidden></aside>
+  </div>
+</main>
+
+<script type="module" src="js/search.js"></script>
+</body>
+</html>

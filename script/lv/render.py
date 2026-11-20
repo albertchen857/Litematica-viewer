@@ -122,6 +122,18 @@ def open_viewer(structure, title: str = None) -> int:
     return count
 
 
+def open_search(lang: str = "") -> None:
+    """投影搜索窗口（viewer/search.html + 本地索引，见 lv/search/）。lang：桌面版当前语言，搜索页第一次打开时跟着用"""
+    html = res("viewer", "search.html")
+    if not os.path.exists(html):
+        raise RenderError(f"找不到 {html}")
+    if getattr(sys, "frozen", False):
+        cmd = [sys.executable, "--webview-host", "--search", html, "Litematica Viewer - Search"]
+    else:
+        cmd = [sys.executable, res("script", "webview_host.py"), "--search", html, "Litematica Viewer - Search"]
+    _processes.append(subprocess.Popen(cmd, env={**os.environ, "LV_LANG": lang or ""}))
+
+
 def close_all() -> None:
     """主程序退出时把还开着的 3D 窗口一起收掉。"""
     for process in _processes:
