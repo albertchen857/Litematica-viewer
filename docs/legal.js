@@ -12,7 +12,11 @@
     document.querySelectorAll("[data-en]").forEach(function (el) {
       el.textContent = lang === "en" ? el.dataset.en : lang === "tw" ? el.dataset.tw : el.dataset.zh;
     });
-    document.querySelectorAll("[data-lang-href]").forEach(function (a) { a.href = a.dataset.langHref + "?lang=" + lang; });
+    // 带锚点的（viewer/#tour）：?lang= 要插在 # 前面
+    document.querySelectorAll("[data-lang-href]").forEach(function (a) {
+      var parts = a.dataset.langHref.split("#");
+      a.href = parts[0] + "?lang=" + lang + (parts[1] ? "#" + parts[1] : "");
+    });
     var title = document.querySelector('article[data-lang="' + lang + '"] h1');
     if (title) document.title = title.textContent + " · Litematica Viewer";
     document.getElementById("lang-switch").value = lang;

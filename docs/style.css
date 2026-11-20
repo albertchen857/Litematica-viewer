@@ -118,7 +118,7 @@ code, .mono { font-family: var(--mono); }
 }
 .site-nav a:hover { color: var(--pc); }
 .site-nav a[aria-current="page"] { color: var(--pc); background: color-mix(in srgb, var(--tt) 8%, var(--bg)); }
-@media (max-width: 1000px) { .site-head .brand span { display: none; } } /* 窄屏三个页面都只留图标（查看器顶栏放不下），位置照样一致 */
+@media (max-width: 1080px) { .site-head .brand span { display: none; } } /* 窄屏三个页面都只留图标（查看器顶栏放不下），位置照样一致 */
 
 .lang-switch { min-width: 64px; font-weight: 700; color: var(--pc); }
 

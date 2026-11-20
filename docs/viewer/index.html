@@ -45,6 +45,7 @@
     js/blockmap.js  Java ↔ 基岩方块 ID / 状态互转（照 script/lv/blockmap.py）
     js/world.js     导出虚空世界存档（照 script/lv/world.py），js/zip.js 打包
     js/app.js       界面：拖文件、页签、子区域、语言、导出、替换方块、工具
+    js/tour.js      观光：第一人称参观（仿 Minecraft 的走 / 飞 / 旁观，方块碰撞箱，右键开门）
 -->
 
 <header class="bar site-head">
@@ -55,6 +56,8 @@
   <!-- 主菜单：三个页面同一个位置（规格见 viewer.css 的 .site-head / .site-nav） -->
   <nav class="site-nav" aria-label="Main">
     <a href="./" id="nav-view" aria-current="page" data-t="conv.toViewer">查看</a>
+    <!-- 观光：同一个页面换成第一人称参观（右边换成观光面板，js/tour.js），网址带 #tour -->
+    <a href="./#tour" id="nav-tour" data-t="tour.nav">观光</a>
     <a href="convert.html" id="nav-convert" data-t="conv.nav">转换</a>
   </nav>
   <span class="bar-file" id="bar-file"></span>
@@ -187,8 +190,7 @@
       <span class="layers-value" id="layer-value"></span>
     </div>
     <div class="hint" id="hint" hidden>
-      <span data-t="controls">左键拖动旋转 · 右键拖动平移 · 滚轮缩放 · WASD 移动</span>
-      <!-- WASD 按世界方向走（W/S 北南、A/D 西东、空格/Shift 上下），速度每秒几格 -->
+      <span data-t="controls">左键拖动旋转 · 右键拖动平移 · 滚轮缩放</span>
       <!-- .vschem 才有：船和船之间的物理连接（绳子、铰链、滑轨……） -->
       <label class="links-toggle" id="links-toggle" hidden><input type="checkbox" id="links-show" checked> <span id="links-label"></span></label>
       <!-- 背景：地板 + 天空，默认关闭 -->
@@ -199,14 +201,18 @@
           <option value="grass" data-t="env.grass">草地</option>
           <option value="end" data-t="env.end">末地</option>
         </select></label>
-      <label class="move-speed"><span data-t="moveSpeed">移动速度</span>
-        <input type="range" id="move-speed" min="2" max="64" step="1" value="12"><b id="move-speed-val">12</b></label>
     </div>
 
     <!-- 右上角轴向面板（同 Blender）：跟着视角转，点端点转到从那一面看 -->
     <svg class="gizmo" id="gizmo" viewBox="0 0 100 100" aria-label="view axes" hidden></svg>
     <!-- 透视 / 正交（等轴）切换：图标画的是现在的模式，点一下换成另一种 -->
     <button class="proj-toggle" id="proj-toggle" type="button" hidden><svg class="proj-icon proj-persp" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10l3 12H4z"/><path d="M7 7l-3 12M17 7l3 12M9.5 11h5M8.5 15h7"/></svg><svg class="proj-icon proj-ortho" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/></svg></button>
+
+    <!-- 桌面版的 3D 窗口没有顶栏菜单：进观光用这个按钮 -->
+    <button class="tour-toggle" id="tour-toggle" type="button" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="2.5"/><path d="M12 8v7M8 11l4-2 4 2M9 21l3-6 3 6"/></svg></button>
+    <!-- 观光：中间的准星；鼠标没锁定时提示点画面开始 -->
+    <div class="crosshair" aria-hidden="true"></div>
+    <div class="tour-prompt" id="tour-prompt"><b data-t="tour.prompt">点击画面开始参观</b><span data-t="tour.promptSub">Esc 放出鼠标</span></div>
 
     <!-- 隐藏 / 高亮了哪些种类方块，一键恢复；隐藏的方块要不要留灰边框 -->
     <div class="kind-bar" id="kind-bar" hidden>
@@ -313,6 +319,70 @@
     <div class="card cats-card">
       <h2 class="card-title" data-ui="ui.chart.t2">分类统计</h2>
       <div class="cats" id="cats"></div>
+    </div>
+  </aside>
+
+  <!-- 右：观光面板（观光模式时换掉信息栏）。设置存在浏览器里（lv-viewer-prefs 的 tour） -->
+  <aside class="side tour-side" id="tour-side" hidden>
+    <div class="card">
+      <h2 class="card-title" data-t="tour.title">观光</h2>
+      <dl class="tour-status">
+        <dt data-t="tour.mode">模式</dt><dd id="tour-mode">-</dd>
+        <dt data-t="tour.pos">位置</dt><dd id="tour-pos">-</dd>
+        <dt data-t="tour.facing">朝向</dt><dd id="tour-facing">-</dd>
+      </dl>
+      <div class="tool-actions">
+        <button class="btn btn-small" id="tour-respawn" type="button" data-t="tour.respawn">回到起点</button>
+        <button class="btn btn-small btn-plain" id="tour-exit" type="button" data-t="tour.exit">返回查看</button>
+      </div>
+    </div>
+
+    <div class="card tour-opts">
+      <h2 class="card-title" data-t="tour.view">视角</h2>
+      <label class="tour-row"><span data-t="tour.fov">视野</span><input type="range" id="tour-fov" min="30" max="110" step="1"><b id="tour-fov-val"></b></label>
+      <label class="tour-row"><span data-t="tour.bright">亮度</span><input type="range" id="tour-bright" min="50" max="200" step="5"><b id="tour-bright-val"></b></label>
+      <label class="opt-check"><input type="checkbox" id="tour-noclip"> <span data-t="tour.noclip">允许穿过方块（旁观模式）</span></label>
+      <p class="tool-note" data-t="tour.noclipNote">关掉就是创造模式：方块挡人、有重力，双击空格切换飞行</p>
+    </div>
+
+    <div class="card tour-opts">
+      <h2 class="card-title" data-t="tour.bg">背景</h2>
+      <label class="tour-row"><span data-t="tour.dim">维度</span>
+        <select id="tour-dim">
+          <option value="" data-t="tour.dim.none">无</option>
+          <option value="overworld" data-t="tour.dim.overworld">主世界</option>
+          <option value="nether" data-t="tour.dim.nether">下界</option>
+          <option value="end" data-t="tour.dim.end">末地</option>
+        </select></label>
+      <label class="tour-row"><span data-t="tour.time">时间</span>
+        <select id="tour-time">
+          <option value="day" data-t="tour.time.day">白天</option>
+          <option value="sunset" data-t="tour.time.sunset">黄昏</option>
+          <option value="night" data-t="tour.time.night">夜晚</option>
+        </select></label>
+    </div>
+
+    <div class="card tour-opts">
+      <h2 class="card-title" data-t="tour.speed">移动速度（格 / 秒）</h2>
+      <label class="tour-row"><span data-t="tour.hSpeed">水平</span><input type="range" id="tour-hspeed" min="1" max="60" step="1"><b id="tour-hspeed-val"></b></label>
+      <label class="tour-row"><span data-t="tour.vSpeed">垂直</span><input type="range" id="tour-vspeed" min="1" max="60" step="1"><b id="tour-vspeed-val"></b></label>
+      <p class="tool-note" data-t="tour.speedNote">走路是水平速度的 0.4 倍；双击 W 疾跑</p>
+    </div>
+
+    <div class="card">
+      <h2 class="card-title" data-t="tour.keys">操作</h2>
+      <ul class="tour-keys">
+        <li><kbd data-t="tour.k.click">点画面</kbd><span data-t="tour.key.click">开始，鼠标转视角</span></li>
+        <li><kbd>W A S D</kbd><span data-t="tour.key.move">前后左右（只在水平面上走）</span></li>
+        <li><kbd data-t="tour.k.space">空格</kbd><span data-t="tour.key.space">上升 / 跳</span></li>
+        <li><kbd>Shift</kbd><span data-t="tour.key.shift">下降 / 潜行</span></li>
+        <li><kbd data-t="tour.k.space2">双击空格</kbd><span data-t="tour.key.space2">切换飞行（不穿墙时）</span></li>
+        <li><kbd data-t="tour.k.w2">双击 W</kbd><span data-t="tour.key.w2">疾跑</span></li>
+        <li><kbd data-t="tour.k.mid">中键</kbd><span data-t="tour.key.mid">看方块属性</span></li>
+        <li><kbd data-t="tour.k.right">右键</kbd><span data-t="tour.key.right">开关门 / 拉杆 / 按钮，打开容器</span></li>
+        <li><kbd>Esc</kbd><span data-t="tour.key.esc">放出鼠标</span></li>
+      </ul>
+      <p class="tool-note" data-t="tour.keyNote">开门这类改动只在观光时有效，返回查看就还原</p>
     </div>
   </aside>
 </main>

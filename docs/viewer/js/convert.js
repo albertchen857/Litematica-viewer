@@ -29,6 +29,7 @@ function applyLang() {
   $("cv-url").placeholder = t("url.placeholder");
   $("lang").value = lang;
   $("nav-view").href = `./?lang=${URL_CODE[lang]}`;
+  $("nav-tour").href = `./?lang=${URL_CODE[lang]}#tour`;
   $("nav-convert").href = `convert.html?lang=${URL_CODE[lang]}`;
   document.title = `${t("conv.title")} · Litematica Viewer`;
   history.replaceState(null, "", `${location.pathname}?lang=${URL_CODE[lang]}`);

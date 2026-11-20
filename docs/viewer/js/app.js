@@ -9,6 +9,7 @@ import { parseRules, replaceBlocks, RuleError } from "./edit.js";
 import { loadResources, View, blockIcon, hasIcon, entityIconId, LINK_COLORS } from "./render.js";
 import { splitSteps, structureWithSteps } from "./tools/steps.js";
 import { toContour } from "./tools/contour.js";
+import { Tour, TOUR_DEFAULTS } from "./tour.js";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -34,6 +35,7 @@ function syncUrl() {
   history.replaceState(null, "", `${location.pathname}?lang=${URL_CODE[lang]}${file}${location.hash}`);
   // 主菜单带上语言；打开着网上的文件时「查看」也带 ?file=，点了还是这个投影
   document.getElementById("nav-view").href = `./?lang=${URL_CODE[lang]}${file}`;
+  document.getElementById("nav-tour").href = `./?lang=${URL_CODE[lang]}${file}#tour`;
   document.getElementById("nav-convert").href = `convert.html?lang=${URL_CODE[lang]}`;
 }
 let lang = pickLang();
@@ -111,6 +113,7 @@ function applyLang() {
   if (state.structure) renderInfo();
   else renderPlaceholder();
   if (state.steps) renderStep();
+  if (tour) renderTourStatus(tour.lastInfo);
 }
 
 // ---------------------------------------------------------------- 状态
@@ -500,10 +503,10 @@ function showInspect(hit) {
   if (!hit) { box.hidden = true; closePicker(); return; }
   // 方块：按坐标找回结构里真正的格子（分步模式下 3D 里的是拆分后的结构；替换后要拿新的）
   const at = hit.kind === "block" ? locate(hit.pos) : null;
-  if (at) hit = { ...hit, block: at.block, region: at.region, local: at.local };
+  if (at) hit = { ...hit, block: touring() ? hit.block : at.block, region: at.region, local: at.local };
   inspectHit = hit;
-  $("inspect-edit").hidden = !at || isDesktop();
-  if (at && !isDesktop()) renderEdit(hit);
+  $("inspect-edit").hidden = !at || isDesktop() || touring();
+  if (at && !isDesktop() && !touring()) renderEdit(hit);
   const id = hit.kind === "entity" ? hit.entity.id : hit.block.id;
   const icon = (hit.kind === "entity" ? blockIcon(entityIconId(hit.entity), 32) : "") || blockIcon(id, 32);
   $("inspect-icon").src = icon || "";
@@ -534,7 +537,7 @@ function showInspect(hit) {
   const used = items.length ? Math.max(...items.map(slotOf)) + 1 : 0;
   const slots = capacity ? Math.max(capacity, used) : Math.ceil(used / 9) * 9;
   const cells = Array.from({ length: Math.min(slots, 54) }, () => ({ html: "" }));
-  const editable = hit.kind === "block" && capacity > 0 && !isDesktop(); // 方块容器的格子可以点着放物品
+  const editable = hit.kind === "block" && capacity > 0 && !isDesktop() && !touring(); // 方块容器的格子可以点着放物品
   $("inspect-items").style.gridTemplateColumns = `repeat(${Math.min(9, slots || 9)}, 1fr)`;
   items.forEach((item, n) => {
     const slot = slotOf(item, n);
@@ -1581,13 +1584,6 @@ function setOrtho(on) {
   b.setAttribute("aria-label", b.title);
 }
 
-function setMoveSpeed(v) {
-  v = Math.max(2, Math.min(64, +v || 12));
-  view.moveSpeed = v;
-  $("move-speed").value = v;
-  $("move-speed-val").textContent = v;
-}
-
 // 背景：关闭 / 海洋 / 草地 / 末地（地板在 3D 里画，天空是舞台的 CSS 背景）
 function setEnvironment(kind) {
   kind = ["ocean", "grass", "end"].includes(kind) ? kind : "";
@@ -1689,7 +1685,6 @@ function bindTools() {
   $("thumb-png").addEventListener("click", async () => download(`${stem()}.png`, await canvasPng(thumbCanvas), "image/png"));
 
 
-  $("move-speed").addEventListener("input", (e) => { setMoveSpeed(e.target.value); setPref("moveSpeed", view.moveSpeed); });
   $("env").addEventListener("change", (e) => { setEnvironment(e.target.value); setPref("env", e.target.value); });
 
   // 右键标题改结构名、右键简介改简介（导出 .litematic 时写进去）
@@ -1705,6 +1700,85 @@ function bindTools() {
     editInline(value, state.structure.description || "", (v) => (state.structure.description = v.trim()), { multiline: true });
   });
   renderBatch();
+}
+
+// ---------------------------------------------------------------- 观光（第一人称参观，js/tour.js）
+
+let tour = null;
+const touring = () => document.body.classList.contains("tour");
+const TOUR_INPUTS = { fov: "tour-fov", bright: "tour-bright", hSpeed: "tour-hspeed", vSpeed: "tour-vspeed" };
+
+function tourPrefs() {
+  const saved = loadPrefs().tour || {};
+  const out = { ...TOUR_DEFAULTS };
+  for (const k of Object.keys(TOUR_DEFAULTS)) if (typeof saved[k] === typeof TOUR_DEFAULTS[k]) out[k] = saved[k];
+  return out;
+}
+
+// 面板控件 ← 设置
+function paintTourOpts(o) {
+  for (const [k, id] of Object.entries(TOUR_INPUTS)) {
+    $(id).value = o[k];
+    $(id + "-val").textContent = k === "bright" ? `${o[k]}%` : k === "fov" ? `${o[k]}°` : o[k];
+  }
+  $("tour-noclip").checked = o.noclip;
+  $("tour-dim").value = o.dim;
+  $("tour-time").value = o.time;
+  $("tour-time").disabled = o.dim !== "overworld"; // 下界 / 末地没有白天黑夜
+}
+
+function setTourOpt(k, v) {
+  const o = { ...tour.opts, [k]: v };
+  tour.apply(o);
+  setPref("tour", o);
+  paintTourOpts(o);
+}
+
+const FACINGS = ["north", "east", "south", "west"];
+function renderTourStatus(info) {
+  if (!info) return;
+  tour.lastInfo = info;
+  $("tour-mode").textContent = t("tour.mode." + info.mode);
+  $("tour-pos").textContent = info.pos.map((v) => v.toFixed(1)).join(", ");
+  // yaw 0 = 朝北（-Z），往右转变大
+  const k = Math.round((((info.yaw % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)) / (Math.PI / 2)) % 4;
+  $("tour-facing").textContent = t("tour.dir." + FACINGS[k]);
+  $("stage").classList.toggle("is-locked", info.locked);
+}
+
+// 进 / 出观光：右边换面板，3D 换成第一人称；网址带 #tour（刷新还在观光）
+function setTour(on) {
+  if (on === touring()) return;
+  document.body.classList.toggle("tour", on);
+  $("side").hidden = on;
+  $("tour-side").hidden = !on;
+  for (const [id, cur] of [["nav-view", !on], ["nav-tour", on]]) (cur ? $(id).setAttribute("aria-current", "page") : $(id).removeAttribute("aria-current"));
+  closeMenu();
+  closePicker();
+  showInspect(null);
+  if (!isDesktop()) history.replaceState(null, "", location.pathname + location.search + (on ? "#tour" : ""));
+  if (on) {
+    paintTourOpts(tourPrefs());
+    tour.apply(tourPrefs());
+    tour.enter();
+  } else {
+    tour.exit();
+    setOrtho(!!loadPrefs().ortho);
+    setEnvironment(loadPrefs().env || "");
+  }
+}
+
+function bindTour() {
+  for (const [k, id] of Object.entries(TOUR_INPUTS)) $(id).addEventListener("input", (e) => setTourOpt(k, +e.target.value));
+  $("tour-noclip").addEventListener("change", (e) => setTourOpt("noclip", e.target.checked));
+  $("tour-dim").addEventListener("change", (e) => setTourOpt("dim", e.target.value));
+  $("tour-time").addEventListener("change", (e) => setTourOpt("time", e.target.value));
+  $("tour-respawn").addEventListener("click", () => tour.spawn());
+  $("tour-exit").addEventListener("click", () => setTour(false));
+  $("tour-toggle").addEventListener("click", () => setTour(true));
+  // 主菜单的「查看 / 观光」：同一个页面里切换，打开着的投影不用重新读
+  $("nav-view").addEventListener("click", (e) => { if (touring()) { e.preventDefault(); setTour(false); } });
+  $("nav-tour").addEventListener("click", (e) => { e.preventDefault(); setTour(true); });
 }
 
 // ---------------------------------------------------------------- 事件
@@ -1781,6 +1855,7 @@ function bind() {
   $("contour-run").addEventListener("click", runContour);
   $("restore").addEventListener("click", () => load(state.pristine, { pristine: true }));
   bindEditing();
+  bindTour();
 }
 
 // ---------------------------------------------------------------- 启动
@@ -1799,14 +1874,24 @@ async function main() {
   $("theme").innerHTML = Object.keys(gamedata.themes || {}).map((n) => `<option value="${n}">${n}</option>`).join("");
   applyLang();
   view = new View($("canvas"), { overlay: $("markers"), onPick: showInspect, onContext: blockMenu, gizmo: $("gizmo") });
+  tour = new Tour(view, {
+    stage: $("stage"),
+    onInspect: showInspect,
+    onStatus: renderTourStatus,
+    // 右键点的是不是容器：箱子这类，或者方块实体里存着物品
+    isContainer: (hit) => {
+      const at = locate(hit.pos);
+      const data = at?.region.blockEntities.get(at.local.join(","));
+      return containerSize(hit.block.id) > 0 || Array.isArray(data?.Items);
+    },
+  });
   restorePrefs();
-  setMoveSpeed(loadPrefs().moveSpeed || 12);
   setEnvironment(loadPrefs().env || ""); // 默认关闭
   setOrtho(!!loadPrefs().ortho); // 透视 / 正交：记住上次的
   const hiddenOutline = loadPrefs().hiddenOutline !== false; // 隐藏的方块留灰边框：默认留
   $("kind-outline").checked = hiddenOutline;
   view.setHiddenOutline(hiddenOutline);
-  window.lvViewer = { view, state, showInspect, runRules }; // 方便在控制台里调试 / 以后扩展
+  window.lvViewer = { view, state, showInspect, runRules, tour }; // 方便在控制台里调试 / 以后扩展
   applyTheme(themeName);
 
   // 桌面版「手动3D渲染」：主程序把结构写进 payload.json，用 #desktop 打开本页
@@ -1816,9 +1901,11 @@ async function main() {
     if (LANGS.includes(payload.lang)) { lang = payload.lang; applyLang(); }
     document.documentElement.classList.remove("i18n-wait");
     if (payload.theme) applyTheme(payload.theme);
+    $("tour-toggle").hidden = false; // 没有顶栏菜单，进观光用画面上的按钮
     load(fromPayload(payload), { pristine: true });
     return;
   }
+  if (location.hash === "#tour") setTour(true);
 
   const params = START_PARAMS;
   // 从主页拖进来的：取出暂存的文件，再把网址里的 from=home 去掉，刷新时不会再找一遍
