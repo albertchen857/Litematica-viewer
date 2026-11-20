@@ -270,7 +270,7 @@
   "web.fmt.schem": "WorldEdit clipboard",
   "web.fmt.schematic": "Old MCEdit format (1.12 and earlier)",
   "web.fmt.versionHead": "Game version (.litematic)",
-  "web.fmt.vschem": "VMod ship schematic (one ship per sub-region)",
+  "web.fmt.vschem": "Valkyrien Skies schematic (one ship per sub-region)",
   "web.fmt.world": "World save (void world)",
   "web.hanging": "Hanging attachments (place from below)",
   "web.inspectMenu": "Inspect this block",
