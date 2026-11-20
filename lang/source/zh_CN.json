@@ -447,7 +447,7 @@
   "web.tour.dir.west": "西（-X）",
   "web.tour.exit": "返回查看",
   "web.tour.facing": "朝向",
-  "web.tour.fakeHint": "这个窗口不支持锁定鼠标：光标到画面边上会继续转 · Esc 退出 · 在 Chrome / Edge 里打开是完整的手感",
+  "web.tour.fakeHint": "此窗口无法锁定鼠标，建议用 Chrome / Edge 打开",
   "web.tour.fov": "视野",
   "web.tour.hSpeed": "水平",
   "web.tour.k.click": "点画面",

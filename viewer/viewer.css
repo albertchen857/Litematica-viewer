@@ -612,7 +612,8 @@ body.tour .crosshair { display: block; }
   padding: 6px 12px; border-radius: 6px; pointer-events: none; text-align: center;
   background: color-mix(in srgb, var(--tt) 82%, transparent); color: var(--bg); font-size: 12px;
 }
-body.tour .stage.is-fake .tour-fake-hint { display: block; }
+body.tour .stage.is-fake .tour-fake-hint { display: block; animation: tour-hint-fade 4s forwards; }
+@keyframes tour-hint-fade { 0%, 75% { opacity: 1; } 100% { opacity: 0; } }
 /* 鼠标没锁定：画面中间提示「点击开始」（没打开文件时不出，让位给拖文件的框） */
 .tour-prompt {
   display: none; position: absolute; left: 50%; top: 50%; z-index: 3; transform: translate(-50%, 28px);

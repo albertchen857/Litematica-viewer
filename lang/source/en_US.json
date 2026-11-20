@@ -447,7 +447,7 @@
   "web.tour.dir.west": "West (-X)",
   "web.tour.exit": "Back to viewer",
   "web.tour.facing": "Facing",
-  "web.tour.fakeHint": "This window can't lock the mouse: keep the cursor at the edge to keep turning · Esc to stop · open in Chrome / Edge for the full feel",
+  "web.tour.fakeHint": "This window can't lock the mouse — try Chrome or Edge",
   "web.tour.fov": "FOV",
   "web.tour.hSpeed": "Horizontal",
   "web.tour.k.click": "Click",

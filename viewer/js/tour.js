@@ -256,7 +256,14 @@ export class Tour {
     });
     // 中键别出浏览器的自动滚动
     c.addEventListener("mousedown", (e) => { if (this.active && e.button === 1) e.preventDefault(); });
-    document.addEventListener("pointerlockchange", () => this.setLocked(this.active && document.pointerLockElement === c));
+    document.addEventListener("pointerlockchange", () => {
+      const on = this.active && document.pointerLockElement === c;
+      if (!on && this.locked && !this.fake) this.realUnlockAt = performance.now();
+      this.setLocked(on);
+    });
+    // 没锁住鼠标时：光标移出画面 / 窗口失去焦点 = 暂停（同游戏里切出去自动暂停），再点画面继续
+    this.stage.addEventListener("pointerleave", () => { if (this.fake) this.setLocked(false); });
+    window.addEventListener("blur", () => { if (this.fake) this.setLocked(false); });
     // 用 pointermove 不用 mousemove：按下时 preventDefault 了，浏览器会停发 mousemove
     document.addEventListener("pointermove", (e) => {
       if (!this.locked) return;
@@ -301,7 +308,9 @@ export class Tour {
   // Esc 刚退出来马上再点，浏览器会拒绝一下（SecurityError，要等约 1 秒），这种不算
   lock() {
     const fallback = (err) => {
-      if (err?.name === "SecurityError" || !this.active) return;
+      // 真锁住过、刚按 Esc 放出来 1.5 秒内又点：浏览器要等一下（SecurityError），这次不算，再点一下就行。
+      // 其余的拒绝（内嵌窗口根本不让锁，有的报 WrongDocumentError，有的也报 SecurityError）都退到不锁定的模式
+      if (!this.active || (err?.name === "SecurityError" && performance.now() - (this.realUnlockAt || -1e9) < 1500)) return;
       this.fake = true;
       this.setLocked(true);
       this.cursor = this.clickAt || null; // 从点下去的位置开始算移动量
