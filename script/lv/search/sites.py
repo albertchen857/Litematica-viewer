@@ -73,6 +73,7 @@ class Site:
     title_suffix = ()
     body_versions = True            # 正文里找版本号（导航栏里堆满版本号的站要关掉）
     body_stats = True               # 正文里找下载量 / 点赞量
+    search_url = ""                 # 站内搜索地址（{q} = 关键词）：搜索页顶上给个「去这个站搜」的跳转
 
     def discover(self, fetcher, limit=None):
         if self.note == "spa":
@@ -188,8 +189,37 @@ class McImg(Site):
 
 
 class RedenMC(Site):
-    key, name, url, note = "redenmc", "RedenMC", "https://redenmc.com/", "unreachable"
-    keep = r"/(?:schematic|litematic|project|post|s)/"
+    # 同桌面版 RedenPanel 的写法：详情页 /litematica/{编号}，站内搜索 /litematica?q=关键词
+    key, name, url = "redenmc", "RedenMC", "https://redenmc.com/"
+    search_url = "https://redenmc.com/litematica?q={q}"
+    child = r"zh-CN"                # 三种语言的地图列的是同一批作品，读中文那份
+    keep = r"/litematica/[^/?#]+$"
+    title_suffix = (r"\s*-\s*Reden投影蓝图在线生成器\s*$", r"\s*-\s*Reden.*$")
+    body_versions = body_stats = False
+
+    def extra(self, it, url, html, body):
+        if it.image.endswith("/reden_256.png"):
+            it.image = ""             # 站点 logo，不是作品图
+        it.description = re.sub(r"[，,]?\s*生成我的世界红石机器投影.*$", "", it.description)
+        # 作者优先级：详细信息里的「作者」> 介绍里写的「作者：」（搬运的作品）> 上传者
+        m = (re.search(r"详细信息 作者 (\S+)", body) or re.search(r"介绍 作者[:：]\s*(\S+)", body)
+             or re.search(r"上传者 (\S+)", body))
+        it.author = m.group(1) if m else it.author
+        m = re.search(r"更新时间 (\d{1,2})/(\d{1,2})/(\d{4})", body)
+        if m:
+            it.uploaded = f"{m.group(3)}-{int(m.group(1)):02d}-{int(m.group(2)):02d}"
+        m = re.search(r"支持版本[:：]\s*(.+?)\s+(?:分类|标签|\d+ 收藏)", body)
+        if m:
+            it.versions = [v.replace(".x", "") for v in re.findall(r"\d+\.\d+(?:\.\d+|\.x)?", m.group(1))]
+        m = re.search(r"标签[:：]\s*(.+?)\s+(?:此设计|此机器|\d+ 收藏)", body)
+        it.tags = m.group(1).split()[:15] if m else []
+        m = re.search(r"分类[:：]\s*(\S+)", body)
+        if m:
+            it.tags.insert(0, m.group(1))
+        m = re.search(r"(\d+) 收藏", body)
+        it.likes = int(m.group(1)) if m else None
+        m = re.search(r"(\d+) 次下载", body)
+        it.downloads = int(m.group(1)) if m else None
 
 
 class Shulkr(Site):

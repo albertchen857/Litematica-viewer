@@ -85,6 +85,11 @@ const imgHTML = (r) => (r.image ? `<img src="${esc(r.image)}" alt="" loading="la
 function render() {
   const indexed = sites.reduce((n, s) => n + (s.count || 0), 0);
   $("sr-count").textContent = !api() ? t("sr.desktopOnly") : !indexed ? t("sr.empty") : t("sr.count", results.length);
+  // 有站内搜索的站（RedenMC）：顶上给个「去那个站搜」的链接，索引里没有的也能找
+  const q = $("sr-q").value.trim();
+  const chosen = new Set(prefs.sites || []);
+  $("sr-jump").innerHTML = !api() || !q ? "" : sites.filter((s) => s.search && chosen.has(s.key))
+    .map((s) => `<button type="button" class="sr-link" data-url="${esc(s.search.replace("{q}", encodeURIComponent(q)))}">${esc(t("sr.jump", s.name, q))} ↗</button>`).join("");
   const grid = $("sr-grid");
   grid.className = "sr-grid is-" + style;
   document.querySelectorAll(".sr-style button").forEach((b) => b.classList.toggle("is-on", b.dataset.style === style));
@@ -156,6 +161,7 @@ function bind() {
   $("sr-all").addEventListener("click", () => { document.querySelectorAll("#sr-site-list input").forEach((i) => (i.checked = true)); run(); });
   $("sr-none").addEventListener("click", () => { document.querySelectorAll("#sr-site-list input").forEach((i) => (i.checked = false)); run(); });
   $("sr-crawl").addEventListener("click", crawl);
+  $("sr-jump").addEventListener("click", (e) => { const b = e.target.closest("[data-url]"); if (b) api()?.open(b.dataset.url); });
   document.querySelectorAll(".sr-style button").forEach((b) => b.addEventListener("click", () => { style = prefs.style = b.dataset.style; savePrefs(); render(); }));
   $("sr-grid").addEventListener("click", (e) => {
     const el = e.target.closest("[data-i]");

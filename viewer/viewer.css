@@ -714,6 +714,8 @@ body.cv-page { display: block; }
 .sr-filter-grid input { height: 32px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--tt); font: 14px var(--sans); }
 
 .sr-count { margin: 4px 2px 0; color: var(--muted); font-size: 13px; }
+.sr-jump { display: flex; flex-wrap: wrap; gap: 16px; margin: 0 2px; }
+.sr-jump:empty { display: none; }
 .sr-results { display: flex; gap: 16px; align-items: flex-start; }
 .sr-grid { flex: 1; min-width: 0; }
 .sr-grid:empty { display: none; }

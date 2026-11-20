@@ -112,7 +112,7 @@ class Api:
 
     def sites(self):
         counts = self.index.counts()
-        return [{"key": s.key, "name": s.name, "url": s.url, "note": s.note, "count": counts.get(s.key, 0)} for s in SITES]
+        return [{"key": s.key, "name": s.name, "url": s.url, "note": s.note, "search": s.search_url, "count": counts.get(s.key, 0)} for s in SITES]
 
     def search(self, req):
         req = req or {}
