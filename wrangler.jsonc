@@ -1,0 +1,6 @@
+// 只给 Cloudflare 预览构建用（web-preview 分支）：网站是纯静态文件，都在 docs/ 里
+{
+  "name": "litematica-viewer",
+  "compatibility_date": "2026-11-01",
+  "assets": { "directory": "./docs" }
+}
