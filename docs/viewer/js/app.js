@@ -556,14 +556,90 @@ function showInspect(hit) {
   // 其他值得一看的：命令方块的命令、告示牌的字、自定义名字
   const extra = [];
   if (data.Command) extra.push(t("command", data.Command));
-  const lines = data.front_text?.messages || (data.Text1 ? [data.Text1, data.Text2, data.Text3, data.Text4] : null);
-  if (lines) {
-    const text = lines.map((m) => textOf(m).replace(/^"|"$/g, "")).filter((m) => m && m !== '""').join(" / ");
-    if (text) extra.push(t("text", text));
-  }
   if (data.CustomName) extra.push(textOf(data.CustomName));
   $("inspect-extra").textContent = extra.join("\n");
+  renderSign(hit, data);
   box.hidden = false;
+}
+
+// ---------------------------------------------------------------- 告示牌：四行字（正面 / 背面），可以改
+
+const isSign = (id) => /sign$/.test(String(id));
+// 一行字：老版本（1.20 ~ 1.21.4、更早的 Text1~4）存的是 JSON 文本组件字符串，1.21.5 起直接是文本组件（字符串 / 对象）
+function lineText(m) {
+  if (m == null) return "";
+  if (typeof m === "string") {
+    const s = m.trim();
+    if (/^[{["]/.test(s)) { try { return textOf(JSON.parse(s)); } catch { /* 不是 JSON，原样 */ } }
+    return m;
+  }
+  return textOf(m);
+}
+function signLines(data) {
+  if (data?.front_text || data?.back_text) {
+    const side = (s) => [0, 1, 2, 3].map((i) => lineText(s?.messages?.[i]));
+    return { front: side(data.front_text), back: side(data.back_text), old: false };
+  }
+  if (data?.Text1 !== undefined) return { front: [data.Text1, data.Text2, data.Text3, data.Text4].map(lineText), back: null, old: true };
+  return { front: ["", "", "", ""], back: ["", "", "", ""], old: false };
+}
+
+function renderSign(hit, data) {
+  const box = $("inspect-sign");
+  box.hidden = hit.kind !== "block" || !isSign(hit.block.id);
+  if (box.hidden) return;
+  const { front, back } = signLines(data);
+  const side = (label, lines) => `<div class="sign-side"><b>${esc(label)}</b>${lines.map((l) => `<span>${l ? esc(l) : "&nbsp;"}</span>`).join("")}</div>`;
+  box.querySelector(".sign-sides").innerHTML = side(t("sign.front"), front) + (back ? side(t("sign.back"), back) : "");
+  $("sign-edit").hidden = isDesktop();
+}
+
+// 改字的对话框：正面 / 背面各四行
+let signAt = null;
+function openSignEditor(pos) {
+  const at = locate(pos);
+  if (!at || isDesktop()) return;
+  signAt = at;
+  const { front, back } = signLines(at.region.blockEntities.get(at.local.join(",")));
+  const inputs = (side, lines) => lines.map((l, i) => `<input type="text" maxlength="90" data-side="${side}" data-line="${i}" value="${esc(l)}" spellcheck="false">`).join("");
+  $("sign-front").innerHTML = inputs("front", front);
+  $("sign-back-wrap").hidden = !back;
+  $("sign-back").innerHTML = back ? inputs("back", back) : "";
+  $("sign-dlg").showModal();
+  $("sign-front").querySelector("input")?.focus();
+}
+
+// 写回方块实体：每行按原文件的写法存（JSON 字符串 / 直接是字），其余字段（颜色、发光、上蜡）原样留着
+function saveSign() {
+  const at = signAt;
+  if (!at) return;
+  const D = globalThis.deepslate;
+  const read = (side) => [...document.querySelectorAll(`#sign-dlg input[data-side="${side}"]`)].map((el) => el.value);
+  const key = at.local.join(","), data = at.region.blockEntities.get(key) || null;
+  const { old } = signLines(data);
+  const sample = old ? data.Text1 : (data?.front_text?.messages?.[0] ?? data?.back_text?.messages?.[0]);
+  // 原来是 JSON 字符串就写 JSON 字符串（"字"），原来直接是字 / 对象就直接写字；没有原样的按 JSON 写（各版本都认）
+  const encode = (v) => (sample === undefined || (typeof sample === "string" && /^\s*[{["]/.test(sample)) ? JSON.stringify(v) : v);
+  const list = (lines) => new D.NbtList(lines.map((v) => new D.NbtString(encode(v))), 8);
+  let next, tag;
+  if (old) {
+    const lines = read("front");
+    next = { ...data, Text1: encode(lines[0]), Text2: encode(lines[1]), Text3: encode(lines[2]), Text4: encode(lines[3]) };
+    tag = compoundWith(data, Object.fromEntries(lines.map((v, i) => ["Text" + (i + 1), new D.NbtString(encode(v))])));
+  } else {
+    const sideData = (name) => {
+      const lines = read(name.replace("_text", "")), base = data?.[name] || { color: "black", has_glowing_text: 0 };
+      return { plain: { ...base, messages: lines.map(encode) }, tag: compoundWith(base, { messages: list(lines) }) };
+    };
+    const front = sideData("front_text"), back = $("sign-back-wrap").hidden ? null : sideData("back_text");
+    const beId = data?.id || (/hanging_sign$/.test(at.block.id) ? "minecraft:hanging_sign" : "minecraft:sign");
+    next = { ...(data || {}), id: beId, front_text: front.plain, ...(back ? { back_text: back.plain } : {}) };
+    tag = compoundWith(data, { id: new D.NbtString(beId), front_text: front.tag, ...(back ? { back_text: back.tag } : {}) });
+  }
+  RAW_TAG.set(next, tag);
+  const s = state.structure;
+  commitEdit({ ...s, regions: s.regions.map((r) => (r === at.region ? { ...r, blockEntities: new Map(r.blockEntities).set(key, next) } : r)) });
+  toast(t("sign.saved"));
 }
 
 function showStep(k) {
@@ -1722,6 +1798,8 @@ function paintTourOpts(o) {
     $(id + "-val").textContent = k === "bright" ? `${o[k]}%` : k === "fov" ? `${o[k]}°` : o[k];
   }
   $("tour-noclip").checked = o.noclip;
+  $("tour-debug").checked = o.debug;
+  $("tour-glow").checked = o.glow;
   $("tour-dim").value = o.dim;
   $("tour-time").value = o.time;
   $("tour-time").disabled = o.dim !== "overworld"; // 下界 / 末地没有白天黑夜
@@ -1738,7 +1816,7 @@ const FACINGS = ["north", "east", "south", "west"];
 function renderTourStatus(info) {
   if (!info) return;
   tour.lastInfo = info;
-  $("tour-mode").textContent = t("tour.mode." + info.mode);
+  $("tour-mode").textContent = [t("tour.mode." + info.mode), info.noclip ? t("tour.mode.noclip") : "", info.sprint ? t("tour.mode.sprint") : ""].filter(Boolean).join(" · ");
   $("tour-pos").textContent = info.pos.map((v) => v.toFixed(1)).join(", ");
   // yaw 0 = 朝北（-Z），往右转变大
   const k = Math.round((((info.yaw % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)) / (Math.PI / 2)) % 4;
@@ -1771,6 +1849,13 @@ function setTour(on) {
 function bindTour() {
   for (const [k, id] of Object.entries(TOUR_INPUTS)) $(id).addEventListener("input", (e) => setTourOpt(k, +e.target.value));
   $("tour-noclip").addEventListener("change", (e) => setTourOpt("noclip", e.target.checked));
+  $("tour-debug").addEventListener("change", (e) => setTourOpt("debug", e.target.checked));
+  $("tour-glow").addEventListener("change", (e) => setTourOpt("glow", e.target.checked));
+  // 观光时 Ctrl 是疾跑：按着 Ctrl 再按 W 浏览器会关掉标签页，关之前问一下
+  window.addEventListener("beforeunload", (e) => { if (touring() && state.structure) { e.preventDefault(); e.returnValue = ""; } });
+  // 告示牌
+  $("sign-edit").addEventListener("click", () => inspectHit && openSignEditor(inspectHit.pos));
+  $("sign-dlg").addEventListener("close", () => { if ($("sign-dlg").returnValue === "ok") saveSign(); signAt = null; });
   $("tour-dim").addEventListener("change", (e) => setTourOpt("dim", e.target.value));
   $("tour-time").addEventListener("change", (e) => setTourOpt("time", e.target.value));
   $("tour-respawn").addEventListener("click", () => tour.spawn());
@@ -1884,6 +1969,16 @@ async function main() {
       const data = at?.region.blockEntities.get(at.local.join(","));
       return containerSize(hit.block.id) > 0 || Array.isArray(data?.Items);
     },
+    onSign: (hit) => { showInspect(hit); openSignEditor(hit.pos); },
+    // C：替换准星指着的方块（同 3D 右键菜单的「替换」：全部同类 / 只这一格）
+    onReplace: (hit) => {
+      const at = locate(hit.pos);
+      if (!at || isDesktop()) return;
+      const r = $("canvas").getBoundingClientRect();
+      quickReplace({ anchor: pointAt(r.left + r.width / 2, r.top + r.height / 2), sources: [at.block.id], at });
+    },
+    propValues: (id) => Object.fromEntries(Object.entries(propValues(id)).map(([k, v]) => [k, [...v]])),
+    say: (key, ...args) => t(key, ...args),
   });
   restorePrefs();
   setEnvironment(loadPrefs().env || ""); // 默认关闭

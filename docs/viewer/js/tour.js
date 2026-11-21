@@ -1,11 +1,13 @@
 // 观光模式：第一人称参观投影，手感照 Minecraft 的旁观 / 创造模式（index.html 的 #tour-side 是它的面板）。
 //
 //   点左边的画面锁定鼠标（Esc 放出来）；鼠标转视角，画面中间有准星。
-//   WASD 只在水平面上走（往上看按 W 也不会往上飘），空格上升 / 跳，Shift 下降 / 潜行，双击 W 疾跑。
-//   「允许穿过方块」= 旁观模式：一直在飞、不碰方块。关掉 = 创造模式：方块有碰撞箱，有重力，
-//   双击空格切换飞行，飞着落地就变回走路，走路能直接上 0.6 格高的台阶（台阶、半砖）。
-//   中键：看准星指着的方块的属性（左上角的信息面板）；右键：开关门 / 活板门 / 栅栏门、拉杆、按钮……，容器就打开信息面板。
-//   开门这类改动只是观光时看的，退出观光就还原，不改投影文件。
+//   WASD 只在水平面上走（往上看按 W 也不会往上飘），空格上升 / 跳，Shift 下降 / 潜行，Ctrl 切换疾跑。
+//   双击空格切换飞 / 走，飞着落地就变回走路，走路有重力、能直接上 0.6 格高的台阶（台阶、半砖）。
+//   「允许穿过方块」只管碰不碰方块（地面 y = 0 一直是实心的），不管飞不飞。
+//   中键：看准星指着的方块的属性（左上角的信息面板）；右键：开关门 / 活板门 / 栅栏门、拉杆、按钮……，
+//   告示牌改字，容器打开信息面板。T：传送到准星指着的地方；C：替换准星指着的方块。
+//   调试棒（面板上的选项）：左键选下一个属性，右键改它的值（按着 Shift 倒着改），同游戏的调试棒。
+//   开门、调试棒这类改动只是观光时看的，退出观光就还原，不改投影文件（告示牌改字和替换方块会改）。
 //
 // 碰撞箱取方块模型里的长方体（按方块状态的旋转转好），栅栏 / 墙 / 栅栏门是 1.5 格高（同游戏），
 // 花草、火把、告示牌、铁轨、水这些穿得过去。地面 y = 0（结构最底下一层的底面）一直是实心的。
@@ -26,7 +28,7 @@ const SENSITIVITY = 0.0025; // 鼠标每像素转多少弧度
 const EPS = 1e-7;
 const FULL = [[0, 0, 0, 1, 1, 1]];
 
-export const TOUR_DEFAULTS = { fov: 70, bright: 100, noclip: true, dim: "overworld", time: "day", hSpeed: 11, vSpeed: 8 };
+export const TOUR_DEFAULTS = { fov: 70, bright: 100, noclip: true, dim: "overworld", time: "day", hSpeed: 11, vSpeed: 8, debug: false, glow: true };
 
 // 维度 → 地板（render.js 的 ENVIRONMENTS）；维度 + 时间 → 光照颜色（乘在方块颜色上）
 const DIM_FLOOR = { overworld: "grass", nether: "nether", end: "end" };
@@ -142,20 +144,32 @@ function toggled(block) {
 
 export class Tour {
   // view：render.js 的 View；stage：画面那块（加 is-locked / data-env / data-time）
-  // onInspect(命中 | null)：显示 / 关掉方块信息；isContainer(命中)：是不是容器；onStatus({ mode, pos, yaw, locked })
-  constructor(view, { stage, onInspect = () => {}, isContainer = () => false, onStatus = () => {} } = {}) {
+  // onInspect(命中 | null)：显示 / 关掉方块信息；isContainer(命中)：是不是容器；onStatus({ mode, noclip, sprint, pos, yaw, locked })
+  // onSign(命中)：改告示牌的字；onReplace(命中)：替换方块（C）；propValues(方块 id)：每个属性能取哪些值（调试棒）；
+  // say(键, ...参数)：翻译好的提示文字
+  constructor(view, { stage, onInspect = () => {}, isContainer = () => false, onStatus = () => {}, onSign = () => {},
+    onReplace = () => {}, propValues = () => ({}), say = (k) => k } = {}) {
     this.view = view;
     this.canvas = view.canvas;
     this.stage = stage;
     this.onInspect = onInspect;
     this.isContainer = isContainer;
     this.onStatus = onStatus;
+    this.onSign = onSign;
+    this.onReplace = onReplace;
+    this.propValues = propValues;
+    this.say = say;
+    this.debugSel = new Map(); // 调试棒：每种方块选中的是哪个属性（同游戏，记在棒子上）
+    // 画面底部的提示条（同游戏的动作栏）
+    this.bar = document.createElement("div");
+    this.bar.className = "tour-actionbar";
+    stage.appendChild(this.bar);
     this.active = false;
     this.locked = false;
     this.opts = { ...TOUR_DEFAULTS };
     this.player = { pos: [0, 0, 0], vel: [0, 0, 0], flying: true, onGround: false };
     this.keys = new Set();
-    this.sprint = false;
+    this.sprint = false;      // Ctrl 切换，开着就一直疾跑（往前走的时候）
     this.lastTap = {};
     this.changes = new Map(); // 观光时改过的格子：key → { pos, block: 原来的 }，退出时还原
     this.inspected = null;
@@ -191,6 +205,7 @@ export class Tour {
     Object.assign(v, { yaw: s.yaw, pitch: s.pitch, distance: s.distance, target: s.target, fov: s.fov });
     v.setOrtho(s.ortho);
     v.setLight(1, [1, 1, 1]);
+    v.setGlow(false);
     v.select(null);
     delete this.stage.dataset.time;
     this.inspected = null;
@@ -231,13 +246,13 @@ export class Tour {
     // 地板铺远一点，看不到边
     const size = v.scene ? Math.max(v.scene.box.size[0], v.scene.box.size[2]) : 0;
     v.envMargin = Math.max(1024, Math.round(size * 4)); // 地板是一整块平面，铺多大都不费事
-    if (o.noclip) this.player.flying = true;
     const dim = DIM_FLOOR[o.dim] ? o.dim : "";
     v.setEnvironment(DIM_FLOOR[dim] || null);
     this.stage.dataset.env = dim;
     this.stage.dataset.time = dim === "overworld" ? o.time : "";
     const tint = dim === "overworld" ? LIGHT[o.time] || LIGHT.day : LIGHT[dim] || LIGHT.day;
     v.setLight(Math.max(0.5, Math.min(2, o.bright / 100)), tint);
+    v.setGlow(o.glow);
     this.status(true);
   }
 
@@ -252,7 +267,8 @@ export class Tour {
       }
       e.preventDefault();
       if (e.button === 1) this.inspect();
-      else if (e.button === 2) this.use();
+      else if (e.button === 2) this.use(e.shiftKey);
+      else if (e.button === 0 && this.opts.debug) this.debugSelect(e.shiftKey);
     });
     // 中键别出浏览器的自动滚动
     c.addEventListener("mousedown", (e) => { if (this.active && e.button === 1) e.preventDefault(); });
@@ -284,20 +300,26 @@ export class Tour {
     });
     window.addEventListener("keydown", (e) => {
       if (this.fake && e.code === "Escape") { this.setLocked(false); return; }
-      if (!this.locked || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (!this.locked || e.metaKey || e.altKey) return;
       e.preventDefault(); // 空格别滚页面
-      const now = performance.now();
-      if (!e.repeat) {
-        const tap = now - (this.lastTap[e.code] || 0) < DOUBLE_TAP;
-        this.lastTap[e.code] = tap ? 0 : now;
-        // 双击空格：飞 / 走（旁观模式一直在飞）
-        if (tap && e.code === "Space" && !this.opts.noclip) {
-          this.player.flying = !this.player.flying;
-          this.player.vel[1] = 0;
-          this.status(true);
-        }
-        if (tap && e.code === "KeyW") this.sprint = true; // 双击 W 疾跑
+      if (e.repeat) { this.keys.add(e.code); return; }
+      // Ctrl：切换疾跑（按一下开，再按一下关）
+      if (e.code === "ControlLeft" || e.code === "ControlRight") {
+        this.sprint = !this.sprint;
+        this.status(true);
+        return;
       }
+      const now = performance.now();
+      const tap = now - (this.lastTap[e.code] || 0) < DOUBLE_TAP;
+      this.lastTap[e.code] = tap ? 0 : now;
+      // 双击空格：飞 / 走（穿不穿墙都一样）
+      if (tap && e.code === "Space") {
+        this.player.flying = !this.player.flying;
+        this.player.vel[1] = 0;
+        this.status(true);
+      }
+      if (e.code === "KeyT") this.teleport();
+      if (e.code === "KeyC") this.replace();
       this.keys.add(e.code);
     });
     window.addEventListener("keyup", (e) => this.keys.delete(e.code));
@@ -333,7 +355,7 @@ export class Tour {
     this.locked = on;
     this.stage.classList.toggle("is-locked", on);
     this.stage.classList.toggle("is-fake", on && !!this.fake); // 没真锁住：光标还在，别藏
-    if (!on) { this.keys.clear(); this.sprint = false; }
+    if (!on) this.keys.clear();
     this.status(true);
   }
 
@@ -383,14 +405,13 @@ export class Tour {
     const f = (k.has("KeyW") || k.has("ArrowUp") ? 1 : 0) - (k.has("KeyS") || k.has("ArrowDown") ? 1 : 0);
     const s = (k.has("KeyD") || k.has("ArrowRight") ? 1 : 0) - (k.has("KeyA") || k.has("ArrowLeft") ? 1 : 0);
     const up = k.has("Space"), down = k.has("ShiftLeft") || k.has("ShiftRight");
-    if (f <= 0) this.sprint = false;
     // 只在水平面上走：前方 = (sin yaw, 0, -cos yaw)，右手 = (cos yaw, 0, sin yaw)
     let wx = f * Math.sin(yaw) + s * Math.cos(yaw), wz = -f * Math.cos(yaw) + s * Math.sin(yaw);
     const len = Math.hypot(wx, wz);
     if (len) { wx /= len; wz /= len; }
-    const flying = o.noclip || p.flying;
+    const flying = p.flying;
     let speed = o.hSpeed * (flying ? 1 : WALK_RATIO);
-    if (this.sprint) speed *= flying ? 2 : 1.3;
+    if (this.sprint && f > 0) speed *= flying ? 2 : 1.3;
     if (!flying && down) speed *= 0.3; // 潜行
     // 速度慢慢跟上（飞着有点滑，地上停得快，空中不好拐弯），和游戏里的惯性差不多
     const a = 1 - Math.exp(-dt * (flying ? 6 : p.onGround ? 20 : 3));
@@ -443,14 +464,10 @@ export class Tour {
 
   move(dx, dy, dz) {
     const p = this.player;
-    if (this.opts.noclip) {
-      p.pos[0] += dx; p.pos[1] += dy; p.pos[2] += dz;
-      p.onGround = false;
-      return;
-    }
     const start = this.box();
     const reach = STEP + 0.1;
-    const boxes = this.collect(
+    // 穿墙：方块都不碰，只有地面（y = 0）是实心的，走路不会一直掉下去
+    const boxes = this.opts.noclip ? [[-1e6, -16, -1e6, 1e6, 0, 1e6]] : this.collect(
       [Math.min(start[0], start[0] + dx) - 1, Math.min(start[1], start[1] + dy) - 1, Math.min(start[2], start[2] + dz) - 1],
       [Math.max(start[3], start[3] + dx) + 1, Math.max(start[4], start[4] + dy) + reach, Math.max(start[5], start[5] + dz) + 1],
     );
@@ -506,9 +523,16 @@ export class Tour {
     this.onInspect(hit);
   }
 
-  use() {
+  use(back = false) {
     const hit = this.aim();
     if (!hit) return;
+    if (this.opts.debug) { this.debugCycle(hit, back); return; }
+    // 告示牌：改字（要打字，鼠标放出来）
+    if (/sign$/.test(hit.block.id)) {
+      this.unlock();
+      this.onSign(hit);
+      return;
+    }
     const next = toggled(hit.block);
     if (next) {
       const block = { id: hit.block.id, props: next };
@@ -530,12 +554,102 @@ export class Tour {
       }
       return;
     }
-    // 容器：打开信息面板（物品格子），鼠标放出来好看
+    // 容器：打开信息面板（物品格子）
     if (this.isContainer(hit)) {
       this.inspected = hit.pos;
       this.onInspect(hit);
-      this.unlock();
     }
+  }
+
+  // ---- 调试棒（同游戏）：左键换选中的属性，右键把选中的属性改成下一个值；按着 Shift 都是倒着来
+  debugProps(block) {
+    const vals = this.propValues(block.id) || {};
+    const props = block.props || {};
+    const keys = Object.keys(props).sort();
+    const natural = (a, b) => (isNaN(a) || isNaN(b) ? String(a).localeCompare(String(b)) : a - b);
+    return keys.map((k) => {
+      const set = new Set([...(vals[k] || []), props[k]]);
+      if (set.has("true") || set.has("false")) set.add("true").add("false");
+      return [k, [...set].sort(natural)];
+    });
+  }
+
+  debugSelect(back) {
+    const hit = this.aim();
+    if (!hit) return;
+    const props = this.debugProps(hit.block), id = hit.block.id;
+    const name = id.replace(/^minecraft:/, "");
+    if (!props.length) { this.flash(this.say("tour.debug.none", name)); return; }
+    const keys = props.map(([k]) => k);
+    const now = this.debugSel.get(id);
+    const i = keys.indexOf(now);
+    const k = keys[(i < 0 ? (back ? keys.length - 1 : 0) : i + (back ? keys.length - 1 : 1)) % keys.length];
+    this.debugSel.set(id, k);
+    this.flash(this.say("tour.debug.select", k, hit.block.props[k]));
+  }
+
+  debugCycle(hit, back) {
+    const props = this.debugProps(hit.block), id = hit.block.id;
+    if (!props.length) { this.flash(this.say("tour.debug.none", id.replace(/^minecraft:/, ""))); return; }
+    let k = this.debugSel.get(id);
+    if (!props.some(([x]) => x === k)) { k = props[0][0]; this.debugSel.set(id, k); }
+    const values = props.find(([x]) => x === k)[1];
+    const i = values.indexOf(hit.block.props[k]);
+    const v = values[(i + (back ? values.length - 1 : 1)) % values.length];
+    this.change([{ pos: hit.pos, block: { id, props: { ...hit.block.props, [k]: v } } }]);
+    this.flash(this.say("tour.debug.set", k, v));
+  }
+
+  // 画面底部的提示（两秒后淡掉）
+  flash(text) {
+    this.bar.textContent = text;
+    this.bar.classList.remove("is-on");
+    void this.bar.offsetWidth; // 重新开始动画
+    this.bar.classList.add("is-on");
+  }
+
+  // ---- 视线打到哪：从眼睛沿视线一格格走（DDA），返回打中的方块格 hit 和它前面那一格 prev（空的）；
+  // 一路没方块、往下看的话就打在地面（y = 0）上
+  ray(max = 512) {
+    const v = this.view, sc = v.scene;
+    const o = v.target.slice();
+    const cp = Math.cos(v.pitch);
+    const d = [Math.sin(v.yaw) * cp, -Math.sin(v.pitch), -Math.cos(v.yaw) * cp];
+    const cell = o.map(Math.floor), step = d.map((x) => (x > 0 ? 1 : -1));
+    const delta = d.map((x) => (Math.abs(x) < 1e-9 ? Infinity : Math.abs(1 / x)));
+    const next = d.map((x, a) => (Math.abs(x) < 1e-9 ? Infinity : ((cell[a] + (x > 0 ? 1 : 0)) - o[a]) / x));
+    let prev = cell.slice(), t = 0;
+    while (t <= max) {
+      if (cell[1] < 0) return { ground: true, prev };
+      if (sc && sc.live.getBlock(cell)) return { hit: cell.slice(), prev };
+      prev = cell.slice();
+      const a = next[0] < next[1] ? (next[0] < next[2] ? 0 : 2) : (next[1] < next[2] ? 1 : 2);
+      t = next[a];
+      cell[a] += step[a];
+      next[a] += delta[a];
+    }
+    return null;
+  }
+
+  // T：传送到准星指着的地方（站到打中的那一面外面那格里）
+  teleport() {
+    const r = this.ray();
+    if (!r) return;
+    const p = this.player, [x, y, z] = r.prev;
+    p.pos = [x + 0.5, Math.max(0, y), z + 0.5];
+    p.vel = [0, 0, 0];
+    this.stepOffset = 0;
+    this.place();
+    this.status(true);
+  }
+
+  // C：替换准星指着的方块（打开方块选择框，鼠标放出来）
+  replace() {
+    const hit = this.aim();
+    if (!hit) return;
+    this.keys.clear();
+    this.unlock();
+    this.onReplace(hit);
   }
 
   // 场景里这格现在的方块（不管显不显示）
@@ -552,6 +666,7 @@ export class Tour {
     for (const c of list) {
       const key = c.pos.join(",");
       if (!this.changes.has(key)) this.changes.set(key, { pos: c.pos, block: this.entryBlock(c.pos)?.block });
+      this.changes.get(key).mine = c.block;
     }
     this.view.applyChanges(list);
     // 信息面板正开着这一格：刷新成新的属性
@@ -559,7 +674,7 @@ export class Tour {
   }
 
   revert() {
-    const list = [...this.changes.values()].filter((c) => c.block).map((c) => ({ pos: c.pos, block: c.block }));
+    const list = [...this.changes.values()].filter((c) => c.block && this.entryBlock(c.pos)?.block === c.mine).map((c) => ({ pos: c.pos, block: c.block }));
     this.changes.clear();
     if (list.length) this.view.applyChanges(list);
   }
@@ -571,7 +686,7 @@ export class Tour {
     this.lastStatus = now;
     const p = this.player;
     this.onStatus({
-      mode: this.opts.noclip ? "spectator" : p.flying ? "fly" : "walk",
+      mode: p.flying ? "fly" : "walk", noclip: this.opts.noclip, sprint: this.sprint,
       pos: p.pos.slice(), yaw: this.view.yaw, locked: this.locked,
     });
   }

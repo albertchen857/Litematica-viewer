@@ -605,6 +605,30 @@ body.tour .markers { display: none; }
 .crosshair::before { left: 8px; top: 0; width: 2px; height: 18px; }
 .crosshair::after { left: 0; top: 8px; width: 18px; height: 2px; }
 body.tour .crosshair { display: block; }
+/* 还没打开文件（拖文件的那页）：不要准星 */
+body.tour .stage:has(.empty:not(.is-hidden)) .crosshair { display: none; }
+/* 画面底部的提示（调试棒选了什么、改成什么），同游戏的动作栏 */
+.tour-actionbar {
+  position: absolute; left: 50%; bottom: 72px; z-index: 3; transform: translateX(-50%); max-width: calc(100% - 32px);
+  padding: 4px 12px; border-radius: 4px; pointer-events: none; opacity: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  background: rgba(0, 0, 0, 0.45); color: #fff; font: 600 14px var(--sans); text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.5);
+}
+.tour-actionbar.is-on { animation: tour-bar 2.2s forwards; }
+@keyframes tour-bar { 0%, 70% { opacity: 1; } 100% { opacity: 0; } }
+/* 告示牌：信息面板里的四行字、改字的对话框 */
+.inspect-sign { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); display: grid; gap: 6px; }
+.inspect-sign[hidden] { display: none; }
+.sign-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.sign-side { display: grid; gap: 2px; padding: 6px 8px; border-radius: 6px; background: var(--chip); text-align: center; font-size: 12px; }
+.sign-side b { color: var(--muted); font-size: 11px; font-weight: 600; }
+.sign-side span { min-height: 1.3em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inspect-sign .btn { justify-self: start; }
+.sign-form { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 8px 0 4px; }
+.sign-form b { display: block; margin-bottom: 6px; color: var(--muted); font-size: 13px; }
+.sign-form [hidden] { display: none; }
+.sign-lines { display: grid; gap: 4px; }
+.sign-lines input { height: 30px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--tt); font: 14px var(--sans); text-align: center; }
+.sign-lines input:focus { outline: 2px solid var(--pc); outline-offset: -1px; }
 .stage.is-locked { cursor: none; }
 .stage.is-locked.is-fake, .stage.is-locked.is-fake * { cursor: none; }
 .tour-fake-hint {
