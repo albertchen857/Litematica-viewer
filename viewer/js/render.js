@@ -242,11 +242,18 @@ function patchChunkBuilder(builder) {
   };
   // 6. 高亮的方块亮一档：每个方块的网格做好后，顶点颜色乘 BRIGHTEN。
   // 顶点颜色数组是网格缓存里共用的（见 cloneMesh），只能换成新数组，不能原地乘
+  // 8. 光源发光（观光面板的选项）：每个面按它朝向的那一格的方块光照提亮（见 View.lightFactor），顶点颜色乘上去
   const finish = CB.finishChunkMesh;
   CB.finishChunkMesh = function (mesh, pos) {
     finish.call(this, mesh, pos);
-    if (!this.brighten?.(pos)) return;
-    for (const q of mesh.quads) q.forEach((v) => { v.color = [v.color[0] * BRIGHTEN, v.color[1] * BRIGHTEN, v.color[2] * BRIGHTEN]; });
+    const bright = this.brighten?.(pos), lit = this.lightFactor;
+    if (!bright && !lit) return;
+    for (const q of mesh.quads) {
+      let f = bright ? [BRIGHTEN, BRIGHTEN, BRIGHTEN] : null;
+      const g = lit ? lit(pos, q.v1.normal) : null;
+      if (g) f = f ? f.map((v, i) => v * g[i]) : g;
+      if (f) q.forEach((v) => { v.color = [v.color[0] * f[0], v.color[1] * f[1], v.color[2] * f[2]]; });
+    }
   };
   // 5. 视锥剔除用：每个非空区块的网格 + 包围盒。deepslate 存区块的下标是 |c|*2 + (c<0 ? 1 : 0)，这里解回区块坐标
   CB.getChunkList = function () {
@@ -369,6 +376,39 @@ const LOD_FRAGMENT = `
     vec3 c = mix(texColor.rgb, avg, far) * vTintColor * vLighting * light;
     gl_FragColor = vec4(pow(max(c, vec3(0.0)), vec3(1.0 / gamma)), texColor.a);
   }`;
+
+// ---- 方块光照（同游戏）：光源方块的亮度 0~15，往外每走一格减 1，不透明的整方块挡光。
+// 只算方块光，天空光用光照颜色（View.light.tint）代替：白天天空光是满的，方块光看不出来；夜里 / 下界才显出来
+const LIGHT_LEVEL = {
+  glowstone: 15, sea_lantern: 15, lantern: 15, soul_lantern: 10, copper_lantern: 15, exposed_copper_lantern: 15,
+  weathered_copper_lantern: 15, oxidized_copper_lantern: 15, torch: 14, wall_torch: 14, soul_torch: 10, soul_wall_torch: 10,
+  copper_torch: 14, copper_wall_torch: 14, jack_o_lantern: 15, shroomlight: 15, beacon: 15, end_rod: 14, lava: 15,
+  fire: 15, soul_fire: 10, conduit: 15, end_portal: 15, end_gateway: 15, nether_portal: 11, ochre_froglight: 15,
+  verdant_froglight: 15, pearlescent_froglight: 15, magma_block: 3, crying_obsidian: 10, glow_lichen: 7,
+  enchanting_table: 7, ender_chest: 7, brewing_stand: 1, amethyst_cluster: 5, large_amethyst_bud: 4,
+  medium_amethyst_bud: 2, small_amethyst_bud: 1, sculk_catalyst: 6, end_portal_frame: 1, dragon_egg: 1,
+};
+const LIT_LEVEL = {
+  redstone_torch: 7, redstone_wall_torch: 7, redstone_lamp: 15, campfire: 15, soul_campfire: 10, furnace: 13,
+  smoker: 13, blast_furnace: 13, redstone_ore: 9, deepslate_redstone_ore: 9, copper_bulb: 15, waxed_copper_bulb: 15,
+  exposed_copper_bulb: 12, waxed_exposed_copper_bulb: 12, weathered_copper_bulb: 8, waxed_weathered_copper_bulb: 8,
+  oxidized_copper_bulb: 4, waxed_oxidized_copper_bulb: 4, candle_cake: 3,
+};
+export function lightLevel(block) {
+  const name = String(block.id).replace(/^minecraft:/, ""), p = block.props || {};
+  if (name in LIGHT_LEVEL) return LIGHT_LEVEL[name];
+  if (name in LIT_LEVEL) return p.lit === "true" ? LIT_LEVEL[name] : 0;
+  if (/candle$/.test(name)) return p.lit === "true" ? 3 * (+p.candles || 1) : 0;
+  if (/_candle_cake$/.test(name)) return p.lit === "true" ? 3 : 0;
+  if (name === "sea_pickle") return p.waterlogged === "true" ? 3 + 3 * (+p.pickles || 1) : 0;
+  if (name === "cave_vines" || name === "cave_vines_plant") return p.berries === "true" ? 14 : 0;
+  if (name === "respawn_anchor") return [0, 3, 7, 11, 15][+p.charges || 0];
+  if (name === "light") return +p.level || 0;
+  return 0;
+}
+const TORCH_COLOR = [1, 0.9, 0.74]; // 方块光偏暖
+// 游戏里亮度等级 → 实际亮度的曲线（暗处掉得快）
+const lightCurve = (level) => { const r = 1 - level / 15; return (1 - r) / (r * 3 + 1); };
 
 // ---- 背景地板：一整块大平面，着色器按世界坐标每 1 格贴一张方块贴图（和游戏里一格一格的地面一样），
 // 远处同样往平均色过渡。之前是拼贴片，铺大了贴片会变成 2×2、4×4… 格一张，贴图被拉大
@@ -762,6 +802,7 @@ export class View {
     this.fov = FOV;                   // 视野（观光面板可以调）
     this.light = { gamma: 1, tint: [1, 1, 1] }; // 亮度 / 光照颜色，见 LOD_FRAGMENT
     this.envMargin = 24;              // 地板往结构外多铺几格（观光时铺远一点）
+    this.glow = false;                // 光源发光（观光面板的选项），lightMap = 每格的方块光照 0~15
     this.highlight = new Set();       // 高亮的方块种类
     this.ortho = false;               // 正交（等轴）投影；false = 透视
     this.renderScale = 1;             // 动态分辨率的倍数（1 = 全分辨率）
@@ -872,6 +913,7 @@ export class View {
     }
     this.scene = sc;
     this.pending.clear();
+    this.computeLight();
 
     // 先建一个空的渲染器（不在这里一口气做完所有网格，几十万方块会卡死页面），网格交给后台分批做
     live.only = new Set();
@@ -881,6 +923,7 @@ export class View {
     live.only = null;
     patchChunkBuilder(this.renderer.chunkBuilder);
     this.renderer.chunkBuilder.brighten = (pos) => this.highlight.size > 0 && this.highlight.has(live.getBlock(pos)?.entry?.block.id);
+    this.renderer.chunkBuilder.lightFactor = this.lightMap ? (pos, n) => this.lightFactor(pos, n) : null;
     this.renderer.drawStructure = drawStructureCulled;
     // 图集不用多级纹理（mipmap）：缩小时多级纹理会把图集里相邻的贴图混在一起，
     // 远处方块边上出现杂色线（玻璃上的紫点就是隔壁贴图混进来的）。和游戏里关掉 mipmap 一样，只取最近的像素
@@ -1291,9 +1334,82 @@ export class View {
 
   // 亮度（伽马，1 = 原样）和光照颜色（白天白光、夜里偏暗偏蓝……）
   setLight(gamma = 1, tint = [1, 1, 1]) {
+    const changed = String(tint) !== String(this.light.tint);
     this.light.gamma = gamma;
     this.light.tint = tint;
+    if (changed && this.lightMap) this.relightAll(); // 方块光提亮多少跟着天空光变（白天看不出来，夜里明显）
     this.draw();
+  }
+
+  // ---- 光源发光：开关
+  setGlow(on) {
+    on = !!on;
+    if (on === this.glow && (!on || this.lightMap)) return;
+    this.glow = on;
+    this.computeLight();
+    this.relightAll();
+  }
+
+  // 每格的方块光照：从光源往外一格一格扩（广度优先），每走一格减 1，不透明整方块挡住
+  computeLight() {
+    this.lightMap = null;
+    const sc = this.scene;
+    if (!this.glow || !sc) return;
+    const [sx, sy, sz] = sc.box.size, n = sx * sy * sz;
+    if (n > 120e6) return; // 太大了就不算（一格一个字节）
+    const L = new Uint8Array(n);
+    let queue = [];
+    for (const e of sc.entries) {
+      const lv = lightLevel(e.block);
+      if (lv > L[e.key]) { L[e.key] = lv; queue.push(e.key); }
+    }
+    if (!queue.length) { this.lightMap = L; return; }
+    const plane = sy * sz;
+    while (queue.length) {
+      const next = [];
+      for (const k of queue) {
+        const lv = L[k] - 1;
+        if (lv <= 0) continue;
+        const x = Math.floor(k / plane), y = Math.floor(k / sz) % sy, z = k % sz;
+        const spread = (nk) => {
+          if (L[nk] >= lv) return;
+          if (this.opaque(sc.byKey.get(nk))) return;
+          L[nk] = lv;
+          next.push(nk);
+        };
+        if (x > 0) spread(k - plane);
+        if (x < sx - 1) spread(k + plane);
+        if (y > 0) spread(k - sz);
+        if (y < sy - 1) spread(k + sz);
+        if (z > 0) spread(k - 1);
+        if (z < sz - 1) spread(k + 1);
+      }
+      queue = next;
+    }
+    this.lightMap = L;
+  }
+
+  // 一个面要提亮多少（每个颜色通道的倍数，不用提亮返回 null）：取它自己那格和它朝向那格里亮的那个，
+  // 最终颜色 = 原色 × max(天空光颜色, 方块光颜色)，所以乘的是 max(1, 方块光 / 天空光)
+  lightFactor(pos, normal) {
+    const L = this.lightMap, sc = this.scene;
+    if (!L || !sc) return null;
+    const [sx, sy, sz] = sc.box.size;
+    const at = (x, y, z) => (x < 0 || y < 0 || z < 0 || x >= sx || y >= sy || z >= sz ? 0 : L[(x * sy + y) * sz + z]);
+    const nx = Math.round(normal?.x ?? 0), ny = Math.round(normal?.y ?? 0), nz = Math.round(normal?.z ?? 0);
+    const level = Math.max(at(pos[0], pos[1], pos[2]), at(pos[0] + nx, pos[1] + ny, pos[2] + nz));
+    if (!level) return null;
+    const b = lightCurve(level), sky = this.light.tint;
+    const f = TORCH_COLOR.map((c, i) => Math.max(1, (b * c) / Math.max(0.05, sky[i])));
+    return f[0] > 1.001 || f[1] > 1.001 || f[2] > 1.001 ? f : null;
+  }
+
+  // 光照变了：所有区块重画（后台分批，不卡）
+  relightAll() {
+    const sc = this.scene;
+    if (!sc || !this.renderer) return;
+    this.renderer.chunkBuilder.lightFactor = this.lightMap ? (pos, n) => this.lightFactor(pos, n) : null;
+    this.queueChunks([...sc.live.chunks.keys()].map((k) => k.split(",").map(Number)));
   }
 
   setOrtho(on) {

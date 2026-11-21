@@ -154,6 +154,11 @@
         <button class="btn btn-small btn-accent" id="edit-apply" type="button" data-t="edit.apply">应用</button>
         <p class="tool-msg" id="edit-msg"></p>
       </details>
+      <!-- 告示牌：正面 / 背面各四行字 -->
+      <div class="inspect-sign" id="inspect-sign" hidden>
+        <div class="sign-sides"></div>
+        <button class="btn btn-small btn-plain" id="sign-edit" type="button" data-t="sign.edit">改字</button>
+      </div>
       <div class="inspect-items" id="inspect-items"></div>
       <p class="inspect-tip" id="inspect-items-tip" data-t="items.tip" hidden>点格子放物品</p>
       <p class="inspect-extra" id="inspect-extra"></p>
@@ -343,8 +348,9 @@
       <h2 class="card-title" data-t="tour.view">视角</h2>
       <label class="tour-row"><span data-t="tour.fov">视野</span><input type="range" id="tour-fov" min="30" max="110" step="1"><b id="tour-fov-val"></b></label>
       <label class="tour-row"><span data-t="tour.bright">亮度</span><input type="range" id="tour-bright" min="50" max="200" step="5"><b id="tour-bright-val"></b></label>
-      <label class="opt-check"><input type="checkbox" id="tour-noclip"> <span data-t="tour.noclip">允许穿过方块（旁观模式）</span></label>
-      <p class="tool-note" data-t="tour.noclipNote">关掉就是创造模式：方块挡人、有重力，双击空格切换飞行</p>
+      <label class="opt-check"><input type="checkbox" id="tour-noclip"> <span data-t="tour.noclip">允许穿过方块</span></label>
+      <label class="opt-check"><input type="checkbox" id="tour-glow"> <span data-t="tour.glow">光源方块发光</span></label>
+      <label class="opt-check"><input type="checkbox" id="tour-debug"> <span data-t="tour.debug">调试棒（左键选属性，右键改值）</span></label>
     </div>
 
     <div class="card tour-opts">
@@ -368,7 +374,7 @@
       <h2 class="card-title" data-t="tour.speed">移动速度（格 / 秒）</h2>
       <label class="tour-row"><span data-t="tour.hSpeed">水平</span><input type="range" id="tour-hspeed" min="1" max="60" step="1"><b id="tour-hspeed-val"></b></label>
       <label class="tour-row"><span data-t="tour.vSpeed">垂直</span><input type="range" id="tour-vspeed" min="1" max="60" step="1"><b id="tour-vspeed-val"></b></label>
-      <p class="tool-note" data-t="tour.speedNote">走路是水平速度的 0.4 倍；双击 W 疾跑</p>
+      <p class="tool-note" data-t="tour.speedNote">走路是水平速度的 0.4 倍；Ctrl 切换疾跑</p>
     </div>
 
     <div class="card">
@@ -378,13 +384,15 @@
         <li><kbd>W A S D</kbd><span data-t="tour.key.move">前后左右（只在水平面上走）</span></li>
         <li><kbd data-t="tour.k.space">空格</kbd><span data-t="tour.key.space">上升 / 跳</span></li>
         <li><kbd>Shift</kbd><span data-t="tour.key.shift">下降 / 潜行</span></li>
-        <li><kbd data-t="tour.k.space2">双击空格</kbd><span data-t="tour.key.space2">切换飞行（不穿墙时）</span></li>
-        <li><kbd data-t="tour.k.w2">双击 W</kbd><span data-t="tour.key.w2">疾跑</span></li>
+        <li><kbd data-t="tour.k.space2">双击空格</kbd><span data-t="tour.key.space2">切换飞行</span></li>
+        <li><kbd>Ctrl</kbd><span data-t="tour.key.ctrl">切换疾跑</span></li>
         <li><kbd data-t="tour.k.mid">中键</kbd><span data-t="tour.key.mid">看方块属性</span></li>
-        <li><kbd data-t="tour.k.right">右键</kbd><span data-t="tour.key.right">开关门 / 拉杆 / 按钮，打开容器</span></li>
+        <li><kbd data-t="tour.k.right">右键</kbd><span data-t="tour.key.right">开关门 / 拉杆 / 按钮，告示牌改字，打开容器</span></li>
+        <li><kbd>T</kbd><span data-t="tour.key.t">传送到准星指着的地方</span></li>
+        <li><kbd>C</kbd><span data-t="tour.key.c">替换准星指着的方块</span></li>
         <li><kbd>Esc</kbd><span data-t="tour.key.esc">放出鼠标</span></li>
       </ul>
-      <p class="tool-note" data-t="tour.keyNote">开门这类改动只在观光时有效，返回查看就还原</p>
+      <p class="tool-note" data-t="tour.keyNote">开门、调试棒的改动只在观光时有效，返回查看就还原；告示牌改字和替换方块会改到投影里</p>
     </div>
   </aside>
 </main>
@@ -427,6 +435,21 @@
     <div class="dlg-actions">
       <button class="btn btn-plain" value="cancel" data-t="cancel">取消</button>
       <button class="btn btn-accent" value="ok" data-t="worldIcon.export">导出</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- 告示牌改字（观光时右键告示牌、信息面板的「改字」） -->
+<dialog class="dlg" id="sign-dlg">
+  <form method="dialog">
+    <h2 data-t="sign.title">告示牌文字</h2>
+    <div class="sign-form">
+      <div><b data-t="sign.front">正面</b><div class="sign-lines" id="sign-front"></div></div>
+      <div id="sign-back-wrap"><b data-t="sign.back">背面</b><div class="sign-lines" id="sign-back"></div></div>
+    </div>
+    <div class="dlg-actions">
+      <button class="btn btn-plain" value="cancel" data-t="cancel">取消</button>
+      <button class="btn btn-accent" value="ok" data-t="sign.save">保存</button>
     </div>
   </form>
 </dialog>
