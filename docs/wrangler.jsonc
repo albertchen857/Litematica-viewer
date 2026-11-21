@@ -1,0 +1,7 @@
+// 只给 Cloudflare 预览构建用（web-preview 分支）。构建的根目录是 /docs，静态文件就是这个文件夹本身
+{
+  "name": "litematica-viewer",
+  "compatibility_date": "2026-11-01",
+  "assets": { "directory": "." },
+  "previews": {}
+}
