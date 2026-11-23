@@ -1,6 +1,6 @@
 **简体中文** | [English](./README_EN.md) | [繁體中文](./README_ZHT.md)
 
-# LitematicaViewer 投影查看器 v0.9.6
+# LitematicaViewer 投影查看器 v0.9.7
 
 ### Minecraft tool - 让我的世界投影查看更加的轻量便捷
 
@@ -52,15 +52,17 @@ QQ讨论群：1044260630
 - `统计面板` 红石偏度、材质判定、液体、密度、作者、版本、简介
 - `饼图` 方块构成 + 分类构成
 - `3D 缩略图` 左上角常驻的小预览，可在设置里开关自动旋转
-- `手动3D渲染` 用 deepslate 渲染引擎在独立窗口里看整个结构，可拖动视角、按层切片
+- `手动3D渲染` 用 deepslate 渲染引擎在独立窗口里看整个结构：拖动转视角、按层切片、透视 / 正交切换，点方块看属性和容器物品
 - `步骤查看器` 逐层查看方块摆放，带朝向 / 上下半 / 含水属性标注
 - `容器分析器` 列出容器里的物品，并按容器类型画出槽位排布
+- `投影搜索` 在 15 个投影网站（RedenMC、GrabCraft、9minecraft……）里搜投影，图片 / 详细两种样式，
+  按下载量、点赞综合排序；只跳转原站，不下载文件。主界面左下角也能直接输入搜索
 
 ### 改
 
 - `生成图形投影` 生成实心 / 空心长方体，方块用带贴图的下拉框挑
 - `替换特定方块` 一行一条规则，`＋/−` 增删，可限定坐标范围和方块状态
-- `另存为` 在 litematic / nbt / mcstructure 之间互转
+- `另存为` 在 litematic / nbt / mcstructure / schem 之间互转，或导出成虚空世界存档（可选存档图标）
 - `跨版本转换投影` 把 litematic 转成 1.16 / 1.13 版本
 
 ### 导出
@@ -73,7 +75,7 @@ QQ讨论群：1044260630
 
 - 右侧「投影工具」侧栏可左右收起，默认收起
 - 窗口拉窄时按「侧栏 → 饼图列 → 左列」的顺序让位，中间的表格保到最后
-- 生成投影 / 替换方块 / REDENMC 搜索 / 信息显示 四块都能**单独开窗口**（功能菜单里），
+- 生成投影 / 替换方块 / 投影搜索 / 信息显示 四块都能**单独开窗口**（功能菜单里），
   窗口再小也点得到
 - 主题色、字体、字号、中英文切换
 
@@ -110,6 +112,7 @@ script/
   LitematicaViewer.py   入口
   webview_host.py       3D 渲染窗口的子进程入口
   lv/                   主体代码，见 ARCHITECTURE.md
+    search/             投影搜索：各网站的读取规则、本机索引
 viewer/                 3D 查看器（「手动3D渲染」用它）；网站 web 分支的 docs/viewer 由它同步过去
   resource/             贴图图集，方块图标也从这里裁
 lang/
@@ -136,7 +139,7 @@ tools/
 | 分支 | 内容 |
 |---|---|
 | `main` | 主线：桌面版 |
-| `web` | 网站 [lite-viewer.com](https://lite-viewer.com)（`docs/`，Cloudflare Pages） |
+| `web` | 网站 [lite-viewer.com](https://lite-viewer.com)（`docs/`，Cloudflare Workers） |
 | `macos` | macOS 打包脚本、图标、Release 工作流 |
 | `original` | 改版之前的 0.8.0c 原版（只做了能启动的最小修复），留着对比用 |
 
@@ -148,6 +151,7 @@ tools/
 |  |- .litematic (litemapy)
 |  |- .nbt Java 结构方块 (amulet-nbt)
 |  |- .mcstructure 基岩版 (amulet-nbt, 小端)
+|  |- .schem WorldEdit / .schematic 老格式 (legacy 数字 ID)
 |  |- Java <-> 基岩 方块 ID / 状态互转 blockmap
 |- 分析 analysis
 |  |- 材料清单 / 分类 / 密度 / 红石占比
@@ -162,6 +166,8 @@ tools/
 |  |- 内嵌缩略图 (pyopengltk, 非 macOS)
 |  |- 等轴缩略图写入投影文件 snapshot
 |  |- 步骤查看器 (逐层 2D)
+|- 投影搜索 search
+|  |- 15 个网站的本机索引 / 综合排序 / 只跳转原站
 |- 界面 ui
    |- 可收纳侧栏 / 面板独立开窗 / 主题色 / 字体 / 多语言
 ```

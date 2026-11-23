@@ -85,7 +85,7 @@
   "litem.funcNew.4": "Size (Width, Height, Length)",
   "litem.funcNew.5": "Generate",
   "litem.funcNew.6": "ID input can be pure English or Chinese name",
-  "litem.log": "LitematicaViewer V{} - What's new\n1. Manual 3D Rendering now uses real textures: glass and other transparent blocks, signs and beds render correctly; click a block to see its state and container items\n2. The 3D window adds all / range / single-layer view, step-by-step build splitting and entity hitboxes, and follows your theme colours\n3. The web version is live at lite-viewer.com: view schematics, export materials, convert formats and replace blocks in your browser",
+  "litem.log": "LitematicaViewer V{} - What's new\n1. Schematic search (Functions → Schematic search, or the box at the bottom left): search 15 schematic sites; results open the original page\n2. .schem support (read and write) and old .schematic; pick a save icon when exporting a world\n3. Manual 3D Rendering now shows just the view; fixed entity positions in .litematic files with negative region sizes\n4. The web version at lite-viewer.com adds Tour: walk through the schematic in first person",
   "litem.menuAnaSet.1": "Analyze entities?",
   "litem.menuAnaSet.2": "Show projection panel?",
   "litem.menuAnaSet.3": "Show statistics panel?",

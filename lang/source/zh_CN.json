@@ -85,7 +85,7 @@
   "litem.funcNew.4": "宽高长",
   "litem.funcNew.5": "生成",
   "litem.funcNew.6": "ID输入可以为纯英文或中文名",
-  "litem.log": "LitematicaViewer 投影查看器 V{} 更新内容\n1. 「手动3D渲染」换成真实贴图渲染：玻璃等透明方块、告示牌和床都能正确显示，点方块可看属性和容器里的物品\n2. 3D 窗口新增按层 / 范围 / 单层查看、分步拆解、实体碰撞箱，五套主题配色同步\n3. 网页版上线 lite-viewer.com：浏览器里直接看投影、导出材料、转换格式、替换方块",
+  "litem.log": "LitematicaViewer 投影查看器 V{} 更新内容\n1. 新增投影搜索（功能 → 投影搜索，左下角也能直接搜）：在 15 个投影网站里找投影，只跳转原站\n2. 支持 .schem（读写）和老 .schematic；导出存档可以选存档图标\n3. 手动3D渲染只保留画面，更清爽；修好尺寸为负的 .litematic 实体位置不对\n4. 网页版 lite-viewer.com 新增观光：第一人称走进投影里看",
   "litem.menuAnaSet.1": "是否分析实体",
   "litem.menuAnaSet.2": "是否显示投影面板",
   "litem.menuAnaSet.3": "是否显示统计面板",

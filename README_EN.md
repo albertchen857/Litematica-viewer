@@ -1,6 +1,6 @@
 [简体中文](./README.md) | **English** | [繁體中文](./README_ZHT.md)
 
-# LitematicaViewer v0.9.6
+# LitematicaViewer v0.9.7
 
 ### Minecraft tool - A tool to easily check Minecraft structure files
 
@@ -55,16 +55,20 @@ every format**, and you can convert between them via `Data Analysis → Save as`
 - `Pie charts` block composition and category composition
 - `3D thumbnail` a small always-on preview in the top-left; auto-rotation toggles in Settings
 - `Manual 3D rendering` view the whole structure with the deepslate renderer in its own
-  window, with drag-to-look and a Y-layer slider
+  window: drag to look, Y-layer slider, perspective / orthographic, click a block for its state
+  and container items
 - `Step Checker` walk the structure layer by layer with facing / half / waterlogged markers
 - `Container Analysis` list container contents and draw the slot layout per container type
+- `Schematic search` search 15 schematic sites (RedenMC, GrabCraft, 9minecraft, ...) with
+  image or detail views, ranked by downloads, likes and relevance; results only link to the
+  original page, nothing is downloaded. The box at the bottom left of the main window searches too
 
 ### Editing
 
 - `Spawn Regular Shape` solid or hollow boxes; pick the block from a dropdown with textures
 - `Replace Specific Block` one rule per row, `＋/−` to add and remove, with coordinate
   range and block state filters
-- `Save as` convert between litematic / nbt / mcstructure
+- `Save as` convert between litematic / nbt / mcstructure / schem, or export a void world save (with a save icon of your choice)
 - `Transfer Schematic Version` convert litematic files down to 1.16 / 1.13
 
 ### Exporting
@@ -79,7 +83,7 @@ every format**, and you can convert between them via `Data Analysis → Save as`
 - The right-hand "Schematic tools" sidebar collapses sideways, closed by default
 - As the window narrows, panels give way in order: sidebar → charts column → left column,
   keeping the table visible longest
-- Spawn shape / Replace block / REDENMC search / Info display can each be opened in
+- Spawn shape / Replace block / Schematic search / Info display can each be opened in
   **their own window** (under the Functions menu), so they stay reachable in a small window
 - Theme colour, font, font size, language
 
@@ -116,6 +120,7 @@ script/
   LitematicaViewer.py   entry point
   webview_host.py       subprocess entry for the 3D window
   lv/                   the actual code, see ARCHITECTURE.md
+    search/             schematic search: per-site rules and the local index
 viewer/                 3D viewer used by "Manual 3D Rendering"; synced to the website's docs/viewer on the web branch
   resource/             texture atlas; block icons are cropped from it
 lang/
@@ -142,7 +147,7 @@ tools/
 | Branch | Contents |
 |---|---|
 | `main` | mainline: the desktop app |
-| `web` | the website [lite-viewer.com](https://lite-viewer.com) (`docs/`, Cloudflare Pages) |
+| `web` | the website [lite-viewer.com](https://lite-viewer.com) (`docs/`, Cloudflare Workers) |
 | `macos` | macOS packaging script, icon, release workflow |
 | `original` | the pre-rewrite 0.8.0c build (with only the minimal fixes needed to launch), kept for comparison |
 
