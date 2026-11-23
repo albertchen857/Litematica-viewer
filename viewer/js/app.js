@@ -1860,7 +1860,6 @@ function bindTour() {
   $("tour-time").addEventListener("change", (e) => setTourOpt("time", e.target.value));
   $("tour-respawn").addEventListener("click", () => tour.spawn());
   $("tour-exit").addEventListener("click", () => setTour(false));
-  $("tour-toggle").addEventListener("click", () => setTour(true));
   // 主菜单的「查看 / 观光」：同一个页面里切换，打开着的投影不用重新读
   $("nav-view").addEventListener("click", (e) => { if (touring()) { e.preventDefault(); setTour(false); } });
   $("nav-tour").addEventListener("click", (e) => { e.preventDefault(); setTour(true); });
@@ -1996,11 +1995,10 @@ async function main() {
     if (LANGS.includes(payload.lang)) { lang = payload.lang; applyLang(); }
     document.documentElement.classList.remove("i18n-wait");
     if (payload.theme) applyTheme(payload.theme);
-    $("tour-toggle").hidden = false; // 没有顶栏菜单，进观光用画面上的按钮
     load(fromPayload(payload), { pristine: true });
     return;
   }
-  if (location.hash === "#tour") setTour(true);
+  if (location.hash === "#tour") setTour(true); // 桌面版的 3D 窗口（#desktop）上面已经 return 了，不进观光
 
   const params = START_PARAMS;
   // 从主页拖进来的：取出暂存的文件，再把网址里的 from=home 去掉，刷新时不会再找一遍

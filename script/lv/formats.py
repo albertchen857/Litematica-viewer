@@ -105,16 +105,21 @@ def _load_litematic(path: str) -> Structure:
         block_entities = {
             tuple(int(v) for v in te.position): to_python(te.data) for te in region.tile_entities
         }
-        # raw 留着原始标签，同格式另存时原样写回去，不会丢精度
+        # 尺寸可以是负的（区域从 Position 往负方向长）：litemapy 的方块数组从最小角开始，
+        # 原点要用最小角（region.x + min_x()），不然多区域对不齐；实体坐标是相对 Position 的，也换成相对最小角
+        lo = (region.min_x(), region.min_y(), region.min_z())
+        # raw 留着原始标签，同格式另存时原样写回去（坐标按 pos 改），不会丢精度
         entities = [
-            {"id": str(e.id), "nbt": to_python(e.data), "raw": e.data} for e in region.entities
+            {"id": str(e.id), "nbt": to_python(e.data), "raw": e.data,
+             "pos": [float(p) - float(m) for p, m in zip(e.position, lo)]}
+            for e in region.entities
         ]
         regions.append(
             region_from_indices(
                 str(name),
                 indices,
                 palette,
-                origin=(int(region.x), int(region.y), int(region.z)),
+                origin=(int(region.x) + lo[0], int(region.y) + lo[1], int(region.z) + lo[2]),
                 block_entities=block_entities,
                 entities=entities,
             )
@@ -179,6 +184,9 @@ def _save_litematic(structure: Structure, path: str, report=None) -> None:
             raw = entity.get("raw")
             if isinstance(raw, nbtlib.Compound) and "id" in raw:
                 tag = raw  # 同样来自 litematic，原样写回最保险
+                if entity.get("pos"):  # 读的时候换算到最小角了，新区域尺寸是正的，坐标就是这个
+                    tag = nbtlib.Compound(dict(raw))
+                    tag["Pos"] = nbtlib.List[nbtlib.Double]([nbtlib.Double(v) for v in entity["pos"]])
             else:
                 # 基岩版实体用的是 identifier，litemapy 要求必须有 id，这里补上
                 payload = dict(entity.get("nbt") or {})
